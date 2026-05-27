@@ -1,8 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { createGvgScopeLabel } from "../gvg/createGvgScopeLabel";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
-import type { GvgSnapshot, GvgWorldId } from "../gvg/types";
+import type { GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
+import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
+import { createOwnedCastleViewModels } from "./selectors";
+import type { GuildBattleOwnedCastleViewModel } from "./types";
 
 interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
@@ -12,9 +15,11 @@ export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot
 }: GuildBattlePlaceholderProps) {
   const [worldId, setWorldId] = useState("1001");
+  const [ownGuildId, setOwnGuildId] = useState("");
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
 
   const trimmedWorldId = worldId.trim();
+  const trimmedOwnGuildId = ownGuildId.trim();
   const isLoading = loadState.status === "loading";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -46,7 +51,7 @@ export function GuildBattlePlaceholder({
           GuildBattleMonitor
         </h1>
         <p className="placeholder__description">
-          REST初期状態を取得し、正規化済みのGvGスナップショット概要だけを表示します。
+          REST初期状態から正規化済みスナップショットを取得し、自ギルドの防衛拠点だけを表示します。
         </p>
 
         <form className="load-form" onSubmit={handleSubmit}>
@@ -61,24 +66,49 @@ export function GuildBattlePlaceholder({
               inputMode="numeric"
             />
           </label>
-          <button className="load-form__button" type="submit" disabled={isLoading || trimmedWorldId.length === 0}>
+          <label className="field">
+            <span className="field__label">自ギルドID</span>
+            <input
+              className="field__input field__input--wide"
+              type="text"
+              value={ownGuildId}
+              onChange={(event) => setOwnGuildId(event.target.value)}
+              disabled={isLoading}
+              inputMode="numeric"
+            />
+          </label>
+          <button
+            className="load-form__button"
+            type="submit"
+            disabled={isLoading || trimmedWorldId.length === 0}
+          >
             初期状態を取得
           </button>
         </form>
 
-        <SnapshotStatus loadState={loadState} />
+        <SnapshotStatus loadState={loadState} ownGuildId={trimmedOwnGuildId} />
       </section>
     </main>
   );
 }
 
-function SnapshotStatus({ loadState }: { readonly loadState: AsyncLoadState<GvgSnapshot> }) {
+function SnapshotStatus({
+  loadState,
+  ownGuildId
+}: {
+  readonly loadState: AsyncLoadState<GvgSnapshot>;
+  readonly ownGuildId: string;
+}) {
   if (loadState.status === "idle") {
     return <p className="status-message">未取得です。</p>;
   }
 
   if (loadState.status === "loading") {
-    return <p className="status-message" aria-live="polite">取得中です。</p>;
+    return (
+      <p className="status-message" aria-live="polite">
+        取得中です。
+      </p>
+    );
   }
 
   if (loadState.status === "error") {
@@ -89,10 +119,27 @@ function SnapshotStatus({ loadState }: { readonly loadState: AsyncLoadState<GvgS
     );
   }
 
-  return <SnapshotSummary snapshot={loadState.data} />;
+  return <SnapshotSummary ownGuildId={ownGuildId} snapshot={loadState.data} />;
 }
 
-function SnapshotSummary({ snapshot }: { readonly snapshot: GvgSnapshot }) {
+function SnapshotSummary({
+  ownGuildId,
+  snapshot
+}: {
+  readonly ownGuildId: string;
+  readonly snapshot: GvgSnapshot;
+}) {
+  const ownedCastleViewModels = useMemo(() => {
+    if (ownGuildId.length === 0) {
+      return [];
+    }
+
+    return createOwnedCastleViewModels(snapshot, {
+      ownGuildId: ownGuildId as GvgGuildId,
+      alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+    });
+  }, [ownGuildId, snapshot]);
+
   return (
     <section className="snapshot-summary" aria-labelledby="snapshot-title">
       <h2 className="snapshot-summary__title" id="snapshot-title">
@@ -117,26 +164,52 @@ function SnapshotSummary({ snapshot }: { readonly snapshot: GvgSnapshot }) {
         </div>
       </dl>
 
-      <div className="castle-list" aria-label="castle list">
-        <div className="castle-list__header">
-          <span>castleId</span>
-          <span>ownerGuildId</span>
-          <span>attackerGuildId</span>
-          <span>defense</span>
-          <span>attack</span>
-          <span>state</span>
-        </div>
-        {snapshot.castles.map((castle) => (
-          <div className="castle-list__row" key={castle.castleId}>
-            <span>{castle.castleId}</span>
-            <span>{castle.ownerGuildId ?? "-"}</span>
-            <span>{castle.attackerGuildId ?? "-"}</span>
-            <span>{castle.defenseCount}</span>
-            <span>{castle.attackCount}</span>
-            <span>{castle.state}</span>
-          </div>
-        ))}
-      </div>
+      {ownGuildId.length === 0 ? (
+        <p className="status-message">自ギルドIDを入力してください。</p>
+      ) : (
+        <OwnedCastleList capturedAt={snapshot.capturedAt} viewModels={ownedCastleViewModels} />
+      )}
     </section>
+  );
+}
+
+function OwnedCastleList({
+  capturedAt,
+  viewModels
+}: {
+  readonly capturedAt: string;
+  readonly viewModels: readonly GuildBattleOwnedCastleViewModel[];
+}) {
+  if (viewModels.length === 0) {
+    return <p className="status-message">自ギルドの防衛拠点はありません。</p>;
+  }
+
+  return (
+    <div className="castle-list" aria-label="owned castle list">
+      <div className="castle-list__header castle-list__header--owned">
+        <span>拠点ID</span>
+        <span>防衛数</span>
+        <span>侵攻数</span>
+        <span>状態</span>
+        <span>アラート</span>
+        <span>攻撃ギルドID</span>
+        <span>攻撃ギルド名</span>
+        <span>最終取得時刻</span>
+      </div>
+      {viewModels.map((viewModel) => (
+        <div className="castle-list__row castle-list__row--owned" key={viewModel.castleId}>
+          <span>{viewModel.castleId}</span>
+          <span>{viewModel.defenseCount}</span>
+          <span>{viewModel.attackCount}</span>
+          <span>{viewModel.state}</span>
+          <span className={`alert-level alert-${viewModel.alertLevel}`}>
+            {viewModel.alertLevel}
+          </span>
+          <span>{viewModel.attackerGuildId ?? "-"}</span>
+          <span>{viewModel.attackerGuildName ?? "-"}</span>
+          <span>{capturedAt}</span>
+        </div>
+      ))}
+    </div>
   );
 }

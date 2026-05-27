@@ -55,6 +55,9 @@ export function createOwnedCastleViewModels(
       castleId: castle.castleId,
       ownerGuildId: castle.ownerGuildId as GvgGuildId,
       ownerGuildName: snapshot.guildNames[castle.ownerGuildId as GvgGuildId] ?? "Unknown guild",
+      attackerGuildId: castle.attackerGuildId,
+      attackerGuildName:
+        castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
       state: castle.state,
       defenseCount: castle.defenseCount,
       attackCount: castle.attackCount,

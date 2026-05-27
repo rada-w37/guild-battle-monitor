@@ -93,6 +93,10 @@ select {
   background: #ffffff;
 }
 
+.field__input--wide {
+  width: min(100%, 240px);
+}
+
 .load-form__button {
   min-height: 42px;
   padding: 10px 14px;
@@ -166,6 +170,12 @@ select {
   min-width: 760px;
 }
 
+.castle-list__header--owned,
+.castle-list__row--owned {
+  grid-template-columns: 80px 80px 80px minmax(120px, 1fr) 100px minmax(150px, 1fr) minmax(150px, 1fr) minmax(190px, 1fr);
+  min-width: 980px;
+}
+
 .castle-list__header {
   color: #566675;
   background: #f0f4f8;
@@ -182,4 +192,24 @@ select {
 
 .castle-list__row:last-child span {
   border-bottom: 0;
+}
+
+.alert-level {
+  font-weight: 700;
+}
+
+.alert-safe {
+  color: #1f7a3f;
+}
+
+.alert-warning {
+  color: #8a6500;
+}
+
+.alert-danger {
+  color: #a32929;
+}
+
+.alert-critical {
+  color: #8f1d5c;
 }

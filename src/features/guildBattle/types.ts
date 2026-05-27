@@ -17,6 +17,8 @@ export interface GuildBattleOwnedCastleViewModel {
   readonly castleId: GvgCastleId;
   readonly ownerGuildId: GvgGuildId;
   readonly ownerGuildName: string;
+  readonly attackerGuildId: GvgGuildId | null;
+  readonly attackerGuildName: string | null;
   readonly state: GvgCastleState;
   readonly defenseCount: number;
   readonly attackCount: number;

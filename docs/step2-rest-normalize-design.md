@@ -105,3 +105,26 @@ Still not implemented:
 - routing
 
 The next step can pass the normalized `GvgSnapshot` through Guild Battle selectors to create owner-focused ViewModels.
+
+## Step2-D owned castle ViewModel connection
+
+The placeholder screen now accepts an own guild ID and passes the normalized `GvgSnapshot` to `createOwnedCastleViewModels`.
+The UI displays only selector-created owned castle ViewModels for the defense-base list.
+
+REST initial state is enough to confirm:
+
+- owned castle filtering
+- guild name resolution from `GvgGuildNameMap`
+- defense and attack counts
+- alert level calculation
+- captured timestamp display
+
+Still not implemented:
+
+- WebSocket updates
+- realtime merge with the REST snapshot
+- binary parsing
+- notification behavior
+- map display
+
+When WebSocket support is added, realtime castle updates should normalize into the same `GvgCastle` shape and then reuse the same Guild Battle selectors.

@@ -70,6 +70,8 @@ describe("guild battle selectors", () => {
     const castle = createCastle({
       castleId: "castle-owned" as GvgCastleId,
       ownerGuildId: "000123" as GvgGuildId,
+      attackerGuildId: "789" as GvgGuildId,
+      attackCount: 1,
       defenseCount: 9
     });
 
@@ -79,7 +81,8 @@ describe("guild battle selectors", () => {
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [castle, createCastle({ castleId: "castle-other" as GvgCastleId, ownerGuildId: "456" as GvgGuildId })],
         guildNames: {
-          [castle.ownerGuildId as GvgGuildId]: "Own Guild"
+          [castle.ownerGuildId as GvgGuildId]: "Own Guild",
+          ["789" as GvgGuildId]: "Attack Guild"
         }
       },
       settings
@@ -90,10 +93,12 @@ describe("guild battle selectors", () => {
         castleId: "castle-owned",
         ownerGuildId: "000123",
         ownerGuildName: "Own Guild",
+        attackerGuildId: "789",
+        attackerGuildName: "Attack Guild",
         state: "idle",
         defenseCount: 9,
-        attackCount: 0,
-        alertLevel: "danger"
+        attackCount: 1,
+        alertLevel: "critical"
       }
     ]);
   });
