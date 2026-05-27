@@ -127,3 +127,38 @@ Empty guild names are not applied to `guildNames`.
 They normalize to `unknown` messages so the app does not crash and the condition remains inspectable.
 
 The next parser implementation step can focus only on byte layout and produce these raw message types.
+
+## Step3-D minimal binary parser
+
+`parseRealtimePayload` now reads documented binary layouts into raw messages.
+It uses `ArrayBuffer` and `DataView` internally and reads all integers as little-endian.
+
+Supported byte layouts:
+
+- Guild information:
+  - byte `0..3`: stream ID
+  - byte `4..7`: guild ID
+  - byte `8`: guild name byte length
+  - byte `9+`: UTF-8 guild name
+- Castle status:
+  - byte `0..3`: stream ID
+  - byte `4..7`: owner guild ID
+  - byte `8..11`: attacker guild ID
+  - byte `12..15`: fallen timestamp
+  - byte `16..17`: defense count
+  - byte `18..19`: attack count
+  - byte `20`: raw state
+  - byte `21`: reserved
+  - byte `22..23`: current party K.O. count
+
+Message type detection remains transport-level:
+
+- stream castle ID `0`: guild information
+- stream castle ID `1..21`: castle status
+- any other castle ID: `unknown`
+
+Parser output is still raw.
+It does not map state numbers, expand guild IDs, update snapshots, call selectors, or touch UI.
+Malformed payloads return an `error` parser result with an `unknown` message containing remaining bytes instead of throwing.
+
+Next step can add a WebSocket client boundary that receives binary frames and passes bytes into this parser, while keeping connection lifecycle separate from normalize and merge logic.
