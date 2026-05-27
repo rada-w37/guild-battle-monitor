@@ -22,7 +22,7 @@ export function normalizeLocalGvgSnapshot(response: LocalGvgApiResponse): GvgSna
   const worldId = normalizeLocalGvgWorldId(data.world_id);
   const capturedAt = normalizeLocalGvgTimestamp(response.timestamp);
   const castles = Array.isArray(data.castles)
-    ? data.castles.map((castle) => normalizeLocalGvgCastle(castle, worldId))
+    ? data.castles.map((castle) => normalizeLocalGvgCastle(castle, worldId, capturedAt))
     : [];
   const guildNames = normalizeLocalGvgGuildNameMap(data.guilds);
 
@@ -36,7 +36,8 @@ export function normalizeLocalGvgSnapshot(response: LocalGvgApiResponse): GvgSna
 
 export function normalizeLocalGvgCastle(
   castle: LocalGvgCastleResponse,
-  worldId: GvgWorldId
+  worldId: GvgWorldId,
+  updatedAt = new Date(0).toISOString()
 ): GvgCastle {
   const state = normalizeLocalGvgCastleState(castle.GvgCastleState);
 
@@ -48,7 +49,10 @@ export function normalizeLocalGvgCastle(
     ownerGuildId: normalizeLocalGvgGuildId(castle.GuildId),
     attackerGuildId: normalizeLocalGvgGuildId(castle.AttackerGuildId),
     defenseCount: normalizeLocalGvgCount(castle.DefensePartyCount),
-    attackCount: normalizeLocalGvgCount(castle.AttackPartyCount)
+    attackCount: normalizeLocalGvgCount(castle.AttackPartyCount),
+    fallenAt: normalizeLocalGvgNullableTimestamp(castle.UtcFallenTimeStamp),
+    lastWinPartyKnockOutCount: normalizeLocalGvgCount(castle.LastWinPartyKnockOutCount),
+    updatedAt
   };
 }
 
@@ -159,6 +163,16 @@ function normalizeLocalGvgTimestamp(timestamp: number | undefined): string {
   }
 
   return new Date(timestamp * 1000).toISOString();
+}
+
+function normalizeLocalGvgNullableTimestamp(timestamp: LocalGvgApiScalar | undefined): string | null {
+  const numericTimestamp = toNumber(timestamp);
+
+  if (numericTimestamp === null || numericTimestamp <= 0) {
+    return null;
+  }
+
+  return new Date(numericTimestamp * 1000).toISOString();
 }
 
 function toNumber(value: LocalGvgApiScalar | undefined): number | null {

@@ -55,7 +55,10 @@ describe("normalizeLocalGvgSnapshot", () => {
       ownerGuildId: "438130839001",
       attackerGuildId: null,
       defenseCount: 120,
-      attackCount: 0
+      attackCount: 0,
+      fallenAt: null,
+      lastWinPartyKnockOutCount: 0,
+      updatedAt: "2026-05-27T11:15:36.000Z"
     });
   });
 
@@ -98,7 +101,10 @@ describe("normalizeLocalGvgCastle", () => {
       ownerGuildId: null,
       attackerGuildId: null,
       defenseCount: 0,
-      attackCount: 0
+      attackCount: 0,
+      fallenAt: null,
+      lastWinPartyKnockOutCount: 0,
+      updatedAt: "1970-01-01T00:00:00.000Z"
     });
   });
 

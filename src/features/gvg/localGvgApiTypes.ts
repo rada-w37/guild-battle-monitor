@@ -20,6 +20,7 @@ export interface LocalGvgCastleResponse extends Record<string, unknown> {
   readonly DefensePartyCount?: LocalGvgApiScalar;
   readonly GvgCastleState?: LocalGvgApiScalar;
   readonly UtcFallenTimeStamp?: LocalGvgApiScalar;
+  readonly LastWinPartyKnockOutCount?: LocalGvgApiScalar;
 }
 
 export interface LocalGvgGuildResponse extends Record<string, unknown> {

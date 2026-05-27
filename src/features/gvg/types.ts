@@ -25,6 +25,9 @@ export interface GvgCastle {
   readonly attackerGuildId: GvgGuildId | null;
   readonly defenseCount: number;
   readonly attackCount: number;
+  readonly fallenAt: string | null;
+  readonly lastWinPartyKnockOutCount: number;
+  readonly updatedAt: string;
 }
 
 export interface GvgSnapshot {
@@ -32,6 +35,25 @@ export interface GvgSnapshot {
   readonly capturedAt: string;
   readonly castles: readonly GvgCastle[];
   readonly guildNames: GvgGuildNameMap;
+}
+
+export interface GvgCastleUpdate {
+  readonly castleId: GvgCastleId;
+  readonly worldId?: GvgWorldId;
+  readonly state: GvgCastleState;
+  readonly status?: GvgCastleStatus;
+  readonly ownerGuildId: GvgGuildId | null;
+  readonly attackerGuildId: GvgGuildId | null;
+  readonly defenseCount: number;
+  readonly attackCount: number;
+  readonly fallenAt: string | null;
+  readonly lastWinPartyKnockOutCount: number;
+  readonly updatedAt: string;
+}
+
+export interface GvgGuildNameUpdate {
+  readonly guildId: GvgGuildId;
+  readonly guildName: string;
 }
 
 export type GvgRealtimeMessage =
@@ -43,7 +65,12 @@ export type GvgRealtimeMessage =
   | {
       readonly type: "castleUpdate";
       readonly receivedAt: string;
-      readonly castle: GvgCastle;
+      readonly castle: GvgCastleUpdate;
+    }
+  | {
+      readonly type: "guildNameUpdate";
+      readonly receivedAt: string;
+      readonly guild: GvgGuildNameUpdate;
     }
   | {
       readonly type: "unknown";

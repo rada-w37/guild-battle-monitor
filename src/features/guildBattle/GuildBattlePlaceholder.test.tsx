@@ -27,7 +27,10 @@ const snapshot = {
       ownerGuildId: ownGuildId,
       attackerGuildId: "123456789001" as GvgGuildId,
       defenseCount: 120,
-      attackCount: 1
+      attackCount: 1,
+      fallenAt: null,
+      lastWinPartyKnockOutCount: 0,
+      updatedAt: "2026-05-27T11:15:36.000Z"
     },
     {
       castleId: "2" as GvgCastleId,
@@ -37,7 +40,10 @@ const snapshot = {
       ownerGuildId: "999999999001" as GvgGuildId,
       attackerGuildId: null,
       defenseCount: 40,
-      attackCount: 0
+      attackCount: 0,
+      fallenAt: null,
+      lastWinPartyKnockOutCount: 0,
+      updatedAt: "2026-05-27T11:15:36.000Z"
     }
   ]
 } satisfies GvgSnapshot;

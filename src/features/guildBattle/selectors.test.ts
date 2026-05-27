@@ -23,6 +23,9 @@ function createCastle(overrides: Partial<GvgCastle> = {}): GvgCastle {
     attackerGuildId: null,
     defenseCount: 31,
     attackCount: 0,
+    fallenAt: null,
+    lastWinPartyKnockOutCount: 0,
+    updatedAt: "2026-05-27T00:00:00.000Z",
     ...overrides
   };
 }

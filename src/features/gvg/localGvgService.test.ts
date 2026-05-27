@@ -44,7 +44,8 @@ describe("loadLocalGvgSnapshot", () => {
           castleId: "1",
           ownerGuildId: "438130839001",
           defenseCount: 120,
-          attackCount: 0
+          attackCount: 0,
+          updatedAt: "2026-05-27T11:15:36.000Z"
         }
       ],
       guildNames: {
