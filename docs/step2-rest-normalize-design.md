@@ -64,13 +64,20 @@ REST provides a full initial snapshot.
 WebSocket will later provide realtime updates for selected streams.
 Both must normalize to the same `GvgCastle` and `GvgSnapshot` meanings before reaching selectors.
 
-## Next Step2-B
+## Step2-B REST boundary
 
-Step2-B can add the actual REST read layer:
+The REST boundary is split into two responsibilities:
 
-- endpoint URL builder for `/{worldId}/localgvg/latest`
-- fetch wrapper with error handling
-- runtime handoff from raw JSON to `normalizeLocalGvgSnapshot`
-- tests for request boundary using mocks
+- API client: builds `/{worldId}/localgvg/latest`, calls an injectable fetcher, validates HTTP/API envelope failures, and returns `LocalGvgApiResponse`.
+- Application service: calls the API client and immediately passes the raw response to `normalizeLocalGvgSnapshot`, returning only `GvgSnapshot`.
 
-UI connection should remain separate unless explicitly requested.
+UI must not call `fetch` directly because raw REST shapes are API-specific and may change.
+Keeping fetch behind the API client prevents UI from depending on `CastleId`, `GuildId`, or envelope fields.
+
+Step2-B still does not connect the result to React state or rendering.
+The minimal `AsyncLoadState<T>` type exists only so the next UI step can represent idle/loading/success/error without introducing a state management library.
+
+## Next UI connection step
+
+The next step can call `loadLocalGvgSnapshot` from a small application boundary, store `AsyncLoadState<GvgSnapshot>` in local React state, then pass the normalized snapshot to Guild Battle selectors.
+REST response objects should remain outside UI components.
