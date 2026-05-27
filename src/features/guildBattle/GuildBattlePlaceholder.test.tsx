@@ -161,7 +161,7 @@ describe("GuildBattlePlaceholder", () => {
     });
     await clickButtonByText("監視開始");
 
-    expect(document.body.textContent).toContain("接続状態: connected");
+    expect(document.body.textContent).toContain("接続状態: 接続中");
     expect(realtimeClient.subscriptions).toHaveLength(1);
 
     await act(async () => {
@@ -187,9 +187,79 @@ describe("GuildBattlePlaceholder", () => {
     await clickButtonByText("監視開始");
     await clickButtonByText("監視停止");
 
-    expect(document.body.textContent).toContain("接続状態: disconnected");
+    expect(document.body.textContent).toContain("接続状態: 切断");
     expect(realtimeClient.subscriptions).toHaveLength(1);
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
+  });
+
+  it("shows disconnected after socket close and reconnects manually", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const firstClient = new MockGvgRealtimeClient();
+    const secondClient = new MockGvgRealtimeClient();
+    const realtimeClients = [firstClient, secondClient];
+    renderComponent(loadSnapshot, () => {
+      const client = realtimeClients.shift();
+
+      if (!client) {
+        throw new Error("missing realtime client");
+      }
+
+      return client;
+    });
+
+    await clickSubmitButton();
+
+    await act(async () => {
+      updateInput(getOwnGuildIdInput(), ownGuildId);
+    });
+    await clickButtonByText("監視開始");
+
+    act(() => {
+      firstClient.disconnect("socket closed");
+    });
+
+    expect(document.body.textContent).toContain("接続状態: 切断");
+
+    await clickButtonByText("再接続");
+
+    expect(firstClient.sentUnsubscriptions).toHaveLength(1);
+    expect(secondClient.subscriptions).toHaveLength(1);
+    expect(document.body.textContent).toContain("接続状態: 接続中");
+  });
+
+  it("shows error and can reconnect manually", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const firstClient = new MockGvgRealtimeClient();
+    const secondClient = new MockGvgRealtimeClient();
+    const clients = [firstClient, secondClient];
+    renderComponent(loadSnapshot, () => {
+      const client = clients.shift();
+
+      if (!client) {
+        throw new Error("missing realtime client");
+      }
+
+      return client;
+    });
+
+    await clickSubmitButton();
+
+    await act(async () => {
+      updateInput(getOwnGuildIdInput(), ownGuildId);
+    });
+    await clickButtonByText("監視開始");
+
+    act(() => {
+      firstClient.emitError(new Error("socket failed"));
+    });
+
+    expect(document.body.textContent).toContain("接続状態: エラー");
+    expect(document.body.textContent).toContain("接続エラーが発生しました");
+
+    await clickButtonByText("再接続");
+
+    expect(secondClient.subscriptions).toHaveLength(1);
+    expect(document.body.textContent).toContain("接続状態: 接続中");
   });
 });
 

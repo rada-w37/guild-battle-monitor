@@ -29,12 +29,14 @@ export function GuildBattlePlaceholder({
   const trimmedWorldId = worldId.trim();
   const trimmedOwnGuildId = ownGuildId.trim();
   const isLoading = loadState.status === "loading";
+  const hasLoadedSnapshot = loadState.status === "success";
+  const hasRealtimeInputs = trimmedWorldId.length > 0 && trimmedOwnGuildId.length > 0;
   const canStartRealtime =
-    loadState.status === "success" &&
-    trimmedWorldId.length > 0 &&
-    trimmedOwnGuildId.length > 0 &&
-    realtimeState.status !== "connecting" &&
-    realtimeState.status !== "connected";
+    hasLoadedSnapshot && hasRealtimeInputs && realtimeState.status === "idle";
+  const canReconnectRealtime =
+    hasLoadedSnapshot &&
+    hasRealtimeInputs &&
+    (realtimeState.status === "disconnected" || realtimeState.status === "error");
   const canStopRealtime = realtimeState.status === "connecting" || realtimeState.status === "connected";
 
   useEffect(() => {
@@ -70,7 +72,19 @@ export function GuildBattlePlaceholder({
       return;
     }
 
-    stopRealtime("realtime restart");
+    await startRealtime(loadState.data);
+  }
+
+  async function handleReconnectRealtime() {
+    if (!canReconnectRealtime || loadState.status !== "success") {
+      return;
+    }
+
+    await startRealtime(loadState.data);
+  }
+
+  async function startRealtime(snapshot: GvgSnapshot) {
+    stopRealtime("realtime restart", { nextState: "idle" });
 
     const client = createRealtimeClient();
     const removeRealtimeListener = client.addEventListener((event) => {
@@ -96,7 +110,7 @@ export function GuildBattlePlaceholder({
     runtimeRef.current = runtime;
 
     try {
-      await runtime.start(loadState.data);
+      await runtime.start(snapshot);
     } catch (error) {
       setRealtimeState({
         status: "error",
@@ -109,11 +123,16 @@ export function GuildBattlePlaceholder({
     stopRealtime("manual stop");
   }
 
-  function stopRealtime(reason: string) {
+  function stopRealtime(reason: string, options: { readonly nextState?: "idle" | "disconnected" } = {}) {
     runtimeRef.current?.dispose(reason);
     runtimeRef.current = null;
     removeRealtimeListenerRef.current?.();
     removeRealtimeListenerRef.current = null;
+
+    if (options.nextState === "idle") {
+      setRealtimeState({ status: "idle" });
+      return;
+    }
 
     if (realtimeState.status !== "idle" && realtimeState.status !== "disconnected") {
       setRealtimeState({ status: "disconnected", reason });
@@ -166,9 +185,11 @@ export function GuildBattlePlaceholder({
         <SnapshotStatus loadState={loadState} ownGuildId={trimmedOwnGuildId} />
         <RealtimeControls
           canStart={canStartRealtime}
+          canReconnect={canReconnectRealtime}
           canStop={canStopRealtime}
           realtimeState={realtimeState}
           onStart={handleStartRealtime}
+          onReconnect={handleReconnectRealtime}
           onStop={handleStopRealtime}
         />
       </section>
@@ -178,28 +199,42 @@ export function GuildBattlePlaceholder({
 
 function RealtimeControls({
   canStart,
+  canReconnect,
   canStop,
   realtimeState,
   onStart,
+  onReconnect,
   onStop
 }: {
   readonly canStart: boolean;
+  readonly canReconnect: boolean;
   readonly canStop: boolean;
   readonly realtimeState: GvgRealtimeConnectionState;
   readonly onStart: () => void;
+  readonly onReconnect: () => void;
   readonly onStop: () => void;
 }) {
+  const stateView = getRealtimeStateView(realtimeState);
+
   return (
     <section className="realtime-controls" aria-labelledby="realtime-title">
       <h2 className="realtime-controls__title" id="realtime-title">
         realtime
       </h2>
-      <p className="status-message realtime-controls__state">
-        接続状態: {formatRealtimeState(realtimeState)}
+      <p className={`status-message realtime-controls__state realtime-state realtime-state--${stateView.tone}`}>
+        接続状態: {stateView.label}
       </p>
+      {realtimeState.status === "error" ? (
+        <p className="status-message status-message--error realtime-controls__hint" role="alert">
+          接続エラーが発生しました
+        </p>
+      ) : null}
       <div className="realtime-controls__actions">
         <button className="load-form__button" type="button" disabled={!canStart} onClick={onStart}>
           監視開始
+        </button>
+        <button className="load-form__button" type="button" disabled={!canReconnect} onClick={onReconnect}>
+          再接続
         </button>
         <button className="load-form__button load-form__button--secondary" type="button" disabled={!canStop} onClick={onStop}>
           監視停止
@@ -209,12 +244,23 @@ function RealtimeControls({
   );
 }
 
-function formatRealtimeState(state: GvgRealtimeConnectionState): string {
-  if (state.status === "error") {
-    return `error: ${state.error.message}`;
+function getRealtimeStateView(state: GvgRealtimeConnectionState): {
+  readonly label: string;
+  readonly tone: "idle" | "connecting" | "connected" | "disconnected" | "error";
+} {
+  switch (state.status) {
+    case "connecting":
+    case "reconnecting":
+      return { label: "接続中...", tone: "connecting" };
+    case "connected":
+      return { label: "接続中", tone: "connected" };
+    case "disconnected":
+      return { label: "切断", tone: "disconnected" };
+    case "error":
+      return { label: "エラー", tone: "error" };
+    case "idle":
+      return { label: "未接続", tone: "idle" };
   }
-
-  return state.status;
 }
 
 function SnapshotStatus({

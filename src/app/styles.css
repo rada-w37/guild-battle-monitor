@@ -147,11 +147,36 @@ select {
   margin-top: 8px;
 }
 
+.realtime-controls__hint {
+  margin-top: 8px;
+}
+
 .realtime-controls__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 12px;
+}
+
+.realtime-state {
+  font-weight: 700;
+}
+
+.realtime-state--idle {
+  color: #566675;
+}
+
+.realtime-state--connecting {
+  color: #8a6500;
+}
+
+.realtime-state--connected {
+  color: #1f7a3f;
+}
+
+.realtime-state--disconnected,
+.realtime-state--error {
+  color: #a32929;
 }
 
 .snapshot-summary__title {
