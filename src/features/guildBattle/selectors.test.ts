@@ -20,6 +20,7 @@ function createCastle(overrides: Partial<GvgCastle> = {}): GvgCastle {
     state: "idle",
     status: "normal",
     ownerGuildId: ownGuildId,
+    attackerGuildId: null,
     defenseCount: 31,
     attackCount: 0,
     ...overrides

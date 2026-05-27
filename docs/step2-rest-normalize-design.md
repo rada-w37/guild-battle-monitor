@@ -81,3 +81,27 @@ The minimal `AsyncLoadState<T>` type exists only so the next UI step can represe
 
 The next step can call `loadLocalGvgSnapshot` from a small application boundary, store `AsyncLoadState<GvgSnapshot>` in local React state, then pass the normalized snapshot to Guild Battle selectors.
 REST response objects should remain outside UI components.
+
+## Step2-C minimal UI connection
+
+The placeholder screen now accepts a `worldId`, calls `loadLocalGvgSnapshot`, and stores only `AsyncLoadState<GvgSnapshot>` in local React state.
+It renders idle, loading, error, and success states without exposing REST response fields to UI.
+
+The success view is intentionally limited to snapshot overview data:
+
+- world ID
+- castle count
+- guild count
+- captured timestamp
+- a simple normalized castle list
+
+Still not implemented:
+
+- WebSocket updates
+- binary parsing
+- auto refresh
+- alert/monitoring UI
+- map display
+- routing
+
+The next step can pass the normalized `GvgSnapshot` through Guild Battle selectors to create owner-focused ViewModels.

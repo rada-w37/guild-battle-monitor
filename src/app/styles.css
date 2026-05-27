@@ -29,8 +29,9 @@ select {
 
 .app-shell {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   padding: 32px 16px;
 }
 
@@ -59,4 +60,126 @@ select {
   margin: 0;
   color: #3d4d5c;
   line-height: 1.7;
+}
+
+.monitor-panel {
+  width: min(100%, 960px);
+}
+
+.load-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-top: 24px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field__label {
+  color: #566675;
+  font-size: 0.875rem;
+}
+
+.field__input {
+  width: min(100%, 180px);
+  padding: 10px 12px;
+  border: 1px solid #c8d2de;
+  border-radius: 6px;
+  color: #1d2733;
+  background: #ffffff;
+}
+
+.load-form__button {
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid #1f6feb;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #1f6feb;
+  cursor: pointer;
+}
+
+.load-form__button:disabled,
+.field__input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.status-message {
+  margin: 24px 0 0;
+  color: #3d4d5c;
+}
+
+.status-message--error {
+  color: #a32929;
+}
+
+.snapshot-summary {
+  margin-top: 24px;
+}
+
+.snapshot-summary__title {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.summary-grid div {
+  padding: 12px;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.summary-grid dt {
+  color: #566675;
+  font-size: 0.8125rem;
+}
+
+.summary-grid dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.castle-list {
+  margin-top: 16px;
+  overflow-x: auto;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+}
+
+.castle-list__header,
+.castle-list__row {
+  display: grid;
+  grid-template-columns: 80px minmax(150px, 1fr) minmax(150px, 1fr) 80px 80px minmax(130px, 1fr);
+  min-width: 760px;
+}
+
+.castle-list__header {
+  color: #566675;
+  background: #f0f4f8;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.castle-list__header span,
+.castle-list__row span {
+  padding: 10px 12px;
+  border-bottom: 1px solid #d8e0ea;
+  overflow-wrap: anywhere;
+}
+
+.castle-list__row:last-child span {
+  border-bottom: 0;
 }

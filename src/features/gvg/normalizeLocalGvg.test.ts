@@ -53,6 +53,7 @@ describe("normalizeLocalGvgSnapshot", () => {
       state: "idle",
       status: "normal",
       ownerGuildId: "438130839001",
+      attackerGuildId: null,
       defenseCount: 120,
       attackCount: 0
     });
@@ -95,6 +96,7 @@ describe("normalizeLocalGvgCastle", () => {
       state: "unknown",
       status: "unknown",
       ownerGuildId: null,
+      attackerGuildId: null,
       defenseCount: 0,
       attackCount: 0
     });

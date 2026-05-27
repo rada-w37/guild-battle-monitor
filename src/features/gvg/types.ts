@@ -22,6 +22,7 @@ export interface GvgCastle {
   readonly state: GvgCastleState;
   readonly status: GvgCastleStatus;
   readonly ownerGuildId: GvgGuildId | null;
+  readonly attackerGuildId: GvgGuildId | null;
   readonly defenseCount: number;
   readonly attackCount: number;
 }

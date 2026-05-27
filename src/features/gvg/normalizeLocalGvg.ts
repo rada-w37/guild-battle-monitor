@@ -46,6 +46,7 @@ export function normalizeLocalGvgCastle(
     state,
     status: normalizeLocalGvgCastleStatus(state, castle.AttackPartyCount),
     ownerGuildId: normalizeLocalGvgGuildId(castle.GuildId),
+    attackerGuildId: normalizeLocalGvgGuildId(castle.AttackerGuildId),
     defenseCount: normalizeLocalGvgCount(castle.DefensePartyCount),
     attackCount: normalizeLocalGvgCount(castle.AttackPartyCount)
   };
