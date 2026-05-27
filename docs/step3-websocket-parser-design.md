@@ -95,3 +95,35 @@ Step3-C can implement `normalizeRealtimeGvgMessage` using parser fixtures:
 - guild ID display/comparison consistency with REST normalize
 
 Actual byte parsing can remain a later isolated step.
+
+## Step3-C realtime normalize
+
+Step3-C adds the semantic layer after parser output:
+
+```txt
+RawRealtimeMessage[]
+-> normalizeRealtimeGvgMessages
+-> GvgRealtimeMessage[]
+```
+
+Raw messages are transport-oriented.
+Normalized messages are app-oriented and can be passed to `applyGvgRealtimeMessages`.
+
+Realtime normalize handles:
+
+- stream ID decoding for castle ID and world ID
+- castle status to `GvgCastleUpdate`
+- guild information to `guildNameUpdate`
+- state number mapping shared with REST semantics
+- fallen timestamp conversion
+- missing or zero guild IDs as `null`
+- unknown raw messages as `unknown`
+
+WebSocket guild IDs contain the first 9 digits only.
+For Guild Battle worlds, normalize appends the last three digits of the stream world ID so the display ID matches REST-style guild IDs.
+Comparison-specific ID handling remains separate.
+
+Empty guild names are not applied to `guildNames`.
+They normalize to `unknown` messages so the app does not crash and the condition remains inspectable.
+
+The next parser implementation step can focus only on byte layout and produce these raw message types.
