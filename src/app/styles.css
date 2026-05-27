@@ -113,6 +113,12 @@ select {
   opacity: 0.6;
 }
 
+.load-form__button--secondary {
+  border-color: #738395;
+  color: #1d2733;
+  background: #ffffff;
+}
+
 .status-message {
   margin: 24px 0 0;
   color: #3d4d5c;
@@ -124,6 +130,28 @@ select {
 
 .snapshot-summary {
   margin-top: 24px;
+}
+
+.realtime-controls {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #d8e0ea;
+}
+
+.realtime-controls__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.realtime-controls__state {
+  margin-top: 8px;
+}
+
+.realtime-controls__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .snapshot-summary__title {

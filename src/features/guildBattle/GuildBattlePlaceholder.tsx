@@ -1,7 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
+import { BrowserGvgRealtimeClient } from "../gvg/browserRealtimeClient";
 import { createGvgScopeLabel } from "../gvg/createGvgScopeLabel";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
+import type { GvgRealtimeClient, GvgRealtimeConnectionState } from "../gvg/realtimeClientTypes";
+import { GvgRealtimeSnapshotRuntime } from "../gvg/realtimeSnapshotRuntime";
 import type { GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
 import { createOwnedCastleViewModels } from "./selectors";
@@ -9,18 +12,36 @@ import type { GuildBattleOwnedCastleViewModel } from "./types";
 
 interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
+  readonly createRealtimeClient?: () => GvgRealtimeClient;
 }
 
 export function GuildBattlePlaceholder({
-  loadSnapshot = loadLocalGvgSnapshot
+  loadSnapshot = loadLocalGvgSnapshot,
+  createRealtimeClient = () => new BrowserGvgRealtimeClient()
 }: GuildBattlePlaceholderProps) {
   const [worldId, setWorldId] = useState("1001");
   const [ownGuildId, setOwnGuildId] = useState("");
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
+  const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
+  const runtimeRef = useRef<GvgRealtimeSnapshotRuntime | null>(null);
+  const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
 
   const trimmedWorldId = worldId.trim();
   const trimmedOwnGuildId = ownGuildId.trim();
   const isLoading = loadState.status === "loading";
+  const canStartRealtime =
+    loadState.status === "success" &&
+    trimmedWorldId.length > 0 &&
+    trimmedOwnGuildId.length > 0 &&
+    realtimeState.status !== "connecting" &&
+    realtimeState.status !== "connected";
+  const canStopRealtime = realtimeState.status === "connecting" || realtimeState.status === "connected";
+
+  useEffect(() => {
+    return () => {
+      stopRealtime("component unmounted");
+    };
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,6 +51,7 @@ export function GuildBattlePlaceholder({
       return;
     }
 
+    stopRealtime("snapshot reload");
     setLoadState({ status: "loading" });
 
     try {
@@ -40,6 +62,61 @@ export function GuildBattlePlaceholder({
         status: "error",
         error: error instanceof Error ? error : new Error("初期状態の取得に失敗しました。")
       });
+    }
+  }
+
+  async function handleStartRealtime() {
+    if (!canStartRealtime || loadState.status !== "success") {
+      return;
+    }
+
+    stopRealtime("realtime restart");
+
+    const client = createRealtimeClient();
+    const removeRealtimeListener = client.addEventListener((event) => {
+      if (event.type === "stateChanged") {
+        setRealtimeState(event.state);
+      }
+
+      if (event.type === "error") {
+        setRealtimeState({ status: "error", error: event.error });
+      }
+    });
+    const runtime = new GvgRealtimeSnapshotRuntime({
+      client,
+      onSnapshotUpdated: (snapshot) => {
+        setLoadState({ status: "success", data: snapshot });
+      },
+      onError: (error) => {
+        setRealtimeState({ status: "error", error });
+      }
+    });
+
+    removeRealtimeListenerRef.current = removeRealtimeListener;
+    runtimeRef.current = runtime;
+
+    try {
+      await runtime.start(loadState.data);
+    } catch (error) {
+      setRealtimeState({
+        status: "error",
+        error: error instanceof Error ? error : new Error("realtime start failed")
+      });
+    }
+  }
+
+  function handleStopRealtime() {
+    stopRealtime("manual stop");
+  }
+
+  function stopRealtime(reason: string) {
+    runtimeRef.current?.dispose(reason);
+    runtimeRef.current = null;
+    removeRealtimeListenerRef.current?.();
+    removeRealtimeListenerRef.current = null;
+
+    if (realtimeState.status !== "idle" && realtimeState.status !== "disconnected") {
+      setRealtimeState({ status: "disconnected", reason });
     }
   }
 
@@ -87,9 +164,57 @@ export function GuildBattlePlaceholder({
         </form>
 
         <SnapshotStatus loadState={loadState} ownGuildId={trimmedOwnGuildId} />
+        <RealtimeControls
+          canStart={canStartRealtime}
+          canStop={canStopRealtime}
+          realtimeState={realtimeState}
+          onStart={handleStartRealtime}
+          onStop={handleStopRealtime}
+        />
       </section>
     </main>
   );
+}
+
+function RealtimeControls({
+  canStart,
+  canStop,
+  realtimeState,
+  onStart,
+  onStop
+}: {
+  readonly canStart: boolean;
+  readonly canStop: boolean;
+  readonly realtimeState: GvgRealtimeConnectionState;
+  readonly onStart: () => void;
+  readonly onStop: () => void;
+}) {
+  return (
+    <section className="realtime-controls" aria-labelledby="realtime-title">
+      <h2 className="realtime-controls__title" id="realtime-title">
+        realtime
+      </h2>
+      <p className="status-message realtime-controls__state">
+        接続状態: {formatRealtimeState(realtimeState)}
+      </p>
+      <div className="realtime-controls__actions">
+        <button className="load-form__button" type="button" disabled={!canStart} onClick={onStart}>
+          監視開始
+        </button>
+        <button className="load-form__button load-form__button--secondary" type="button" disabled={!canStop} onClick={onStop}>
+          監視停止
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function formatRealtimeState(state: GvgRealtimeConnectionState): string {
+  if (state.status === "error") {
+    return `error: ${state.error.message}`;
+  }
+
+  return state.status;
 }
 
 function SnapshotStatus({

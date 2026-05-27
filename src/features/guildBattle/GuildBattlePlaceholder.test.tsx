@@ -3,13 +3,24 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
+import { MockGvgRealtimeClient } from "../gvg/mockRealtimeClient";
+import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import type { loadLocalGvgSnapshot } from "../gvg/localGvgService";
+import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
 const ownGuildId = "438130839001" as GvgGuildId;
+
+const castleStreamId = buildGvgStreamId({
+  castleId: 1,
+  block: 0,
+  worldGroupId: 0,
+  gvgClass: 0,
+  worldId: 1001
+});
 
 const snapshot = {
   worldId: "1001" as GvgWorldId,
@@ -137,15 +148,63 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(document.body.textContent).toContain("HTTP 500");
   });
+
+  it("starts realtime monitoring and rerenders owned castles after payload update", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(loadSnapshot, () => realtimeClient);
+
+    await clickSubmitButton();
+
+    await act(async () => {
+      updateInput(getOwnGuildIdInput(), ownGuildId);
+    });
+    await clickButtonByText("監視開始");
+
+    expect(document.body.textContent).toContain("接続状態: connected");
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await act(async () => {
+      realtimeClient.emitPayload(createCastleStatusBytes({ defenseCount: 12, attackCount: 0 }));
+    });
+
+    expect(document.body.textContent).toContain("warning");
+    expect(document.body.textContent).toContain("12");
+  });
+
+  it("stops realtime monitoring safely", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(loadSnapshot, () => realtimeClient);
+
+    await clickSubmitButton();
+
+    await act(async () => {
+      updateInput(getOwnGuildIdInput(), ownGuildId);
+    });
+    await clickButtonByText("監視停止");
+    await clickButtonByText("監視開始");
+    await clickButtonByText("監視開始");
+    await clickButtonByText("監視停止");
+
+    expect(document.body.textContent).toContain("接続状態: disconnected");
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
+  });
 });
 
-function renderComponent(loadSnapshot?: typeof loadLocalGvgSnapshot) {
+function renderComponent(
+  loadSnapshot?: typeof loadLocalGvgSnapshot,
+  createRealtimeClient?: () => GvgRealtimeClient
+) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
 
   act(() => {
-    root?.render(<GuildBattlePlaceholder loadSnapshot={loadSnapshot} />);
+    root?.render(
+      <GuildBattlePlaceholder loadSnapshot={loadSnapshot} createRealtimeClient={createRealtimeClient} />
+    );
   });
 }
 
@@ -183,6 +242,20 @@ function getSubmitButton() {
   return button;
 }
 
+async function clickButtonByText(label: string) {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+    (candidate) => candidate.textContent === label
+  );
+
+  if (!button) {
+    throw new Error(`button was not found: ${label}`);
+  }
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
 function updateInput(input: HTMLInputElement, value: string) {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   valueSetter?.call(input, value);
@@ -198,4 +271,40 @@ function createDeferred<TValue>() {
   });
 
   return { promise, resolve, reject };
+}
+
+function createCastleStatusBytes(
+  overrides: Partial<{
+    guildId: number;
+    attackerGuildId: number;
+    defenseCount: number;
+    attackCount: number;
+    rawState: number;
+  }> = {}
+): number[] {
+  return [
+    ...writeUint32(castleStreamId),
+    ...writeUint32(overrides.guildId ?? 438130839),
+    ...writeUint32(overrides.attackerGuildId ?? 0),
+    ...writeUint32(0),
+    ...writeUint16(overrides.defenseCount ?? 30),
+    ...writeUint16(overrides.attackCount ?? 0),
+    overrides.rawState ?? 0,
+    0,
+    ...writeUint16(0)
+  ];
+}
+
+function writeUint32(value: number): number[] {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, value, true);
+
+  return [...bytes];
+}
+
+function writeUint16(value: number): number[] {
+  const bytes = new Uint8Array(2);
+  new DataView(bytes.buffer).setUint16(0, value, true);
+
+  return [...bytes];
 }
