@@ -13,6 +13,6 @@ export function normalizeGvgGuildIdForComparison(
     return null;
   }
 
-  // APIによって数値/文字列/ゼロ埋めの差があり得るため、比較専用IDは表示用IDから分離する。
+  // API responses may differ by number/string/zero padding. Keep display IDs separate from comparison IDs.
   return displayGuildId.replace(/^0+(?=\d)/, "");
 }

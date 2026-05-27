@@ -34,6 +34,6 @@ guild IDはAPIによって数値、文字列、ゼロ埋めの差が出る可能
 - `safe`: `defenseCount > 30`
 - `warning`: `defenseCount <= 30`
 - `danger`: `defenseCount <= 10`
-- `critical`: `attackCount > 0` または `state` が `inBattle` / `fallen` / `counterattack`
+- `critical`: `attackCount > 0` または `state` が `inBattle` / `fallen` / `counterattack` / `counterattackSuccessful`
 
 判定優先度は `critical > danger > warning > safe` とする。

@@ -8,6 +8,7 @@ export type GvgCastleState =
   | "idle"
   | "inBattle"
   | "counterattack"
+  | "counterattackSuccessful"
   | "fallen"
   | "unknown";
 
