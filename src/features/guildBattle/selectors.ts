@@ -8,6 +8,7 @@ import type {
   GuildBattleCastleListSortMode,
   GuildBattleCastleSummaryViewModel,
   GuildBattleCastleViewModel,
+  GuildBattleGuildCandidateViewModel,
   GuildBattleMonitorSettings,
   GuildBattleOwnedCastleViewModel
 } from "./types";
@@ -136,6 +137,44 @@ export function createGuildBattleCastleSummaryViewModel(
     criticalCount: countAlertLevel(viewModels, "critical"),
     mode
   };
+}
+
+export function createGuildBattleGuildCandidates(
+  snapshot: GvgSnapshot
+): GuildBattleGuildCandidateViewModel[] {
+  const candidateMap = new Map<GvgGuildId, GuildBattleGuildCandidateViewModel>();
+
+  for (const castle of snapshot.castles) {
+    if (castle.ownerGuildId === null) {
+      continue;
+    }
+
+    const existingCandidate = candidateMap.get(castle.ownerGuildId);
+
+    if (existingCandidate) {
+      candidateMap.set(castle.ownerGuildId, {
+        ...existingCandidate,
+        ownedCastleCount: existingCandidate.ownedCastleCount + 1
+      });
+      continue;
+    }
+
+    candidateMap.set(castle.ownerGuildId, {
+      guildId: castle.ownerGuildId,
+      guildName: snapshot.guildNames[castle.ownerGuildId] ?? `Guild ${castle.ownerGuildId}`,
+      ownedCastleCount: 1
+    });
+  }
+
+  return [...candidateMap.values()].sort((left, right) => {
+    const countDiff = right.ownedCastleCount - left.ownedCastleCount;
+
+    if (countDiff !== 0) {
+      return countDiff;
+    }
+
+    return left.guildName.localeCompare(right.guildName);
+  });
 }
 
 function createCastleViewModel(

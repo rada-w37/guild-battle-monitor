@@ -5,6 +5,7 @@ import {
   createAllCastleViewModels,
   createGuildBattleCastleDisplayViewModel,
   createGuildBattleCastleSummaryViewModel,
+  createGuildBattleGuildCandidates,
   createOwnedCastleViewModels,
   getDefenseAlertLevel,
   isCastleFallen,
@@ -205,5 +206,34 @@ describe("guild battle selectors", () => {
       criticalCount: 1,
       mode: "allCastles"
     });
+  });
+
+  it("creates guild candidates from castle owners", () => {
+    const candidates = createGuildBattleGuildCandidates({
+      worldId,
+      capturedAt: "2026-05-27T00:00:00.000Z",
+      castles: [
+        createCastle({ ownerGuildId: "456" as GvgGuildId }),
+        createCastle({ castleId: "castle-2" as GvgCastleId, ownerGuildId: ownGuildId }),
+        createCastle({ castleId: "castle-3" as GvgCastleId, ownerGuildId: ownGuildId }),
+        createCastle({ castleId: "castle-empty" as GvgCastleId, ownerGuildId: null })
+      ],
+      guildNames: {
+        [ownGuildId]: "Own Guild"
+      }
+    });
+
+    expect(candidates).toEqual([
+      {
+        guildId: ownGuildId,
+        guildName: "Own Guild",
+        ownedCastleCount: 2
+      },
+      {
+        guildId: "456",
+        guildName: "Guild 456",
+        ownedCastleCount: 1
+      }
+    ]);
   });
 });

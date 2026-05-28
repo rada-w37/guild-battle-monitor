@@ -47,3 +47,9 @@ export interface GuildBattleCastleSummaryViewModel {
   readonly criticalCount: number;
   readonly mode: GuildBattleCastleDisplayMode;
 }
+
+export interface GuildBattleGuildCandidateViewModel {
+  readonly guildId: GvgGuildId;
+  readonly guildName: string;
+  readonly ownedCastleCount: number;
+}

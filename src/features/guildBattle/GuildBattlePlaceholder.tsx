@@ -9,6 +9,7 @@ import type { GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
 import {
   createGuildBattleCastleDisplayViewModel,
+  createGuildBattleGuildCandidates,
   createGuildBattleCastleSummaryViewModel,
   sortGuildBattleCastleViewModels
 } from "./selectors";
@@ -16,7 +17,8 @@ import type {
   GuildBattleAlertLevel,
   GuildBattleCastleDisplayReason,
   GuildBattleCastleListSortMode,
-  GuildBattleCastleViewModel
+  GuildBattleCastleViewModel,
+  GuildBattleGuildCandidateViewModel
 } from "./types";
 
 interface GuildBattlePlaceholderProps {
@@ -40,6 +42,12 @@ export function GuildBattlePlaceholder({
   const trimmedOwnGuildId = ownGuildId.trim();
   const isLoading = loadState.status === "loading";
   const hasLoadedSnapshot = loadState.status === "success";
+  const guildCandidates = useMemo(
+    () => (loadState.status === "success" ? createGuildBattleGuildCandidates(loadState.data) : []),
+    [loadState]
+  );
+  const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === trimmedOwnGuildId);
+  const guildSelectValue = selectedGuildCandidate?.guildId ?? "";
   const hasRealtimeInputs = trimmedWorldId.length > 0 && trimmedOwnGuildId.length > 0;
   const canStartRealtime = hasLoadedSnapshot && hasRealtimeInputs && realtimeState.status === "idle";
   const canReconnectRealtime =
@@ -182,6 +190,12 @@ export function GuildBattlePlaceholder({
               inputMode="numeric"
             />
           </label>
+          <GuildCandidateSelect
+            candidates={guildCandidates}
+            disabled={isLoading || loadState.status !== "success"}
+            value={guildSelectValue}
+            onChange={setOwnGuildId}
+          />
           <button className="load-form__button" type="submit" disabled={isLoading || trimmedWorldId.length === 0}>
             初期状態を取得
           </button>
@@ -204,6 +218,37 @@ export function GuildBattlePlaceholder({
         />
       </section>
     </main>
+  );
+}
+
+function GuildCandidateSelect({
+  candidates,
+  disabled,
+  value,
+  onChange
+}: {
+  readonly candidates: readonly GuildBattleGuildCandidateViewModel[];
+  readonly disabled: boolean;
+  readonly value: string;
+  readonly onChange: (guildId: string) => void;
+}) {
+  return (
+    <label className="field">
+      <span className="field__label">ギルド選択</span>
+      <select
+        className="field__input field__input--wide"
+        disabled={disabled}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">全拠点表示</option>
+        {candidates.map((candidate) => (
+          <option key={candidate.guildId} value={candidate.guildId}>
+            {candidate.guildName} ({candidate.ownedCastleCount})
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

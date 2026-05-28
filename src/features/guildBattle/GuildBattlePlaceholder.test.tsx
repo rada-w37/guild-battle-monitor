@@ -109,7 +109,23 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("取得結果");
     expect(document.body.textContent).toContain("自ギルドが未指定のため、全拠点を表示しています。");
     expect(document.body.textContent).toContain("表示モード全拠点");
+    expect(getGuildSelectOptions()).toEqual(["全拠点表示", "Guild 999999999001 (1)", "Owner Guild (1)"]);
     expect(getRenderedCastleIds()).toEqual(["1", "2"]);
+  });
+
+  it("selects a guild candidate by guildId", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    renderComponent(loadSnapshot);
+
+    await clickSubmitButton();
+
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
+
+    expect(getOwnGuildIdInput().value).toBe(ownGuildId);
+    expect(document.body.textContent).toContain("Owner Guild");
+    expect(getRenderedCastleIds()).toEqual(["1"]);
   });
 
   it("shows only owned castles when own guild ID matches", async () => {
@@ -211,6 +227,26 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(document.body.textContent).toContain("注意");
     expect(document.body.textContent).toContain("12");
+  });
+
+  it("updates guild candidates after realtime snapshot updates", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(loadSnapshot, () => realtimeClient);
+
+    await clickSubmitButton();
+
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
+    await clickRealtimeStartButton();
+
+    await act(async () => {
+      realtimeClient.emitPayload(createCastleStatusBytes({ guildId: 123456789, defenseCount: 25 }));
+    });
+
+    expect(getGuildSelectOptions()).toContain("Attack Guild (1)");
+    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
   });
 
   it("stops realtime monitoring safely", async () => {
@@ -354,13 +390,27 @@ function getSubmitButton() {
 }
 
 function getSortSelect() {
-  const select = document.querySelector<HTMLSelectElement>("select");
+  const select = document.querySelectorAll<HTMLSelectElement>("select")[1];
 
   if (!select) {
     throw new Error("sort select was not found");
   }
 
   return select;
+}
+
+function getGuildSelect() {
+  const select = document.querySelectorAll<HTMLSelectElement>("select")[0];
+
+  if (!select) {
+    throw new Error("guild select was not found");
+  }
+
+  return select;
+}
+
+function getGuildSelectOptions() {
+  return Array.from(getGuildSelect().options).map((option) => option.textContent ?? "");
 }
 
 function getRenderedCastleIds() {
@@ -376,6 +426,18 @@ async function clickButtonByText(label: string) {
 
   if (!button) {
     throw new Error(`button was not found: ${label}`);
+  }
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function clickRealtimeStartButton() {
+  const button = document.querySelectorAll<HTMLButtonElement>("button")[1];
+
+  if (!button) {
+    throw new Error("realtime start button was not found");
   }
 
   await act(async () => {
