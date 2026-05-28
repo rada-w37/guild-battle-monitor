@@ -478,8 +478,51 @@ select {
 }
 
 .snapshot-summary__title {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 1.15rem;
+}
+
+.snapshot-summary__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.connection-indicator {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #c8d2de;
+  border-radius: 999px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.connection-indicator__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.connection-indicator--connected .connection-indicator__dot {
+  background: #16a34a;
+}
+
+.connection-indicator--reconnecting .connection-indicator__dot {
+  background: #eab308;
+}
+
+.connection-indicator--disconnected .connection-indicator__dot {
+  background: #dc2626;
+}
+
+.connection-indicator--disabled .connection-indicator__dot {
+  background: #94a3b8;
 }
 
 .summary-grid {
@@ -541,9 +584,9 @@ select {
   display: grid;
   grid-template-columns:
     minmax(132px, 1.3fr)
-    74px
-    74px
-    68px
+    78px
+    78px
+    70px
     minmax(110px, 1fr);
   align-items: center;
   min-width: 0;
@@ -553,9 +596,9 @@ select {
 .castle-list--with-owner .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    74px
-    74px
-    68px
+    78px
+    78px
+    70px
     minmax(110px, 1fr)
     minmax(110px, 1fr);
 }
@@ -564,9 +607,9 @@ select {
 .castle-list--with-dev .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    74px
-    74px
-    68px
+    78px
+    78px
+    70px
     minmax(110px, 1fr)
     minmax(116px, 0.8fr);
 }
@@ -575,9 +618,9 @@ select {
 .castle-list--with-owner.castle-list--with-dev .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    74px
-    74px
-    68px
+    78px
+    78px
+    70px
     minmax(110px, 1fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr);
@@ -587,9 +630,9 @@ select {
 .castle-list--with-test .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    74px
-    74px
-    68px
+    78px
+    78px
+    70px
     minmax(110px, 1fr)
     minmax(116px, 0.8fr)
     minmax(170px, 1.2fr);
@@ -599,9 +642,9 @@ select {
 .castle-list--with-owner.castle-list--with-test .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    74px
-    74px
-    68px
+    78px
+    78px
+    70px
     minmax(110px, 1fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr)
@@ -665,16 +708,17 @@ select {
 }
 
 .castle-list__count {
-  min-width: 66px;
+  display: inline-flex;
+  justify-content: space-between;
+  min-width: 68px;
   overflow-wrap: normal;
   font-size: 1rem;
   font-weight: 800;
-  text-align: right;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .castle-list__count::before {
-  float: left;
   color: #667789;
   content: attr(data-label);
   font-size: 0.75rem;
@@ -694,13 +738,23 @@ select {
   align-items: center;
   justify-content: flex-end;
   width: fit-content;
-  min-width: 54px;
+  min-width: 60px;
   padding: 2px 6px;
   border-radius: 5px;
   font-size: 0.75rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.ko-badge__label {
+  margin-right: 4px;
+}
+
+.ko-badge__count {
+  min-width: 18px;
+  text-align: right;
 }
 
 .ko-badge--attack {
@@ -711,6 +765,11 @@ select {
 .ko-badge--defense {
   color: #1e40af;
   background: #dbeafe;
+}
+
+.ko-badge--none {
+  color: #334155;
+  background: #e2e8f0;
 }
 
 .test-mode-actions {
@@ -830,7 +889,7 @@ select {
 
   .castle-list__row {
     display: grid;
-    grid-template-columns: minmax(92px, 1fr) 64px 64px 58px;
+    grid-template-columns: minmax(82px, 1fr) 62px 62px 58px;
     gap: 4px;
     align-items: center;
     padding: 6px 7px;
@@ -845,7 +904,7 @@ select {
   .castle-list--with-owner.castle-list--with-dev .castle-list__row,
   .castle-list--with-test .castle-list__row,
   .castle-list--with-owner.castle-list--with-test .castle-list__row {
-    grid-template-columns: minmax(92px, 1fr) 64px 64px 58px;
+    grid-template-columns: minmax(82px, 1fr) 62px 62px 58px;
   }
 
   .castle-list__row span {
@@ -871,7 +930,7 @@ select {
   }
 
   .ko-badge {
-    min-width: 50px;
+    min-width: 52px;
     padding: 1px 4px;
     font-size: 0.6875rem;
   }

@@ -234,7 +234,14 @@ export function GuildBattlePlaceholder({
           </button>
         </div>
 
-        <div className="startup-panel" aria-label="起動">
+        <form
+          className="startup-panel"
+          aria-label="起動"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleRefresh();
+          }}
+        >
           <label className="field">
             <span className="field__label">world</span>
             <input
@@ -246,10 +253,10 @@ export function GuildBattlePlaceholder({
               inputMode="numeric"
             />
           </label>
-          <button className="load-form__button" type="button" disabled={isLoading || world.trim().length === 0} onClick={handleRefresh}>
+          <button className="load-form__button" type="submit" disabled={isLoading || world.trim().length === 0}>
             更新
           </button>
-        </div>
+        </form>
 
         {isSettingsDialogOpen ? (
           <SettingsDialog
@@ -259,7 +266,6 @@ export function GuildBattlePlaceholder({
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={isRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
-            realtimeState={realtimeState}
             onAlertThresholdChange={handleAlertThresholdChange}
             onAlertThresholdReset={handleAlertThresholdReset}
             onAutoUpdateToggle={handleAutoUpdateToggle}
@@ -274,11 +280,14 @@ export function GuildBattlePlaceholder({
           castleSortMode={castleSortMode}
           guildCandidates={guildCandidates}
           guildSelectValue={guildSelectValue}
+          isAutoUpdateEnabled={isAutoUpdateEnabled}
           isTestModeEnabled={IS_DEV && isTestModeEnabled}
           loadState={loadState}
+          realtimeState={realtimeState}
           selectedGuildId={guildSelectValue}
           showDevDetails={IS_DEV}
           onGuildChange={setSelectedGuildId}
+          onOpenSettings={() => setIsSettingsDialogOpen(true)}
           onTestModeDefenseIncrease={(castleId, amount) => testModeClientRef.current?.increaseDefense(castleId, amount)}
           onTestModeAttackIncrease={(castleId, amount) => testModeClientRef.current?.increaseAttack(castleId, amount)}
           onTestModeRevive={(castleId) => testModeClientRef.current?.reviveCastle(castleId)}
@@ -336,7 +345,6 @@ function SettingsDialog({
   isAutoUpdateEnabled,
   isRealtimeActive,
   isTestModeEnabled,
-  realtimeState,
   onAlertThresholdChange,
   onAlertThresholdReset,
   onAutoUpdateToggle,
@@ -350,7 +358,6 @@ function SettingsDialog({
   readonly isAutoUpdateEnabled: boolean;
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
-  readonly realtimeState: GvgRealtimeConnectionState;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => void;
   readonly onAlertThresholdReset: () => void;
   readonly onAutoUpdateToggle: () => void;
@@ -401,9 +408,6 @@ function SettingsDialog({
               >
                 {isAutoUpdateEnabled ? "ON" : "OFF"}
               </button>
-              <span className={`auto-update-state auto-update-state--${getRealtimeStateTone(realtimeState)}`}>
-                {getRealtimeStateLabel(realtimeState)}
-              </span>
             </div>
           </section>
           {IS_DEV ? (
@@ -434,7 +438,7 @@ function AlertThresholdSettings({
 }) {
   return (
     <section className="settings-section alert-settings">
-      <h3>アラート設定</h3>
+      <h3>設定</h3>
       <p className="alert-settings__help">防衛数が設定値未満になると色が変わります。</p>
       <div className="alert-settings__fields">
         <ThresholdInput
@@ -526,11 +530,14 @@ function SnapshotStatus({
   castleSortMode,
   guildCandidates,
   guildSelectValue,
+  isAutoUpdateEnabled,
   isTestModeEnabled,
   loadState,
+  realtimeState,
   selectedGuildId,
   showDevDetails,
   onGuildChange,
+  onOpenSettings,
   onTestModeDefenseIncrease,
   onTestModeAttackIncrease,
   onTestModeRevive
@@ -539,17 +546,20 @@ function SnapshotStatus({
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
   readonly guildSelectValue: string;
+  readonly isAutoUpdateEnabled: boolean;
   readonly isTestModeEnabled: boolean;
   readonly loadState: AsyncLoadState<GvgSnapshot>;
+  readonly realtimeState: GvgRealtimeConnectionState;
   readonly selectedGuildId: string;
   readonly showDevDetails: boolean;
   readonly onGuildChange: (guildId: string) => void;
+  readonly onOpenSettings: () => void;
   readonly onTestModeDefenseIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeAttackIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeRevive: (castleId: GvgCastleId) => void;
 }) {
   if (loadState.status === "idle") {
-    return <p className="status-message">worldを入力して更新してください。</p>;
+    return null;
   }
 
   if (loadState.status === "loading") {
@@ -574,11 +584,14 @@ function SnapshotStatus({
       castleSortMode={castleSortMode}
       guildCandidates={guildCandidates}
       guildSelectValue={guildSelectValue}
+      isAutoUpdateEnabled={isAutoUpdateEnabled}
       isTestModeEnabled={isTestModeEnabled}
+      realtimeState={realtimeState}
       selectedGuildId={selectedGuildId}
       showDevDetails={showDevDetails}
       snapshot={loadState.data}
       onGuildChange={onGuildChange}
+      onOpenSettings={onOpenSettings}
       onTestModeDefenseIncrease={onTestModeDefenseIncrease}
       onTestModeAttackIncrease={onTestModeAttackIncrease}
       onTestModeRevive={onTestModeRevive}
@@ -591,11 +604,14 @@ function SnapshotSummary({
   castleSortMode,
   guildCandidates,
   guildSelectValue,
+  isAutoUpdateEnabled,
   isTestModeEnabled,
+  realtimeState,
   selectedGuildId,
   showDevDetails,
   snapshot,
   onGuildChange,
+  onOpenSettings,
   onTestModeDefenseIncrease,
   onTestModeAttackIncrease,
   onTestModeRevive
@@ -604,11 +620,14 @@ function SnapshotSummary({
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
   readonly guildSelectValue: string;
+  readonly isAutoUpdateEnabled: boolean;
   readonly isTestModeEnabled: boolean;
+  readonly realtimeState: GvgRealtimeConnectionState;
   readonly selectedGuildId: string;
   readonly showDevDetails: boolean;
   readonly snapshot: GvgSnapshot;
   readonly onGuildChange: (guildId: string) => void;
+  readonly onOpenSettings: () => void;
   readonly onTestModeDefenseIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeAttackIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeRevive: (castleId: GvgCastleId) => void;
@@ -628,9 +647,16 @@ function SnapshotSummary({
 
   return (
     <section className="snapshot-summary" aria-labelledby="snapshot-title">
-      <h2 className="snapshot-summary__title" id="snapshot-title">
-        拠点監視
-      </h2>
+      <div className="snapshot-summary__header">
+        <h2 className="snapshot-summary__title" id="snapshot-title">
+          拠点監視
+        </h2>
+        <ConnectionIndicator
+          isAutoUpdateEnabled={isAutoUpdateEnabled}
+          state={realtimeState}
+          onClick={onOpenSettings}
+        />
+      </div>
       <GuildCandidateSelect
         candidates={guildCandidates}
         disabled={false}
@@ -676,6 +702,52 @@ function DevSnapshotDetails({ snapshot }: { readonly snapshot: GvgSnapshot }) {
       </dl>
     </details>
   );
+}
+
+function ConnectionIndicator({
+  isAutoUpdateEnabled,
+  state,
+  onClick
+}: {
+  readonly isAutoUpdateEnabled: boolean;
+  readonly state: GvgRealtimeConnectionState;
+  readonly onClick: () => void;
+}) {
+  const indicatorState = getConnectionIndicatorState(isAutoUpdateEnabled, state);
+
+  return (
+    <button
+      className={`connection-indicator connection-indicator--${indicatorState.tone}`}
+      type="button"
+      title={indicatorState.label}
+      aria-label={`通信状態: ${indicatorState.label}`}
+      onClick={onClick}
+    >
+      <span aria-hidden="true" className="connection-indicator__dot" />
+    </button>
+  );
+}
+
+function getConnectionIndicatorState(
+  isAutoUpdateEnabled: boolean,
+  state: GvgRealtimeConnectionState
+): {
+  readonly tone: "connected" | "reconnecting" | "disconnected" | "disabled";
+  readonly label: string;
+} {
+  if (!isAutoUpdateEnabled) {
+    return { tone: "disabled", label: "自動更新OFF" };
+  }
+
+  if (state.status === "connected") {
+    return { tone: "connected", label: "接続中" };
+  }
+
+  if (state.status === "connecting" || state.status === "reconnecting") {
+    return { tone: "reconnecting", label: "再接続中" };
+  }
+
+  return { tone: "disconnected", label: "切断中" };
 }
 
 function CastleList({
@@ -734,11 +806,10 @@ function CastleList({
             {viewModel.attackCount}
           </span>
           <span className="castle-list__ko" data-label="KO">
-            {viewModel.koDisplay !== null ? (
-              <span className={`ko-badge ko-badge--${viewModel.koDisplay.tone}`}>
-                {viewModel.koDisplay.count} KO
-              </span>
-            ) : null}
+            <span className={`ko-badge ko-badge--${viewModel.koDisplay.tone}`}>
+              <span className="ko-badge__label">KO </span>
+              <span className="ko-badge__count">{viewModel.koDisplay.count}</span>
+            </span>
           </span>
           {showOwnerGuild ? (
             <span className="castle-list__guild" data-label="所有">
@@ -776,36 +847,4 @@ function CastleList({
       ))}
     </div>
   );
-}
-
-function getRealtimeStateTone(state: GvgRealtimeConnectionState): "idle" | "connecting" | "connected" | "disconnected" | "error" {
-  switch (state.status) {
-    case "connecting":
-    case "reconnecting":
-      return "connecting";
-    case "connected":
-      return "connected";
-    case "disconnected":
-      return "disconnected";
-    case "error":
-      return "error";
-    case "idle":
-      return "idle";
-  }
-}
-
-function getRealtimeStateLabel(state: GvgRealtimeConnectionState): string {
-  switch (state.status) {
-    case "connecting":
-    case "reconnecting":
-      return "接続中";
-    case "connected":
-      return "自動更新中";
-    case "disconnected":
-      return "停止中";
-    case "error":
-      return "エラー";
-    case "idle":
-      return "停止中";
-  }
 }

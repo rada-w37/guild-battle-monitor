@@ -138,9 +138,24 @@ Changes:
 - Removed display-mode explanation messages above the list.
 - Kept alert and battle-state text out of the normal rows. Severity remains visible through row background and left border only.
 - Fixed the count columns so `防 0`, `防 40`, `防 656`, `攻 39`, and `50 KO` keep stable horizontal positions.
-- KO is shown only when the available KO count is 10 or higher. Values below 10 are hidden to keep the row compact.
-- The current data model exposes `lastWinPartyKnockOutCount`; Step8-E displays that compactly as `n KO` and keeps future attack/defense-specific KO naming open until the realtime model is clarified.
+- Step8-E initially showed KO only when the value was 10 or higher; Step8-F changed this to always-on `KO n` display.
+- The current data model exposes `lastWinPartyKnockOutCount`; Step8-F displays that compactly as `KO n` and keeps future attack/defense-specific KO naming open until the realtime model is clarified.
 - Castles without an attacker guild and without attack parties are treated as `safe` even if defense count is below thresholds. They are not urgent targets without a declaration.
 - Owner-based filtering remains tied to the latest `GvgSnapshot`, so a castle captured by the selected defense guild appears after realtime ownership updates.
 
 DevTest mode is intentionally not fixed in this step. The UI surface is still settling, so TestMode behavior will be handled separately after the monitor layout is stable.
+
+## Step8-F final micro adjustments
+
+Step8-F focuses on small PC/iPhone interaction and readability fixes.
+
+Changes:
+
+- World input now submits with Enter, including iPhone keyboard submit/Go behavior, while keeping the `更新` button.
+- The empty world helper sentence was removed because the input and button already explain the action.
+- Defense, attack, and KO are fixed monitoring columns with tabular numbers. This keeps `防 42`, `防 719`, `攻 0`, and `KO 0` visually stable.
+- KO is always displayed as `KO n`. It no longer appears/disappears based on threshold because stable scan positions are more important during live monitoring.
+- KO tone remains compact: blue for available defense-side KO data, red reserved for future attack-side KO data, and neutral for zero/unknown.
+- The settings dialog no longer repeats connection text such as `自動更新中`; the ON/OFF button is the source of truth there.
+- A small connection indicator was added near `拠点監視`. It uses CSS circles rather than emoji: green connected, yellow connecting/reconnecting, red disconnected, gray auto-update off.
+- Hover/title text names the communication state, and clicking the indicator opens the settings dialog. This keeps the settings route unified.

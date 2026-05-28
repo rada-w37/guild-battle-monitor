@@ -21,7 +21,6 @@ const ALERT_LEVEL_PRIORITY: Record<GuildBattleAlertLevel, number> = {
   warning: 2,
   safe: 3
 };
-const KO_DISPLAY_THRESHOLD = 10;
 
 export function isOwnedCastle(castle: GvgCastle, ownGuildId: GvgGuildId): boolean {
   const ownerGuildId = normalizeGvgGuildIdForComparison(castle.ownerGuildId);
@@ -243,13 +242,9 @@ function createCastleViewModel(
 }
 
 function createKoDisplay(castle: Pick<GvgCastle, "lastWinPartyKnockOutCount">): GuildBattleCastleViewModel["koDisplay"] {
-  if (castle.lastWinPartyKnockOutCount < KO_DISPLAY_THRESHOLD) {
-    return null;
-  }
-
   return {
     count: castle.lastWinPartyKnockOutCount,
-    tone: "defense"
+    tone: castle.lastWinPartyKnockOutCount > 0 ? "defense" : "none"
   };
 }
 

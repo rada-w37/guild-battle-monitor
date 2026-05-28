@@ -106,7 +106,10 @@ describe("guild battle selectors", () => {
         defenseCount: 9,
         attackCount: 1,
         lastWinPartyKnockOutCount: 0,
-        koDisplay: null,
+        koDisplay: {
+          count: 0,
+          tone: "none"
+        },
         alertLevel: "critical"
       }
     ]);

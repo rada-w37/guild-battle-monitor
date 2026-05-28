@@ -97,11 +97,11 @@ describe("GuildBattlePlaceholder", () => {
 
     const dialog = getSettingsDialog();
     expect(dialog.textContent).toContain("設定");
-    expect(dialog.textContent).toContain("アラート設定");
     expect(dialog.textContent).toContain("並び順");
     expect(dialog.textContent).toContain("自動更新");
     expect(dialog.textContent).toContain("防衛数が設定値未満になると色が変わります。");
     expect(dialog.textContent).not.toContain("注意30未満");
+    expect(dialog.textContent).not.toContain("自動更新中");
   });
 
   it("toggles auto update inside the settings dialog", async () => {
@@ -127,6 +127,18 @@ describe("GuildBattlePlaceholder", () => {
 
     await clickButton("更新");
     expect(loadSnapshot).toHaveBeenCalledTimes(1);
+    expect(loadSnapshot).toHaveBeenCalledWith("1037");
+  });
+
+  it("loads with Enter submit from the world input", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    renderComponent(loadSnapshot);
+
+    act(() => {
+      updateInput(getWorldInput(), "37");
+    });
+    await submitStartupForm();
+
     expect(loadSnapshot).toHaveBeenCalledWith("1037");
   });
 
@@ -180,16 +192,34 @@ describe("GuildBattlePlaceholder", () => {
     expect(firstRow.querySelector("[data-label='防']")?.textContent).toBe("120");
     expect(firstRow.querySelector("[data-label='攻']")?.textContent).toBe("39");
     expect(firstRow.querySelector("[data-label='侵']")).toBeNull();
-    expect(firstRow.querySelector(".ko-badge")?.textContent).toBe("50 KO");
+    expect(firstRow.querySelector(".ko-badge")?.textContent).toBe("KO 50");
   });
 
-  it("hides KO below 10 and shows KO at 10 or higher", async () => {
+  it("always shows KO and uses tone classes", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
     await loadWorld37();
 
-    expect(getCastleRows()[0].querySelector(".ko-badge")?.textContent).toBe("50 KO");
-    expect(getCastleRows()[1].querySelector(".ko-badge")).toBeNull();
+    expect(getCastleRows()[0].querySelector(".ko-badge")?.textContent).toBe("KO 50");
+    expect(getCastleRows()[0].querySelector(".ko-badge--defense")).not.toBeNull();
+    expect(getCastleRows()[1].querySelector(".ko-badge")?.textContent).toBe("KO 7");
+    expect(getCastleRows()[2].querySelector(".ko-badge")?.textContent).toBe("KO 0");
+    expect(getCastleRows()[2].querySelector(".ko-badge--none")).not.toBeNull();
+  });
+
+  it("shows a connection indicator with tooltip and opens settings on click", async () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+
+    await loadWorld37();
+
+    const indicator = getConnectionIndicator();
+    expect(indicator.getAttribute("title")).toBe("接続中");
+
+    await act(async () => {
+      indicator.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(getSettingsDialog()).not.toBeNull();
   });
 
   it("treats undeclared low-defense castles as safe", async () => {
@@ -309,6 +339,30 @@ function getWorldInput() {
   }
 
   return input;
+}
+
+async function submitStartupForm() {
+  const form = document.querySelector<HTMLFormElement>(".startup-panel");
+
+  if (!form) {
+    throw new Error("startup form was not found");
+  }
+
+  await act(async () => {
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+function getConnectionIndicator() {
+  const indicator = document.querySelector<HTMLButtonElement>(".connection-indicator");
+
+  if (!indicator) {
+    throw new Error("connection indicator was not found");
+  }
+
+  return indicator;
 }
 
 function getSettingsDialog() {
