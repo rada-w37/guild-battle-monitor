@@ -197,6 +197,21 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.querySelector(".castle-list__row--danger")).not.toBeNull();
   });
 
+  it("uses DEV test mode buttons to update alert UI through realtime pipeline", async () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+
+    await clickSubmitButton();
+    await act(async () => {
+      updateInput(getOwnGuildIdInput(), ownGuildId);
+    });
+    await toggleTestMode();
+    await clickRealtimeStartButton();
+    await clickTestModeButton("侵攻 +10");
+
+    expect(document.body.textContent).toContain("10");
+    expect(document.querySelector(".castle-list__row--critical")).not.toBeNull();
+  });
+
   it("shows alert threshold helper text and boundaries", () => {
     renderComponent();
 
@@ -457,6 +472,32 @@ async function clickAlertResetButton() {
 
   if (!button) {
     throw new Error("alert reset button was not found");
+  }
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function toggleTestMode() {
+  const checkbox = document.querySelector<HTMLInputElement>(".test-mode-settings input[type='checkbox']");
+
+  if (!checkbox) {
+    throw new Error("test mode checkbox was not found");
+  }
+
+  await act(async () => {
+    checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function clickTestModeButton(label: string) {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>(".test-mode-actions button")).find(
+    (candidate) => candidate.textContent === label
+  );
+
+  if (!button) {
+    throw new Error(`test mode button was not found: ${label}`);
   }
 
   await act(async () => {
