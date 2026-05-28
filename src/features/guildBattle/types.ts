@@ -2,6 +2,13 @@ import type { GvgCastleId, GvgCastleState, GvgGuildId } from "../gvg/types";
 
 export type GuildBattleAlertLevel = "safe" | "warning" | "danger" | "critical";
 
+export type GuildBattleCastleStatusTone =
+  | "normal"
+  | "battle"
+  | "fallen"
+  | "counterattack"
+  | "unknown";
+
 export interface GuildBattleAlertThresholds {
   readonly warningDefenseCount: number;
   readonly dangerDefenseCount: number;
@@ -27,6 +34,8 @@ export interface GuildBattleCastleViewModel {
   readonly attackerGuildId: GvgGuildId | null;
   readonly attackerGuildName: string | null;
   readonly state: GvgCastleState;
+  readonly statusLabel: string;
+  readonly statusTone: GuildBattleCastleStatusTone;
   readonly defenseCount: number;
   readonly attackCount: number;
   readonly alertLevel: GuildBattleAlertLevel;

@@ -6,6 +6,7 @@ import type {
   GuildBattleAlertThresholds,
   GuildBattleCastleDisplayViewModel,
   GuildBattleCastleListSortMode,
+  GuildBattleCastleStatusTone,
   GuildBattleCastleSummaryViewModel,
   GuildBattleCastleViewModel,
   GuildBattleGuildCandidateViewModel,
@@ -59,6 +60,35 @@ export function getDefenseAlertLevel(
   }
 
   return "safe";
+}
+
+export function getGuildBattleCastleStatusDisplay(
+  castle: Pick<GvgCastle, "attackCount" | "state" | "status">
+): {
+  readonly statusLabel: string;
+  readonly statusTone: GuildBattleCastleStatusTone;
+} {
+  if (castle.status === "fallen" || castle.state === "fallen") {
+    return { statusLabel: "占拠", statusTone: "fallen" };
+  }
+
+  if (castle.status === "underAttack" || castle.attackCount > 0 || castle.state === "inBattle") {
+    return { statusLabel: "侵攻中", statusTone: "battle" };
+  }
+
+  if (castle.state === "counterattack") {
+    return { statusLabel: "反撃待ち", statusTone: "counterattack" };
+  }
+
+  if (castle.state === "counterattackSuccessful") {
+    return { statusLabel: "反撃中", statusTone: "counterattack" };
+  }
+
+  if (castle.state === "unknown" || castle.status === "unknown") {
+    return { statusLabel: "不明", statusTone: "unknown" };
+  }
+
+  return { statusLabel: "通常", statusTone: "normal" };
 }
 
 export function createOwnedCastleViewModels(
@@ -186,6 +216,8 @@ function createCastleViewModel(
   castle: GvgCastle,
   thresholds: GuildBattleAlertThresholds
 ): GuildBattleCastleViewModel {
+  const statusDisplay = getGuildBattleCastleStatusDisplay(castle);
+
   return {
     castleId: castle.castleId,
     ownerGuildId: castle.ownerGuildId,
@@ -194,6 +226,8 @@ function createCastleViewModel(
     attackerGuildName:
       castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
     state: castle.state,
+    statusLabel: statusDisplay.statusLabel,
+    statusTone: statusDisplay.statusTone,
     defenseCount: castle.defenseCount,
     attackCount: castle.attackCount,
     alertLevel: getDefenseAlertLevel(castle, thresholds)

@@ -184,6 +184,40 @@ select {
   margin-top: 8px;
 }
 
+.battle-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.battle-status--normal {
+  color: #31523a;
+  background: #e8f6ed;
+}
+
+.battle-status--battle {
+  color: #7c2d12;
+  background: #ffedd5;
+}
+
+.battle-status--fallen {
+  color: #7f1d1d;
+  background: #fee2e2;
+}
+
+.battle-status--counterattack {
+  color: #4c1d95;
+  background: #ede9fe;
+}
+
+.battle-status--unknown {
+  color: #475569;
+  background: #e2e8f0;
+}
+
 .realtime-controls {
   margin-top: 24px;
   padding-top: 16px;

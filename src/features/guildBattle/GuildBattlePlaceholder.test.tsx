@@ -174,6 +174,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("安全1");
     expect(document.body.textContent).toContain("最優先1");
     expect(document.body.textContent).toContain("最優先 / 侵攻中");
+    expect(document.querySelector(".battle-status--battle")?.textContent).toBe("侵攻中");
   });
 
   it("keeps castle ID order by default and can sort by alert level", async () => {

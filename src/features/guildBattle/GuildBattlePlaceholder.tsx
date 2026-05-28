@@ -649,7 +649,9 @@ function CastleList({
           <span>{viewModel.ownerGuildName}</span>
           <span>{viewModel.defenseCount}</span>
           <span>{viewModel.attackCount}</span>
-          <span>{viewModel.state}</span>
+          <span className={`battle-status battle-status--${viewModel.statusTone}`}>
+            {viewModel.statusLabel}
+          </span>
           <span className={`alert-level alert-${viewModel.alertLevel}`}>
             {formatAlertLevel(viewModel.alertLevel)}
           </span>

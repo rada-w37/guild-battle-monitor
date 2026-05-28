@@ -8,6 +8,7 @@ import {
   createGuildBattleGuildCandidates,
   createOwnedCastleViewModels,
   getDefenseAlertLevel,
+  getGuildBattleCastleStatusDisplay,
   isCastleFallen,
   isCastleUnderAttack,
   isOwnedCastle,
@@ -105,6 +106,8 @@ describe("guild battle selectors", () => {
         attackerGuildId: "789",
         attackerGuildName: "Attack Guild",
         state: "idle",
+        statusLabel: "侵攻中",
+        statusTone: "battle",
         defenseCount: 9,
         attackCount: 1,
         alertLevel: "critical"
@@ -236,5 +239,32 @@ describe("guild battle selectors", () => {
         ownedCastleCount: 1
       }
     ]);
+  });
+
+  it("creates Japanese battle state display labels", () => {
+    expect(getGuildBattleCastleStatusDisplay(createCastle()).statusLabel).toBe("通常");
+    expect(getGuildBattleCastleStatusDisplay(createCastle({ attackCount: 1 })).statusLabel).toBe("侵攻中");
+    expect(getGuildBattleCastleStatusDisplay(createCastle({ state: "fallen" })).statusLabel).toBe("占拠");
+    expect(getGuildBattleCastleStatusDisplay(createCastle({ state: "counterattack" })).statusLabel).toBe("反撃待ち");
+    expect(getGuildBattleCastleStatusDisplay(createCastle({ state: "counterattackSuccessful" })).statusLabel).toBe(
+      "反撃中"
+    );
+  });
+
+  it("keeps unknown battle state display safe", () => {
+    expect(getGuildBattleCastleStatusDisplay(createCastle({ state: "unknown" }))).toEqual({
+      statusLabel: "不明",
+      statusTone: "unknown"
+    });
+  });
+
+  it("keeps alert level and battle state display separate", () => {
+    const castle = createCastle({ defenseCount: 9, attackCount: 0, state: "idle", status: "normal" });
+
+    expect(getDefenseAlertLevel(castle)).toBe("critical");
+    expect(getGuildBattleCastleStatusDisplay(castle)).toEqual({
+      statusLabel: "通常",
+      statusTone: "normal"
+    });
   });
 });
