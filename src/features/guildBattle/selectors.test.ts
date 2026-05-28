@@ -38,38 +38,24 @@ function createCastle(overrides: Partial<GvgCastle> = {}): GvgCastle {
 
 describe("guild battle selectors", () => {
   it("detects owned castles using comparison IDs", () => {
-    const castle = createCastle({ ownerGuildId: "000123" as GvgGuildId });
-
-    expect(isOwnedCastle(castle, ownGuildId)).toBe(true);
+    expect(isOwnedCastle(createCastle({ ownerGuildId: "000123" as GvgGuildId }), ownGuildId)).toBe(true);
+    expect(isOwnedCastle(createCastle({ ownerGuildId: null }), ownGuildId)).toBe(false);
   });
 
-  it("does not treat unowned castles as owned", () => {
-    const castle = createCastle({ ownerGuildId: null });
-
-    expect(isOwnedCastle(castle, ownGuildId)).toBe(false);
-  });
-
-  it("detects castles under attack by attack count or critical state", () => {
+  it("detects battle states separately from alert", () => {
     expect(isCastleUnderAttack(createCastle({ attackCount: 1 }))).toBe(true);
-    expect(isCastleUnderAttack(createCastle({ state: "counterattack" }))).toBe(true);
-  });
-
-  it("detects fallen castles by state or status", () => {
+    expect(isCastleUnderAttack(createCastle({ state: "counterattack" }))).toBe(false);
     expect(isCastleFallen(createCastle({ state: "fallen" }))).toBe(true);
     expect(isCastleFallen(createCastle({ status: "fallen" }))).toBe(true);
   });
 
-  it("calculates alert levels with critical priority", () => {
+  it("calculates alert levels by defense count", () => {
     expect(getDefenseAlertLevel(createCastle({ defenseCount: 31 }))).toBe("safe");
     expect(getDefenseAlertLevel(createCastle({ defenseCount: 29 }))).toBe("warning");
     expect(getDefenseAlertLevel(createCastle({ defenseCount: 14 }))).toBe("danger");
     expect(getDefenseAlertLevel(createCastle({ defenseCount: 9 }))).toBe("critical");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 31, attackCount: 1 }))).toBe(
-      "critical"
-    );
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 31, state: "inBattle" }))).toBe(
-      "critical"
-    );
+    expect(getDefenseAlertLevel(createCastle({ defenseCount: 31, attackCount: 1 }))).toBe("safe");
+    expect(getDefenseAlertLevel(createCastle({ defenseCount: 31, state: "inBattle" }))).toBe("safe");
   });
 
   it("creates owned castle view models only", () => {
@@ -197,7 +183,7 @@ describe("guild battle selectors", () => {
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [
           createCastle({ castleId: "2" as GvgCastleId, defenseCount: 31 }),
-          createCastle({ castleId: "1" as GvgCastleId, attackCount: 1 }),
+          createCastle({ castleId: "1" as GvgCastleId, defenseCount: 9 }),
           createCastle({ castleId: "3" as GvgCastleId, defenseCount: 10 })
         ],
         guildNames: {}
@@ -226,7 +212,7 @@ describe("guild battle selectors", () => {
           createCastle({ defenseCount: 31 }),
           createCastle({ defenseCount: 29 }),
           createCastle({ defenseCount: 14 }),
-          createCastle({ attackCount: 1 })
+          createCastle({ defenseCount: 9 })
         ],
         guildNames: {}
       },
@@ -290,12 +276,12 @@ describe("guild battle selectors", () => {
   });
 
   it("keeps alert level and battle state display separate", () => {
-    const castle = createCastle({ defenseCount: 9, attackCount: 0, state: "idle", status: "normal" });
+    const castle = createCastle({ defenseCount: 31, attackCount: 1, state: "inBattle", status: "underAttack" });
 
-    expect(getDefenseAlertLevel(castle)).toBe("critical");
+    expect(getDefenseAlertLevel(castle)).toBe("safe");
     expect(getGuildBattleCastleStatusDisplay(castle)).toEqual({
-      statusLabel: "通常",
-      statusTone: "normal"
+      statusLabel: "侵攻中",
+      statusTone: "battle"
     });
   });
 });

@@ -173,7 +173,8 @@ describe("applyGvgRealtimeMessage", () => {
       expect.objectContaining({
         castleId: "1",
         attackerGuildName: "Attack Guild",
-        alertLevel: "critical"
+        alertLevel: "danger",
+        statusLabel: "侵攻中"
       })
     ]);
   });

@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BrowserGvgRealtimeClient } from "../gvg/browserRealtimeClient";
-import { createGvgScopeLabel } from "../gvg/createGvgScopeLabel";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgRealtimeClient, GvgRealtimeConnectionState } from "../gvg/realtimeClientTypes";
 import { GvgRealtimeSnapshotRuntime } from "../gvg/realtimeSnapshotRuntime";
@@ -24,6 +23,7 @@ import { TestModeGvgRealtimeClient } from "./testModeRealtimeClient";
 import type {
   GuildBattleAlertLevel,
   GuildBattleAlertThresholds,
+  GuildBattleCastleDisplayMode,
   GuildBattleCastleDisplayReason,
   GuildBattleCastleListSortMode,
   GuildBattleCastleViewModel,
@@ -31,6 +31,8 @@ import type {
 } from "./types";
 
 const IS_DEV = import.meta.env.DEV;
+const WORLD_ID_BASE = 1000;
+const AUTO_LOAD_DELAY_MS = 500;
 
 interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
@@ -41,8 +43,8 @@ export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient()
 }: GuildBattlePlaceholderProps) {
-  const [worldId, setWorldId] = useState("1001");
-  const [ownGuildId, setOwnGuildId] = useState("");
+  const [world, setWorld] = useState("");
+  const [selectedGuildId, setSelectedGuildId] = useState("");
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [castleSortMode, setCastleSortMode] = useState<GuildBattleCastleListSortMode>("castleId");
@@ -55,25 +57,23 @@ export function GuildBattlePlaceholder({
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
 
-  const trimmedWorldId = worldId.trim();
-  const trimmedOwnGuildId = ownGuildId.trim();
+  const worldId = useMemo(() => createWorldIdFromWorld(world), [world]);
   const isLoading = loadState.status === "loading";
   const hasLoadedSnapshot = loadState.status === "success";
   const guildCandidates = useMemo(
     () => (loadState.status === "success" ? createGuildBattleGuildCandidates(loadState.data) : []),
     [loadState]
   );
-  const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === trimmedOwnGuildId);
+  const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === selectedGuildId);
   const guildSelectValue = selectedGuildCandidate?.guildId ?? "";
   const alertThresholds = useMemo(
     () => createGuildBattleAlertThresholds(editableAlertThresholds),
     [editableAlertThresholds]
   );
-  const hasRealtimeInputs = trimmedWorldId.length > 0 && trimmedOwnGuildId.length > 0;
-  const canStartRealtime = hasLoadedSnapshot && hasRealtimeInputs && realtimeState.status === "idle";
+  const canStartRealtime = hasLoadedSnapshot && worldId !== null && realtimeState.status === "idle";
   const canReconnectRealtime =
     hasLoadedSnapshot &&
-    hasRealtimeInputs &&
+    worldId !== null &&
     (realtimeState.status === "disconnected" || realtimeState.status === "error");
   const canStopRealtime = realtimeState.status === "connecting" || realtimeState.status === "connected";
 
@@ -83,26 +83,50 @@ export function GuildBattlePlaceholder({
     };
   }, []);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (trimmedWorldId.length === 0) {
-      setLoadState({ status: "error", error: new Error("worldIdを入力してください。") });
+  useEffect(() => {
+    if (world.trim().length === 0) {
+      stopRealtime("world cleared", { nextState: "idle" });
+      setLoadState({ status: "idle" });
+      setSelectedGuildId("");
       return;
     }
 
-    stopRealtime("snapshot reload");
+    if (worldId === null) {
+      setLoadState({ status: "error", error: new Error("worldは数字で入力してください。") });
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      void loadSnapshotForWorldId(worldId);
+    }, AUTO_LOAD_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [world, worldId]);
+
+  async function loadSnapshotForWorldId(nextWorldId: GvgWorldId) {
+    stopRealtime("snapshot reload", { nextState: "idle" });
     setLoadState({ status: "loading" });
 
     try {
-      const snapshot = await loadSnapshot(trimmedWorldId as GvgWorldId);
+      const snapshot = await loadSnapshot(nextWorldId);
       setLoadState({ status: "success", data: snapshot });
+      setSelectedGuildId("");
     } catch (error) {
       setLoadState({
         status: "error",
         error: error instanceof Error ? error : new Error("初期状態の取得に失敗しました。")
       });
     }
+  }
+
+  async function handleRefresh() {
+    if (worldId === null) {
+      return;
+    }
+
+    await loadSnapshotForWorldId(worldId);
   }
 
   async function handleStartRealtime() {
@@ -209,47 +233,33 @@ export function GuildBattlePlaceholder({
   return (
     <main className="app-shell">
       <section className="placeholder monitor-panel" aria-labelledby="app-title">
-        <p className="placeholder__eyebrow">{createGvgScopeLabel()}</p>
         <h1 className="placeholder__title" id="app-title">
           GuildBattleMonitor
         </h1>
-        <p className="placeholder__description">
-          REST初期状態から正規化済みスナップショットを取得し、拠点一覧と防衛状態を確認します。
-        </p>
 
-        <form className="load-form" onSubmit={handleSubmit}>
+        <div className="load-form">
           <label className="field">
-            <span className="field__label">worldId</span>
+            <span className="field__label">world</span>
             <input
-              className="field__input"
+              className="field__input field__input--world"
               type="text"
-              value={worldId}
-              onChange={(event) => setWorldId(event.target.value)}
+              value={world}
+              onChange={(event) => setWorld(event.target.value)}
               disabled={isLoading}
               inputMode="numeric"
-            />
-          </label>
-          <label className="field">
-            <span className="field__label">自ギルドID</span>
-            <input
-              className="field__input field__input--wide"
-              type="text"
-              value={ownGuildId}
-              onChange={(event) => setOwnGuildId(event.target.value)}
-              disabled={isLoading}
-              inputMode="numeric"
+              placeholder="37"
             />
           </label>
           <GuildCandidateSelect
             candidates={guildCandidates}
             disabled={isLoading || loadState.status !== "success"}
             value={guildSelectValue}
-            onChange={setOwnGuildId}
+            onChange={setSelectedGuildId}
           />
-          <button className="load-form__button" type="submit" disabled={isLoading || trimmedWorldId.length === 0}>
-            初期状態を取得
+          <button className="load-form__button" type="button" disabled={isLoading || worldId === null} onClick={handleRefresh}>
+            更新
           </button>
-        </form>
+        </div>
 
         <AlertThresholdSettings
           error={alertThresholdError}
@@ -271,7 +281,8 @@ export function GuildBattlePlaceholder({
           castleSortMode={castleSortMode}
           isTestModeEnabled={IS_DEV && isTestModeEnabled}
           loadState={loadState}
-          ownGuildId={trimmedOwnGuildId}
+          selectedGuildId={guildSelectValue}
+          showDevDetails={IS_DEV}
           onCastleSortModeChange={setCastleSortMode}
           onTestModeDefenseIncrease={(castleId, amount) => testModeClientRef.current?.increaseDefense(castleId, amount)}
           onTestModeAttackIncrease={(castleId, amount) => testModeClientRef.current?.increaseAttack(castleId, amount)}
@@ -289,6 +300,22 @@ export function GuildBattlePlaceholder({
       </section>
     </main>
   );
+}
+
+function createWorldIdFromWorld(world: string): GvgWorldId | null {
+  const trimmedWorld = world.trim();
+
+  if (trimmedWorld.length === 0 || !/^\d+$/.test(trimmedWorld)) {
+    return null;
+  }
+
+  const worldNumber = Number(trimmedWorld);
+
+  if (!Number.isSafeInteger(worldNumber) || worldNumber <= 0) {
+    return null;
+  }
+
+  return String(WORLD_ID_BASE + worldNumber) as GvgWorldId;
 }
 
 function TestModeSettings({
@@ -312,9 +339,6 @@ function TestModeSettings({
         />
         <span>TestModeGvgRealtimeClientを使う</span>
       </label>
-      <p className="test-mode-settings__help">
-        DEV限定です。監視開始後、各拠点行のボタンからrealtime更新を疑似発火できます。
-      </p>
     </details>
   );
 }
@@ -333,16 +357,7 @@ function AlertThresholdSettings({
   return (
     <details className="alert-settings">
       <summary>アラート設定</summary>
-      <p className="alert-settings__help">
-        防衛数が設定値を下回ると警告されます。例: 注意が30の場合、防衛29以下で注意です。
-      </p>
-      <ul className="alert-settings__rules" aria-label="alert threshold rules">
-        <li>注意: {thresholds.warningDefenseCount}未満</li>
-        <li>危険: {thresholds.dangerDefenseCount}未満</li>
-        <li>最優先: {thresholds.criticalDefenseCount}未満</li>
-      </ul>
-      <p className="alert-settings__help">侵攻中は防衛数に関係なく最優先表示されます。</p>
-      <p className="alert-settings__help">初期値: 注意30 / 危険15 / 最優先10</p>
+      <p className="alert-settings__help">防衛数が設定値を下回るとalertが変わります。</p>
       <div className="alert-settings__fields">
         <ThresholdInput
           label="注意"
@@ -360,7 +375,7 @@ function AlertThresholdSettings({
           onChange={(criticalDefenseCount) => onChange({ ...thresholds, criticalDefenseCount })}
         />
         <button className="load-form__button load-form__button--secondary" type="button" onClick={onReset}>
-          デフォルトに戻す
+          デフォルト
         </button>
       </div>
       {error !== null ? (
@@ -382,15 +397,18 @@ function ThresholdInput({
   readonly onChange: (value: number) => void;
 }) {
   return (
-    <label className="field">
+    <label className="field threshold-field">
       <span className="field__label">{label}</span>
-      <input
-        className="field__input field__input--narrow"
-        min="0"
-        type="number"
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
+      <span className="threshold-field__control">
+        <input
+          className="field__input field__input--narrow"
+          min="0"
+          type="number"
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        <span>未満</span>
+      </span>
     </label>
   );
 }
@@ -408,7 +426,7 @@ function GuildCandidateSelect({
 }) {
   return (
     <label className="field">
-      <span className="field__label">ギルド選択</span>
+      <span className="field__label">ギルド</span>
       <select
         className="field__input field__input--wide"
         disabled={disabled}
@@ -497,7 +515,8 @@ function SnapshotStatus({
   castleSortMode,
   isTestModeEnabled,
   loadState,
-  ownGuildId,
+  selectedGuildId,
+  showDevDetails,
   onCastleSortModeChange,
   onTestModeDefenseIncrease,
   onTestModeAttackIncrease,
@@ -507,14 +526,15 @@ function SnapshotStatus({
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly isTestModeEnabled: boolean;
   readonly loadState: AsyncLoadState<GvgSnapshot>;
-  readonly ownGuildId: string;
+  readonly selectedGuildId: string;
+  readonly showDevDetails: boolean;
   readonly onCastleSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
   readonly onTestModeDefenseIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeAttackIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeRevive: (castleId: GvgCastleId) => void;
 }) {
   if (loadState.status === "idle") {
-    return <p className="status-message">未取得です。</p>;
+    return <p className="status-message">worldを入力してください。</p>;
   }
 
   if (loadState.status === "loading") {
@@ -538,7 +558,8 @@ function SnapshotStatus({
       alertThresholds={alertThresholds}
       castleSortMode={castleSortMode}
       isTestModeEnabled={isTestModeEnabled}
-      ownGuildId={ownGuildId}
+      selectedGuildId={selectedGuildId}
+      showDevDetails={showDevDetails}
       snapshot={loadState.data}
       onCastleSortModeChange={onCastleSortModeChange}
       onTestModeDefenseIncrease={onTestModeDefenseIncrease}
@@ -552,7 +573,8 @@ function SnapshotSummary({
   alertThresholds,
   castleSortMode,
   isTestModeEnabled,
-  ownGuildId,
+  selectedGuildId,
+  showDevDetails,
   snapshot,
   onCastleSortModeChange,
   onTestModeDefenseIncrease,
@@ -562,7 +584,8 @@ function SnapshotSummary({
   readonly alertThresholds: GuildBattleAlertThresholds;
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly isTestModeEnabled: boolean;
-  readonly ownGuildId: string;
+  readonly selectedGuildId: string;
+  readonly showDevDetails: boolean;
   readonly snapshot: GvgSnapshot;
   readonly onCastleSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
   readonly onTestModeDefenseIncrease: (castleId: GvgCastleId, amount: number) => void;
@@ -571,10 +594,10 @@ function SnapshotSummary({
 }) {
   const castleDisplay = useMemo(() => {
     return createGuildBattleCastleDisplayViewModel(snapshot, {
-      ownGuildId: ownGuildId.length === 0 ? "" : (ownGuildId as GvgGuildId),
+      ownGuildId: selectedGuildId.length === 0 ? "" : (selectedGuildId as GvgGuildId),
       alertThresholds
     });
-  }, [alertThresholds, ownGuildId, snapshot]);
+  }, [alertThresholds, selectedGuildId, snapshot]);
   const sortedCastles = useMemo(
     () => sortGuildBattleCastleViewModels(castleDisplay.castles, castleSortMode),
     [castleDisplay.castles, castleSortMode]
@@ -587,8 +610,30 @@ function SnapshotSummary({
   return (
     <section className="snapshot-summary" aria-labelledby="snapshot-title">
       <h2 className="snapshot-summary__title" id="snapshot-title">
-        取得結果
+        拠点監視
       </h2>
+      <CastleDisplayNotice reason={castleDisplay.reason} />
+      <CastleListToolbar sortMode={castleSortMode} onSortModeChange={onCastleSortModeChange} />
+      <CastleSummary summary={summary} />
+      {showDevDetails ? <DevSnapshotDetails snapshot={snapshot} /> : null}
+      <CastleList
+        capturedAt={snapshot.capturedAt}
+        displayMode={castleDisplay.mode}
+        isTestModeEnabled={isTestModeEnabled}
+        showDevDetails={showDevDetails}
+        viewModels={sortedCastles}
+        onTestModeDefenseIncrease={onTestModeDefenseIncrease}
+        onTestModeAttackIncrease={onTestModeAttackIncrease}
+        onTestModeRevive={onTestModeRevive}
+      />
+    </section>
+  );
+}
+
+function DevSnapshotDetails({ snapshot }: { readonly snapshot: GvgSnapshot }) {
+  return (
+    <details className="dev-snapshot-details">
+      <summary>DEV取得情報</summary>
       <dl className="summary-grid">
         <div>
           <dt>worldId</dt>
@@ -607,33 +652,17 @@ function SnapshotSummary({
           <dd>{snapshot.capturedAt}</dd>
         </div>
       </dl>
-
-      <CastleDisplayNotice reason={castleDisplay.reason} />
-      <CastleListToolbar sortMode={castleSortMode} onSortModeChange={onCastleSortModeChange} />
-      <CastleSummary summary={summary} />
-      <CastleList
-        capturedAt={snapshot.capturedAt}
-        isTestModeEnabled={isTestModeEnabled}
-        viewModels={sortedCastles}
-        onTestModeDefenseIncrease={onTestModeDefenseIncrease}
-        onTestModeAttackIncrease={onTestModeAttackIncrease}
-        onTestModeRevive={onTestModeRevive}
-      />
-    </section>
+    </details>
   );
 }
 
 function CastleDisplayNotice({ reason }: { readonly reason: GuildBattleCastleDisplayReason }) {
   if (reason === "ownGuildUnspecified") {
-    return <p className="status-message">自ギルドが未指定のため、全拠点を表示しています。</p>;
+    return <p className="status-message">全拠点を表示しています。</p>;
   }
 
   if (reason === "ownedCastlesNotFound") {
-    return (
-      <p className="status-message">
-        指定されたギルドの防衛拠点が見つからないため、全拠点を表示しています。
-      </p>
-    );
+    return <p className="status-message">指定ギルドの防衛拠点がないため、全拠点を表示しています。</p>;
   }
 
   return <p className="status-message">指定ギルドの防衛拠点のみ表示しています。</p>;
@@ -648,16 +677,13 @@ function CastleListToolbar({
 }) {
   return (
     <div className="list-toolbar">
-      <label className="field list-toolbar__field">
-        <span className="field__label">並び順</span>
-        <select
-          className="field__input"
-          value={sortMode}
-          onChange={(event) => onSortModeChange(event.target.value as GuildBattleCastleListSortMode)}
-        >
-          <option value="castleId">拠点ID順</option>
-          <option value="alertLevel">危険度順</option>
-        </select>
+      <label className="sort-toggle">
+        <input
+          type="checkbox"
+          checked={sortMode === "alertLevel"}
+          onChange={(event) => onSortModeChange(event.target.checked ? "alertLevel" : "castleId")}
+        />
+        <span>危険度順で表示</span>
       </label>
     </div>
   );
@@ -671,11 +697,11 @@ function CastleSummary({
   return (
     <dl className="summary-grid summary-grid--alerts" aria-label="castle alert summary">
       <div>
-        <dt>表示モード</dt>
-        <dd>{summary.mode === "allCastles" ? "全拠点" : "指定ギルドのみ"}</dd>
+        <dt>表示</dt>
+        <dd>{summary.mode === "allCastles" ? "全拠点" : "指定ギルド"}</dd>
       </div>
       <div>
-        <dt>表示対象</dt>
+        <dt>対象</dt>
         <dd>{summary.totalCount}</dd>
       </div>
       <div>
@@ -700,52 +726,51 @@ function CastleSummary({
 
 function CastleList({
   capturedAt,
+  displayMode,
   isTestModeEnabled,
+  showDevDetails,
   viewModels,
   onTestModeDefenseIncrease,
   onTestModeAttackIncrease,
   onTestModeRevive
 }: {
   readonly capturedAt: string;
+  readonly displayMode: GuildBattleCastleDisplayMode;
   readonly isTestModeEnabled: boolean;
+  readonly showDevDetails: boolean;
   readonly viewModels: readonly GuildBattleCastleViewModel[];
   readonly onTestModeDefenseIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeAttackIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeRevive: (castleId: GvgCastleId) => void;
 }) {
+  const showOwnerGuild = displayMode === "allCastles";
+
   if (viewModels.length === 0) {
     return <p className="status-message">表示できる拠点がありません。</p>;
   }
 
   return (
-    <div className="castle-list" aria-label="castle list">
-      <div
-        className={`castle-list__header castle-list__header--owned${
-          isTestModeEnabled ? " castle-list__header--test-mode" : ""
-        }`}
-      >
+    <div
+      className={`castle-list${showOwnerGuild ? " castle-list--with-owner" : ""}${
+        showDevDetails ? " castle-list--with-dev" : ""
+      }${isTestModeEnabled ? " castle-list--with-test" : ""}`}
+      aria-label="castle list"
+    >
+      <div className="castle-list__header">
         <span>拠点</span>
         <span>alert</span>
         <span>状態</span>
-        <span>防衛</span>
-        <span>侵攻</span>
-        <span>所有</span>
+        <span>防</span>
+        <span>侵</span>
+        {showOwnerGuild ? <span>所有</span> : null}
         <span>攻撃</span>
-        <span>更新</span>
+        {showDevDetails ? <span>更新</span> : null}
         {isTestModeEnabled ? <span>test</span> : null}
       </div>
       {viewModels.map((viewModel) => (
-        <div
-          className={`castle-list__row castle-list__row--owned castle-list__row--${viewModel.alertLevel}${
-            isTestModeEnabled ? " castle-list__row--test-mode" : ""
-          }`}
-          key={viewModel.castleId}
-        >
+        <div className={`castle-list__row castle-list__row--${viewModel.alertLevel}`} key={viewModel.castleId}>
           <span className="castle-list__castle" data-label="拠点">
             <strong>{viewModel.castleName}</strong>
-            <small>
-              #{viewModel.castleId} / {viewModel.castleTypeLabel}
-            </small>
           </span>
           <span data-label="alert" className={`alert-level alert-${viewModel.alertLevel}`}>
             {formatAlertLevel(viewModel.alertLevel)}
@@ -753,36 +778,38 @@ function CastleList({
           <span data-label="状態" className={`battle-status battle-status--${viewModel.statusTone}`}>
             {viewModel.statusLabel}
           </span>
-          <span className="castle-list__count" data-label="防衛">
+          <span className="castle-list__count" data-label="防">
             {viewModel.defenseCount}
           </span>
-          <span className="castle-list__count" data-label="侵攻">
+          <span className="castle-list__count" data-label="侵">
             {viewModel.attackCount}
           </span>
-          <span className="castle-list__guild" data-label="所有">
-            {viewModel.ownerGuildName}
-            <small>{viewModel.ownerGuildId ?? "-"}</small>
-          </span>
+          {showOwnerGuild ? (
+            <span className="castle-list__guild" data-label="所有">
+              {viewModel.ownerGuildName}
+            </span>
+          ) : null}
           <span className="castle-list__guild" data-label="攻撃">
             {viewModel.attackerGuildName ?? "-"}
-            <small>{viewModel.attackerGuildId ?? "-"}</small>
           </span>
-          <span className="castle-list__updated" data-label="更新">
-            {capturedAt}
-          </span>
+          {showDevDetails ? (
+            <span className="castle-list__updated" data-label="更新">
+              {capturedAt}
+            </span>
+          ) : null}
           {isTestModeEnabled ? (
             <span className="test-mode-actions" data-label="test">
               <button type="button" onClick={() => onTestModeDefenseIncrease(viewModel.castleId, 5)}>
-                防衛 +5
+                防 +5
               </button>
               <button type="button" onClick={() => onTestModeDefenseIncrease(viewModel.castleId, 10)}>
-                防衛 +10
+                防 +10
               </button>
               <button type="button" onClick={() => onTestModeAttackIncrease(viewModel.castleId, 5)}>
-                侵攻 +5
+                侵 +5
               </button>
               <button type="button" onClick={() => onTestModeAttackIncrease(viewModel.castleId, 10)}>
-                侵攻 +10
+                侵 +10
               </button>
               <button type="button" onClick={() => onTestModeRevive(viewModel.castleId)}>
                 復帰
@@ -804,6 +831,6 @@ function formatAlertLevel(alertLevel: GuildBattleAlertLevel): string {
     case "danger":
       return "危険";
     case "critical":
-      return "最優先 / 侵攻中";
+      return "最優先";
   }
 }

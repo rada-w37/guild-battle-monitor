@@ -51,7 +51,7 @@ describe("processRealtimePayload", () => {
     expect(viewModels[0].alertLevel).toBe("danger");
   });
 
-  it("updates attack count and becomes critical", () => {
+  it("updates attack count without changing defense-based alert", () => {
     const result = processRealtimePayload(
       createSnapshot({ defenseCount: 30, attackCount: 0 }),
       createCastleStatusBytes({ defenseCount: 30, attackCount: 3, rawState: 1 }),
@@ -60,7 +60,8 @@ describe("processRealtimePayload", () => {
     const viewModels = createOwnedCastleViewModels(result.snapshot, createSettings());
 
     expect(result.snapshot.castles[0].attackCount).toBe(3);
-    expect(viewModels[0].alertLevel).toBe("critical");
+    expect(viewModels[0].alertLevel).toBe("safe");
+    expect(viewModels[0].statusLabel).toBe("侵攻中");
   });
 
   it("removes a castle from owned view models after ownership changes", () => {

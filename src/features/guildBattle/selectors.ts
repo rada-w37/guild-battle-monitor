@@ -41,14 +41,10 @@ export function isCastleFallen(castle: GvgCastle): boolean {
 }
 
 export function getDefenseAlertLevel(
-  castle: Pick<GvgCastle, "attackCount" | "defenseCount" | "state">,
+  castle: Pick<GvgCastle, "defenseCount">,
   thresholds: GuildBattleAlertThresholds = DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
 ): GuildBattleAlertLevel {
-  if (
-    castle.attackCount > 0 ||
-    thresholds.criticalStates.includes(castle.state) ||
-    castle.defenseCount < thresholds.criticalDefenseCount
-  ) {
+  if (castle.defenseCount < thresholds.criticalDefenseCount) {
     return "critical";
   }
 

@@ -169,7 +169,8 @@ describe("normalizeRealtimeGvgMessage", () => {
     expect(viewModels).toEqual([
       expect.objectContaining({
         castleId: "1",
-        alertLevel: "critical"
+        alertLevel: "danger",
+        statusLabel: "侵攻中"
       })
     ]);
   });
