@@ -218,6 +218,35 @@ select {
   background: #e2e8f0;
 }
 
+.castle-type {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.castle-type--temple {
+  color: #6b3f00;
+  background: #fff1c2;
+}
+
+.castle-type--castle {
+  color: #1e3a8a;
+  background: #dbeafe;
+}
+
+.castle-type--church {
+  color: #31523a;
+  background: #e8f6ed;
+}
+
+.castle-type--unknown {
+  color: #475569;
+  background: #e2e8f0;
+}
+
 .realtime-controls {
   margin-top: 24px;
   padding-top: 16px;
@@ -326,8 +355,8 @@ select {
 
 .castle-list__header--owned,
 .castle-list__row--owned {
-  grid-template-columns: 80px minmax(150px, 1fr) minmax(140px, 1fr) 80px 80px minmax(110px, 1fr) 130px minmax(150px, 1fr) minmax(150px, 1fr) minmax(190px, 1fr);
-  min-width: 1280px;
+  grid-template-columns: minmax(150px, 1.2fr) 80px minmax(150px, 1fr) minmax(140px, 1fr) 80px 80px minmax(110px, 1fr) 130px minmax(150px, 1fr) minmax(150px, 1fr) minmax(190px, 1fr);
+  min-width: 1360px;
 }
 
 .castle-list__header {

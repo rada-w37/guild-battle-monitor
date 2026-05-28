@@ -1,5 +1,6 @@
 import { normalizeGvgGuildIdForComparison } from "../gvg/guildId";
 import type { GvgCastle, GvgGuildId, GvgSnapshot } from "../gvg/types";
+import { getGuildBattleCastleMetadata } from "./castleMetadata";
 import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
 import type {
   GuildBattleAlertLevel,
@@ -217,9 +218,13 @@ function createCastleViewModel(
   thresholds: GuildBattleAlertThresholds
 ): GuildBattleCastleViewModel {
   const statusDisplay = getGuildBattleCastleStatusDisplay(castle);
+  const castleMetadata = getGuildBattleCastleMetadata(castle.castleId);
 
   return {
     castleId: castle.castleId,
+    castleName: castleMetadata.castleName,
+    castleType: castleMetadata.castleType,
+    castleTypeLabel: castleMetadata.castleTypeLabel,
     ownerGuildId: castle.ownerGuildId,
     ownerGuildName: castle.ownerGuildId === null ? "Unknown guild" : snapshot.guildNames[castle.ownerGuildId] ?? "Unknown guild",
     attackerGuildId: castle.attackerGuildId,

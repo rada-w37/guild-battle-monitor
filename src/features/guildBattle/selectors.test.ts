@@ -101,6 +101,9 @@ describe("guild battle selectors", () => {
     expect(viewModels).toEqual([
       {
         castleId: "castle-owned",
+        castleName: "拠点 castle-owned",
+        castleType: "unknown",
+        castleTypeLabel: "不明",
         ownerGuildId: "000123",
         ownerGuildName: "Own Guild",
         attackerGuildId: "789",
@@ -138,6 +141,34 @@ describe("guild battle selectors", () => {
     expect(display.mode).toBe("allCastles");
     expect(display.reason).toBe("ownGuildUnspecified");
     expect(display.castles).toHaveLength(2);
+  });
+
+  it("adds castle metadata to view models", () => {
+    const viewModels = createAllCastleViewModels(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ castleId: "1" as GvgCastleId }),
+          createCastle({ castleId: "99" as GvgCastleId })
+        ],
+        guildNames: {}
+      },
+      DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+    );
+
+    expect(viewModels[0]).toMatchObject({
+      castleId: "1",
+      castleName: "ブラッセル",
+      castleType: "temple",
+      castleTypeLabel: "神殿"
+    });
+    expect(viewModels[1]).toMatchObject({
+      castleId: "99",
+      castleName: "拠点 99",
+      castleType: "unknown",
+      castleTypeLabel: "不明"
+    });
   });
 
   it("falls back to all castles when owned castles are not found", () => {

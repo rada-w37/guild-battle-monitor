@@ -631,7 +631,8 @@ function CastleList({
   return (
     <div className="castle-list" aria-label="castle list">
       <div className="castle-list__header castle-list__header--owned">
-        <span>拠点ID</span>
+        <span>拠点</span>
+        <span>種別</span>
         <span>所有ギルドID</span>
         <span>所有ギルド名</span>
         <span>防衛数</span>
@@ -644,7 +645,12 @@ function CastleList({
       </div>
       {viewModels.map((viewModel) => (
         <div className="castle-list__row castle-list__row--owned" key={viewModel.castleId}>
-          <span>{viewModel.castleId}</span>
+          <span>
+            {viewModel.castleName} <small>(#{viewModel.castleId})</small>
+          </span>
+          <span className={`castle-type castle-type--${viewModel.castleType}`}>
+            {viewModel.castleTypeLabel}
+          </span>
           <span>{viewModel.ownerGuildId ?? "-"}</span>
           <span>{viewModel.ownerGuildName}</span>
           <span>{viewModel.defenseCount}</span>

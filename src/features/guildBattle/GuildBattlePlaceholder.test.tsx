@@ -112,7 +112,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("自ギルドが未指定のため、全拠点を表示しています。");
     expect(document.body.textContent).toContain("表示モード全拠点");
     expect(getGuildSelectOptions()).toEqual(["全拠点表示", "Guild 999999999001 (1)", "Owner Guild (1)"]);
-    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
   });
 
   it("selects a guild candidate by guildId", async () => {
@@ -127,7 +127,7 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(getOwnGuildIdInput().value).toBe(ownGuildId);
     expect(document.body.textContent).toContain("指定ギルドの防衛拠点のみ表示しています。");
-    expect(getRenderedCastleIds()).toEqual(["1"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)"]);
   });
 
   it("shows only owned castles when own guild ID matches", async () => {
@@ -145,7 +145,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("表示モード指定ギルドのみ");
     expect(document.body.textContent).toContain("最優先 / 侵攻中");
     expect(document.body.textContent).toContain("Attack Guild");
-    expect(getRenderedCastleIds()).toEqual(["1"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)"]);
   });
 
   it("falls back to all castles when own guild ID has no owned castles", async () => {
@@ -161,7 +161,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain(
       "指定されたギルドの防衛拠点が見つからないため、全拠点を表示しています。"
     );
-    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
   });
 
   it("shows summary counts and Japanese alert labels", async () => {
@@ -190,13 +190,13 @@ describe("GuildBattlePlaceholder", () => {
 
     await clickSubmitButton();
 
-    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
 
     await act(async () => {
       updateSelect(getSortSelect(), "alertLevel");
     });
 
-    expect(getRenderedCastleIds()).toEqual(["2", "1"]);
+    expect(getRenderedCastleLabels()).toEqual(["ウィスケルケー (#2)", "ブラッセル (#1)"]);
   });
 
   it("renders a compact error message", async () => {
@@ -345,7 +345,7 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(getGuildSelectOptions()).toContain("Attack Guild (1)");
-    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
   });
 
   it("stops realtime monitoring safely", async () => {
@@ -522,7 +522,7 @@ function getThresholdInputs() {
   return inputs;
 }
 
-function getRenderedCastleIds() {
+function getRenderedCastleLabels() {
   return Array.from(document.querySelectorAll<HTMLDivElement>(".castle-list__row")).map(
     (row) => row.querySelector("span")?.textContent ?? ""
   );
