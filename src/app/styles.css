@@ -36,8 +36,8 @@ select {
 }
 
 .placeholder {
-  width: min(100%, 720px);
-  padding: 24px;
+  width: min(100%, 1180px);
+  padding: 18px;
   border: 1px solid #d8e0ea;
   border-radius: 8px;
   background: #ffffff;
@@ -66,12 +66,25 @@ select {
   width: min(100%, 1180px);
 }
 
+.startup-panel,
 .load-form {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: flex-end;
   margin-top: 18px;
+}
+
+.settings-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 10px;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  background: #f8fafc;
 }
 
 .field {
@@ -86,7 +99,7 @@ select {
 
 .field__input {
   width: min(100%, 180px);
-  padding: 10px 12px;
+  padding: 7px 9px;
   border: 1px solid #c8d2de;
   border-radius: 6px;
   color: #1d2733;
@@ -98,16 +111,16 @@ select {
 }
 
 .field__input--narrow {
-  width: min(100%, 120px);
+  width: 64px;
 }
 
 .field__input--world {
-  width: min(100%, 110px);
+  width: 72px;
 }
 
 .load-form__button {
-  min-height: 42px;
-  padding: 10px 14px;
+  min-height: 34px;
+  padding: 7px 12px;
   border: 1px solid #1f6feb;
   border-radius: 6px;
   color: #ffffff;
@@ -141,9 +154,7 @@ select {
 }
 
 .alert-settings {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #d8e0ea;
+  margin: 0;
 }
 
 .alert-settings summary {
@@ -154,7 +165,7 @@ select {
 .alert-settings__fields {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-end;
   margin-top: 10px;
 }
@@ -177,10 +188,50 @@ select {
   align-items: center;
 }
 
+.auto-update-toggle {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid #c8d2de;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.auto-update-toggle--on {
+  color: #ffffff;
+  border-color: #1f7a3f;
+  background: #1f7a3f;
+}
+
+.auto-update-toggle--off {
+  color: #3d4d5c;
+  background: #ffffff;
+}
+
+.auto-update-state {
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.auto-update-state--idle {
+  color: #566675;
+}
+
+.auto-update-state--connecting {
+  color: #8a6500;
+}
+
+.auto-update-state--connected {
+  color: #1f7a3f;
+}
+
+.auto-update-state--disconnected,
+.auto-update-state--error {
+  color: #a32929;
+}
+
 .test-mode-settings {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid #d8e0ea;
+  margin: 0;
 }
 
 .test-mode-settings summary {
@@ -329,6 +380,10 @@ select {
   font-size: 0.875rem;
 }
 
+.guild-select-field {
+  margin-top: 12px;
+}
+
 .snapshot-summary__title {
   margin: 0 0 10px;
   font-size: 1.15rem;
@@ -392,11 +447,10 @@ select {
 .castle-list__row {
   display: grid;
   grid-template-columns:
-    minmax(148px, 1.4fr)
-    86px
-    84px
-    48px
-    48px
+    minmax(132px, 1.3fr)
+    64px
+    64px
+    minmax(116px, 0.9fr)
     minmax(110px, 1fr);
   align-items: center;
   min-width: 0;
@@ -405,11 +459,10 @@ select {
 .castle-list--with-owner .castle-list__header,
 .castle-list--with-owner .castle-list__row {
   grid-template-columns:
-    minmax(148px, 1.4fr)
-    86px
-    84px
-    48px
-    48px
+    minmax(132px, 1.3fr)
+    64px
+    64px
+    minmax(116px, 0.9fr)
     minmax(110px, 1fr)
     minmax(110px, 1fr);
 }
@@ -417,11 +470,10 @@ select {
 .castle-list--with-dev .castle-list__header,
 .castle-list--with-dev .castle-list__row {
   grid-template-columns:
-    minmax(148px, 1.4fr)
-    86px
-    84px
-    48px
-    48px
+    minmax(132px, 1.3fr)
+    64px
+    64px
+    minmax(116px, 0.9fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr);
 }
@@ -429,11 +481,10 @@ select {
 .castle-list--with-owner.castle-list--with-dev .castle-list__header,
 .castle-list--with-owner.castle-list--with-dev .castle-list__row {
   grid-template-columns:
-    minmax(148px, 1.4fr)
-    86px
-    84px
-    48px
-    48px
+    minmax(132px, 1.3fr)
+    64px
+    64px
+    minmax(116px, 0.9fr)
     minmax(110px, 1fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr);
@@ -442,11 +493,10 @@ select {
 .castle-list--with-test .castle-list__header,
 .castle-list--with-test .castle-list__row {
   grid-template-columns:
-    minmax(148px, 1.4fr)
-    86px
-    84px
-    48px
-    48px
+    minmax(132px, 1.3fr)
+    64px
+    64px
+    minmax(116px, 0.9fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr)
     minmax(170px, 1.2fr);
@@ -455,11 +505,10 @@ select {
 .castle-list--with-owner.castle-list--with-test .castle-list__header,
 .castle-list--with-owner.castle-list--with-test .castle-list__row {
   grid-template-columns:
-    minmax(148px, 1.4fr)
-    86px
-    84px
-    48px
-    48px
+    minmax(132px, 1.3fr)
+    64px
+    64px
+    minmax(116px, 0.9fr)
     minmax(110px, 1fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr)
@@ -523,9 +572,40 @@ select {
 }
 
 .castle-list__count {
+  min-width: 54px;
   font-size: 1rem;
   font-weight: 800;
   text-align: right;
+  white-space: nowrap;
+}
+
+.castle-list__ko {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.ko-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ko-badge--attack {
+  color: #9f1239;
+  background: #ffe4e6;
+}
+
+.ko-badge--defense {
+  color: #1e40af;
+  background: #dbeafe;
 }
 
 .test-mode-actions {
@@ -593,17 +673,32 @@ select {
     font-size: 0.875rem;
   }
 
+  .startup-panel,
   .load-form,
   .alert-settings__fields,
   .realtime-controls__actions {
     display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
+  }
+
+  .settings-panel {
+    display: grid;
     grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .field__input,
-  .field__input--wide,
-  .field__input--narrow {
+  .field__input--wide {
     width: 100%;
+  }
+
+  .field__input--narrow {
+    width: 58px;
+  }
+
+  .field__input--world {
+    width: 68px;
   }
 
   .summary-grid {
@@ -621,10 +716,10 @@ select {
 
   .castle-list__row {
     display: grid;
-    grid-template-columns: minmax(86px, 1fr) auto auto 42px 42px;
+    grid-template-columns: minmax(92px, 1fr) minmax(56px, auto) minmax(56px, auto);
     gap: 4px;
     align-items: center;
-    padding: 8px;
+    padding: 6px 7px;
     border: 1px solid #d8e0ea;
     border-left-width: 5px;
     border-radius: 6px;
@@ -636,7 +731,7 @@ select {
   .castle-list--with-owner.castle-list--with-dev .castle-list__row,
   .castle-list--with-test .castle-list__row,
   .castle-list--with-owner.castle-list--with-test .castle-list__row {
-    grid-template-columns: minmax(86px, 1fr) auto auto 42px 42px;
+    grid-template-columns: minmax(92px, 1fr) minmax(56px, auto) minmax(56px, auto);
   }
 
   .castle-list__row span {
@@ -655,6 +750,12 @@ select {
     min-width: 0;
   }
 
+  .castle-list__count {
+    min-width: 56px;
+    font-size: 0.9375rem;
+  }
+
+  .castle-list__ko,
   .castle-list__guild,
   .castle-list__updated {
     display: none;

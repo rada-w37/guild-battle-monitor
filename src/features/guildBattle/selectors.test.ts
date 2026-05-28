@@ -99,6 +99,7 @@ describe("guild battle selectors", () => {
         statusTone: "battle",
         defenseCount: 9,
         attackCount: 1,
+        lastWinPartyKnockOutCount: 0,
         alertLevel: "critical"
       }
     ]);

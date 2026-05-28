@@ -26,7 +26,7 @@ Default values:
 - critical: defense count less than 10
 
 The selector now uses "less than" for defense-count thresholds.
-Attack count greater than 0 and critical castle states still force `critical`.
+Step8-C changed the monitor policy so attack count and battle state no longer force `critical`; they are displayed separately from alert severity.
 
 ## Step5-F UX clarification
 

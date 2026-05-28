@@ -42,6 +42,7 @@ export interface GuildBattleCastleViewModel {
   readonly statusTone: GuildBattleCastleStatusTone;
   readonly defenseCount: number;
   readonly attackCount: number;
+  readonly lastWinPartyKnockOutCount: number;
   readonly alertLevel: GuildBattleAlertLevel;
 }
 

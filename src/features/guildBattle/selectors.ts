@@ -231,6 +231,7 @@ function createCastleViewModel(
     statusTone: statusDisplay.statusTone,
     defenseCount: castle.defenseCount,
     attackCount: castle.attackCount,
+    lastWinPartyKnockOutCount: castle.lastWinPartyKnockOutCount,
     alertLevel: getDefenseAlertLevel(castle, thresholds)
   };
 }

@@ -79,7 +79,7 @@ Changes:
 - Replaced `worldId` input with user-facing `world`.
 - `world` is converted internally with `worldId = 1000 + world`.
 - The default world input is empty.
-- Entering a numeric world auto-loads the REST snapshot after a short debounce.
+- Step8-C initially tried auto-load after world entry, but Step8-D removed it after iPhone testing.
 - The old initial-load button was replaced with a smaller `更新` button for manual refresh.
 - Removed the direct own guild ID input; guild selection is done through the candidate select.
 - Changed danger sorting from a select to a checkbox.
@@ -100,7 +100,27 @@ Alert and battle state are intentionally separated:
 Mobile is treated as a compact monitoring surface. The narrow layout keeps the row close to:
 
 ```txt
-ブラッセル  防0  侵0
+ブラッセル  防0  攻0
 ```
 
 and hides lower-priority guild and timestamp details.
+
+## Step8-D iPhone follow-up
+
+Step8-D applies the real-device iPhone review fixes without changing WebSocket, parser, normalize, or merge responsibilities.
+
+Changes:
+
+- Removed world-input auto fetch. Typing `37` only edits the field; the `更新` button loads `worldId = 1037`.
+- Moved guild selection directly above the monitoring list so filtering is close to the rows it affects.
+- Removed the alert summary panel from the normal view.
+- Removed alert label text and battle-state label text from each row. Row color and left border carry alert severity, while battle state stays out of the compact operational row.
+- Changed visible attack wording from `侵` to `攻`.
+- Added compact KO display for attack-side and defense-side KO values.
+- Changed user-facing realtime wording to `自動更新`.
+- Made auto update a single toggle button: `自動更新 ON` / `自動更新 OFF`.
+- Kept connection state as a small setting-area hint and removed the separate realtime block.
+- Tightened world and threshold inputs to reduce vertical space.
+- Adjusted mobile rows so `防 656` and `攻 123` stay on one line with `white-space: nowrap` and fixed minimum count widths.
+
+The auto update default remains ON. If the user turns it OFF before pressing `更新`, REST loading still works but WebSocket monitoring is not started. If it is ON when the snapshot loads, the realtime runtime starts after the REST snapshot is available.

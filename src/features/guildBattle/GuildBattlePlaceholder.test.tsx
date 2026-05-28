@@ -14,6 +14,8 @@ import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
   true;
 
 const ownGuildId = "438130839001" as GvgGuildId;
+const attackGuildId = "123456789037" as GvgGuildId;
+const otherGuildId = "999999999037" as GvgGuildId;
 
 const castleStreamId = buildGvgStreamId({
   castleId: 1,
@@ -28,7 +30,7 @@ const snapshot = {
   capturedAt: "2026-05-27T11:15:36.000Z",
   guildNames: {
     [ownGuildId]: "Owner Guild",
-    ["123456789037" as GvgGuildId]: "Attack Guild"
+    [attackGuildId]: "Attack Guild"
   },
   castles: [
     {
@@ -37,19 +39,19 @@ const snapshot = {
       state: "idle",
       status: "underAttack",
       ownerGuildId: ownGuildId,
-      attackerGuildId: "123456789037" as GvgGuildId,
+      attackerGuildId: attackGuildId,
       defenseCount: 120,
       attackCount: 1,
       fallenAt: null,
-      lastWinPartyKnockOutCount: 0,
+      lastWinPartyKnockOutCount: 7,
       updatedAt: "2026-05-27T11:15:36.000Z"
     },
     {
       castleId: "2" as GvgCastleId,
       worldId: "1037" as GvgWorldId,
-      state: "idle",
-      status: "normal",
-      ownerGuildId: "999999999037" as GvgGuildId,
+      state: "fallen",
+      status: "fallen",
+      ownerGuildId: otherGuildId,
       attackerGuildId: null,
       defenseCount: 8,
       attackCount: 0,
@@ -75,7 +77,7 @@ afterEach(() => {
 });
 
 describe("GuildBattlePlaceholder", () => {
-  it("starts with empty world input and no own guild ID input", () => {
+  it("starts with empty world input and no old header or own guild ID input", () => {
     renderComponent();
 
     expect(getWorldInput().value).toBe("");
@@ -84,53 +86,43 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).not.toContain("自ギルドID");
   });
 
-  it("converts world to worldId and auto loads after input", async () => {
-    vi.useFakeTimers();
+  it("does not load while typing world", async () => {
     const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     renderComponent(loadSnapshot);
 
     act(() => {
       updateInput(getWorldInput(), "37");
     });
+    await flushPromises();
 
     expect(loadSnapshot).not.toHaveBeenCalled();
+  });
 
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-      await Promise.resolve();
+  it("loads with the update button and converts world to worldId", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    renderComponent(loadSnapshot);
+
+    act(() => {
+      updateInput(getWorldInput(), "37");
     });
+    await clickButton("更新");
 
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
     expect(loadSnapshot).toHaveBeenCalledWith("1037");
     expect(getRenderedCastleLabels()).toEqual(["ブラッセル", "ウィスケルケー"]);
   });
 
-  it("refresh button reloads the current world", async () => {
-    vi.useFakeTimers();
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
-    renderComponent(loadSnapshot);
-
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
-    await clickRefreshButton();
-
-    expect(loadSnapshot).toHaveBeenCalledTimes(2);
-    expect(loadSnapshot).toHaveBeenLastCalledWith("1037");
-  });
-
-  it("uses guild select as the main guild filter", async () => {
-    vi.useFakeTimers();
+  it("uses guild select just before the monitor list", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
+    await loadWorld37();
 
     expect(getGuildSelectOptions()).toEqual(["全拠点表示", "Guild 999999999037 (1)", "Owner Guild (1)"]);
     expect(document.querySelector(".castle-list--with-owner")).not.toBeNull();
-    expect(document.body.textContent).toContain("所有");
+
+    const guildSelect = document.querySelector(".guild-select-field");
+    const castleList = document.querySelector(".castle-list");
+    expect(guildSelect?.compareDocumentPosition(castleList as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
     await act(async () => {
       updateSelect(getGuildSelect(), ownGuildId);
@@ -141,28 +133,19 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.querySelector(".castle-list__header")?.textContent).not.toContain("所有");
   });
 
-  it("does not show snapshot result cards in normal monitor area", async () => {
-    vi.useFakeTimers();
+  it("does not show the old result summary panel in the normal monitor area", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
+    await loadWorld37();
 
-    expect(document.querySelector(".snapshot-summary > .summary-grid")?.textContent).not.toContain("worldId");
+    expect(document.querySelector(".snapshot-summary > .summary-grid")).toBeNull();
     expect(document.querySelector(".dev-snapshot-details")?.textContent).toContain("worldId");
   });
 
-  it("uses a checkbox for danger sorting", async () => {
-    vi.useFakeTimers();
+  it("uses a danger sort checkbox", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
-
+    await loadWorld37();
     expect(getRenderedCastleLabels()).toEqual(["ブラッセル", "ウィスケルケー"]);
 
     await act(async () => {
@@ -172,46 +155,47 @@ describe("GuildBattlePlaceholder", () => {
     expect(getRenderedCastleLabels()).toEqual(["ウィスケルケー", "ブラッセル"]);
   });
 
-  it("does not display guild IDs in normal list columns", async () => {
-    vi.useFakeTimers();
+  it("keeps IDs, alert text, and battle state text out of the normal list", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
+    await loadWorld37();
 
-    const listText = document.querySelector(".castle-list")?.textContent ?? "";
+    const listText = getCastleListText();
     expect(listText).toContain("Owner Guild");
     expect(listText).toContain("Attack Guild");
     expect(listText).not.toContain(ownGuildId);
-    expect(listText).not.toContain("123456789037");
+    expect(listText).not.toContain(attackGuildId);
+    expect(listText).not.toContain("安全");
+    expect(listText).not.toContain("注意");
+    expect(listText).not.toContain("危険");
+    expect(listText).not.toContain("最優先");
+    expect(listText).not.toContain("通常");
+    expect(listText).not.toContain("侵攻中");
+    expect(listText).not.toContain("占拠");
   });
 
-  it("shows timestamp only as DEV details", async () => {
-    vi.useFakeTimers();
+  it("uses attack wording and shows KO counts", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
+    await loadWorld37();
 
-    expect(document.querySelector(".castle-list__updated")?.textContent).toBe(snapshot.capturedAt);
+    const list = document.querySelector(".castle-list");
+    expect(list?.textContent).toContain("攻");
+    expect(list?.textContent).not.toContain("侵");
+    expect(list?.textContent).toContain("攻 1 KO");
+    expect(list?.textContent).toContain("防 7 KO");
   });
 
-  it("does not make under attack castles critical when defense is enough", async () => {
-    vi.useFakeTimers();
+  it("keeps mobile one-line count structure with no wrapping-prone labels", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
+    await loadWorld37();
 
-    const firstRow = document.querySelector(".castle-list__row");
-    expect(firstRow?.className).toContain("castle-list__row--safe");
-    expect(firstRow?.textContent).toContain("侵攻中");
+    const row = document.querySelector(".castle-list__row");
+    expect(row?.querySelector(".castle-list__castle")).not.toBeNull();
+    expect(row?.querySelector("[data-label='防']")).not.toBeNull();
+    expect(row?.querySelector("[data-label='攻']")).not.toBeNull();
+    expect(row?.querySelector("[data-label='侵']")).toBeNull();
   });
 
   it("keeps threshold settings and validation", () => {
@@ -223,7 +207,7 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(getThresholdInputs()[1], "30");
     });
 
-    expect(document.body.textContent).toContain("注意 > 危険 > 最優先 の順になるよう設定してください。");
+    expect(document.body.textContent).toContain("注意 > 危険 > 最優先");
     expect(getThresholdInputs()[1].value).toBe("15");
   });
 
@@ -239,17 +223,27 @@ describe("GuildBattlePlaceholder", () => {
     );
   });
 
-  it("keeps realtime monitoring with mock client", async () => {
-    vi.useFakeTimers();
+  it("uses one auto update toggle button and respects OFF during refresh", async () => {
     const realtimeClient = new MockGvgRealtimeClient();
     renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
-    await clickRealtimeStartButton();
+    expect(getAutoUpdateButton().textContent).toBe("自動更新 ON");
+    await clickButton("自動更新 ON");
+    expect(getAutoUpdateButton().textContent).toBe("自動更新 OFF");
 
+    await loadWorld37();
+    expect(realtimeClient.subscriptions).toHaveLength(0);
+
+    await clickButton("自動更新 OFF");
+    expect(getAutoUpdateButton().textContent).toBe("自動更新 ON");
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+  });
+
+  it("updates the list through the mock realtime pipeline when auto update is on", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
+
+    await loadWorld37();
     expect(realtimeClient.subscriptions).toHaveLength(1);
 
     await act(async () => {
@@ -260,41 +254,25 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.querySelector(".castle-list__row--danger")).not.toBeNull();
   });
 
-  it("uses DEV test mode buttons to update alert UI through realtime pipeline", async () => {
-    vi.useFakeTimers();
+  it("uses DEV test mode buttons to update alert UI through the realtime pipeline", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
+    await clickButton("自動更新 ON");
+    await loadWorld37();
     await toggleTestMode();
-    await clickRealtimeStartButton();
-    await clickTestModeButton("侵 +10");
+    await flushPromises();
+    await clickButton("自動更新 OFF");
+    await waitForText("自動更新中");
+    await clickTestModeButton("攻 +10");
 
-    expect(document.body.textContent).toContain("10");
+    expect(document.body.textContent).toContain("攻 11 KO");
     expect(document.querySelector(".castle-list__row--safe")).not.toBeNull();
-  });
-
-  it("keeps mobile monitor-list structure available", async () => {
-    vi.useFakeTimers();
-    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
-
-    act(() => {
-      updateInput(getWorldInput(), "37");
-    });
-    await flushAutoLoad();
-
-    const row = document.querySelector(".castle-list__row");
-    expect(row?.querySelector(".castle-list__castle")).not.toBeNull();
-    expect(row?.querySelector("[data-label='防']")).not.toBeNull();
-    expect(row?.querySelector("[data-label='侵']")).not.toBeNull();
   });
 });
 
 function renderComponent(
-  loadSnapshot?: typeof loadLocalGvgSnapshot,
-  createRealtimeClient?: () => GvgRealtimeClient
+  loadSnapshot: typeof loadLocalGvgSnapshot = vi.fn(() => Promise.resolve(snapshot)),
+  createRealtimeClient: () => GvgRealtimeClient = () => new MockGvgRealtimeClient()
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -307,29 +285,53 @@ function renderComponent(
   });
 }
 
-async function flushAutoLoad() {
-  await act(async () => {
-    vi.advanceTimersByTime(500);
-    await Promise.resolve();
+async function loadWorld37() {
+  act(() => {
+    updateInput(getWorldInput(), "37");
   });
+  await clickButton("更新");
 }
 
-async function clickRefreshButton() {
+async function clickButton(label: string) {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
-    (candidate) => candidate.textContent === "更新"
+    (candidate) => candidate.textContent === label
   );
 
   if (!button) {
-    throw new Error("refresh button was not found");
+    throw new Error(`button was not found: ${label}`);
   }
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
   });
 }
 
+async function flushPromises() {
+  await act(async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+async function waitForText(text: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (document.body.textContent?.includes(text)) {
+      return;
+    }
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  throw new Error(`text was not found: ${text}`);
+}
+
 function getWorldInput() {
-  const input = document.querySelector<HTMLInputElement>("input[type='text']");
+  const input = document.querySelector<HTMLInputElement>(".field__input--world");
 
   if (!input) {
     throw new Error("world input was not found");
@@ -339,7 +341,7 @@ function getWorldInput() {
 }
 
 function getGuildSelect() {
-  const select = document.querySelector<HTMLSelectElement>("select");
+  const select = document.querySelector<HTMLSelectElement>(".guild-select-field select");
 
   if (!select) {
     throw new Error("guild select was not found");
@@ -374,10 +376,24 @@ function getThresholdInputs() {
   return inputs;
 }
 
+function getAutoUpdateButton() {
+  const button = document.querySelector<HTMLButtonElement>(".auto-update-toggle");
+
+  if (!button) {
+    throw new Error("auto update toggle button was not found");
+  }
+
+  return button;
+}
+
 function getRenderedCastleLabels() {
   return Array.from(document.querySelectorAll<HTMLDivElement>(".castle-list__row")).map(
     (row) => row.querySelector(".castle-list__castle")?.textContent?.trim() ?? ""
   );
+}
+
+function getCastleListText() {
+  return document.querySelector(".castle-list")?.textContent ?? "";
 }
 
 async function toggleTestMode() {
@@ -389,6 +405,7 @@ async function toggleTestMode() {
 
   await act(async () => {
     checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
   });
 }
 
@@ -403,18 +420,7 @@ async function clickTestModeButton(label: string) {
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-}
-
-async function clickRealtimeStartButton() {
-  const button = document.querySelectorAll<HTMLButtonElement>(".realtime-controls__actions button")[0];
-
-  if (!button) {
-    throw new Error("realtime start button was not found");
-  }
-
-  await act(async () => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
   });
 }
 
@@ -437,6 +443,7 @@ function createCastleStatusBytes(
     defenseCount: number;
     attackCount: number;
     rawState: number;
+    lastWinPartyKnockOutCount: number;
   }> = {}
 ): number[] {
   return [
@@ -448,7 +455,7 @@ function createCastleStatusBytes(
     ...writeUint16(overrides.attackCount ?? 0),
     overrides.rawState ?? 0,
     0,
-    ...writeUint16(0)
+    ...writeUint16(overrides.lastWinPartyKnockOutCount ?? 0)
   ];
 }
 
