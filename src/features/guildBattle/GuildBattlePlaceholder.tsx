@@ -806,9 +806,8 @@ function CastleList({
             {viewModel.attackCount}
           </span>
           <span className="castle-list__ko" data-label="KO">
-            <span className={`ko-badge ko-badge--${viewModel.koDisplay.tone}`}>
-              <span className="ko-badge__label">KO </span>
-              <span className="ko-badge__count">{viewModel.koDisplay.count}</span>
+            <span className={`ko-value ko-value--${viewModel.koDisplay.tone}`}>
+              {viewModel.koDisplay.count}
             </span>
           </span>
           {showOwnerGuild ? (

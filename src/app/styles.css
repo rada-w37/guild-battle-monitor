@@ -485,8 +485,8 @@ select {
 .snapshot-summary__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
@@ -494,8 +494,8 @@ select {
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border: 1px solid #c8d2de;
   border-radius: 999px;
   background: #ffffff;
@@ -503,8 +503,8 @@ select {
 }
 
 .connection-indicator__dot {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
   background: #94a3b8;
 }
@@ -718,7 +718,8 @@ select {
   white-space: nowrap;
 }
 
-.castle-list__count::before {
+.castle-list__count::before,
+.castle-list__ko::before {
   color: #667789;
   content: attr(data-label);
   font-size: 0.75rem;
@@ -727,49 +728,31 @@ select {
 }
 
 .castle-list__ko {
+  display: inline-flex;
+  justify-content: space-between;
   min-width: 62px;
   overflow-wrap: normal;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.ko-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: fit-content;
-  min-width: 60px;
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 0.75rem;
+  font-size: 1rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
   white-space: nowrap;
 }
 
-.ko-badge__label {
-  margin-right: 4px;
-}
-
-.ko-badge__count {
+.ko-value {
   min-width: 18px;
   text-align: right;
 }
 
-.ko-badge--attack {
+.ko-value--attack {
   color: #9f1239;
-  background: #ffe4e6;
 }
 
-.ko-badge--defense {
+.ko-value--defense {
   color: #1e40af;
-  background: #dbeafe;
 }
 
-.ko-badge--none {
+.ko-value--none {
   color: #334155;
-  background: #e2e8f0;
 }
 
 .test-mode-actions {
@@ -929,10 +912,9 @@ select {
     min-width: 54px;
   }
 
-  .ko-badge {
-    min-width: 52px;
-    padding: 1px 4px;
-    font-size: 0.6875rem;
+  .castle-list__ko {
+    min-width: 54px;
+    font-size: 0.9375rem;
   }
 
   .castle-list__guild,

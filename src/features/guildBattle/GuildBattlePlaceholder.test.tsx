@@ -192,7 +192,8 @@ describe("GuildBattlePlaceholder", () => {
     expect(firstRow.querySelector("[data-label='防']")?.textContent).toBe("120");
     expect(firstRow.querySelector("[data-label='攻']")?.textContent).toBe("39");
     expect(firstRow.querySelector("[data-label='侵']")).toBeNull();
-    expect(firstRow.querySelector(".ko-badge")?.textContent).toBe("KO 50");
+    expect(firstRow.querySelector(".castle-list__ko")?.textContent).toBe("50");
+    expect(firstRow.querySelector(".castle-list__ko")?.getAttribute("data-label")).toBe("KO");
   });
 
   it("always shows KO and uses tone classes", async () => {
@@ -200,11 +201,11 @@ describe("GuildBattlePlaceholder", () => {
 
     await loadWorld37();
 
-    expect(getCastleRows()[0].querySelector(".ko-badge")?.textContent).toBe("KO 50");
-    expect(getCastleRows()[0].querySelector(".ko-badge--defense")).not.toBeNull();
-    expect(getCastleRows()[1].querySelector(".ko-badge")?.textContent).toBe("KO 7");
-    expect(getCastleRows()[2].querySelector(".ko-badge")?.textContent).toBe("KO 0");
-    expect(getCastleRows()[2].querySelector(".ko-badge--none")).not.toBeNull();
+    expect(getCastleRows()[0].querySelector(".castle-list__ko")?.textContent).toBe("50");
+    expect(getCastleRows()[0].querySelector(".ko-value--defense")).not.toBeNull();
+    expect(getCastleRows()[1].querySelector(".castle-list__ko")?.textContent).toBe("7");
+    expect(getCastleRows()[2].querySelector(".castle-list__ko")?.textContent).toBe("0");
+    expect(getCastleRows()[2].querySelector(".ko-value--none")).not.toBeNull();
   });
 
   it("shows a connection indicator with tooltip and opens settings on click", async () => {
@@ -214,6 +215,9 @@ describe("GuildBattlePlaceholder", () => {
 
     const indicator = getConnectionIndicator();
     expect(indicator.getAttribute("title")).toBe("接続中");
+    const header = document.querySelector(".snapshot-summary__header");
+    expect(header?.children[0]?.textContent).toBe("拠点監視");
+    expect(header?.children[1]).toBe(indicator);
 
     await act(async () => {
       indicator.dispatchEvent(new MouseEvent("click", { bubbles: true }));
