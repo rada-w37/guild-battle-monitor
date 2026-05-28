@@ -45,7 +45,10 @@ export function validateGuildBattleAlertThresholds(
       thresholds.dangerDefenseCount > thresholds.criticalDefenseCount
     )
   ) {
-    return { valid: false, error: "注意 > 危険 > 最優先 の順にしてください。" };
+    return {
+      valid: false,
+      error: "注意 > 危険 > 最優先 の順になるよう設定してください。"
+    };
   }
 
   return { valid: true, thresholds };

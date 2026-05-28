@@ -28,6 +28,28 @@ Default values:
 The selector now uses "less than" for defense-count thresholds.
 Attack count greater than 0 and critical castle states still force `critical`.
 
+## Step5-F UX clarification
+
+Step5-F does not change alert logic. It only makes the existing threshold rules easier to understand in the settings UI.
+
+The UI now explains that thresholds use a "less than" rule:
+
+- warning 30 means defense count 29 or lower becomes warning
+- danger 15 means defense count 14 or lower becomes danger
+- critical 10 means defense count 9 or lower becomes critical
+
+The settings panel also shows the current boundary labels directly:
+
+```txt
+warning: less than 30
+danger: less than 15
+critical: less than 10
+```
+
+Critical remains the highest-priority alert. If a castle is under attack, or its state is one of the critical battle states, it is shown as critical regardless of defense count.
+
+This explanation was added because "30" can otherwise be misunderstood as "30 or lower". Keeping the wording close to the actual selector rule reduces accidental over-alerting or under-alerting when users tune thresholds.
+
 ## Validation
 
 The editable defense thresholds must satisfy:

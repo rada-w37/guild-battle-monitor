@@ -126,7 +126,7 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(getOwnGuildIdInput().value).toBe(ownGuildId);
-    expect(document.body.textContent).toContain("Owner Guild");
+    expect(document.body.textContent).toContain("指定ギルドの防衛拠点のみ表示しています。");
     expect(getRenderedCastleIds()).toEqual(["1"]);
   });
 
@@ -140,6 +140,7 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(getOwnGuildIdInput(), ownGuildId);
     });
 
+    expect(document.body.textContent).toContain("Owner Guild");
     expect(document.body.textContent).toContain("指定ギルドの防衛拠点のみ表示しています。");
     expect(document.body.textContent).toContain("表示モード指定ギルドのみ");
     expect(document.body.textContent).toContain("最優先 / 侵攻中");
@@ -160,7 +161,6 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain(
       "指定されたギルドの防衛拠点が見つからないため、全拠点を表示しています。"
     );
-    expect(document.body.textContent).toContain("表示モード全拠点");
     expect(getRenderedCastleIds()).toEqual(["1", "2"]);
   });
 
@@ -173,7 +173,6 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("表示対象2");
     expect(document.body.textContent).toContain("安全1");
     expect(document.body.textContent).toContain("最優先1");
-    expect(document.body.textContent).toContain("安全");
     expect(document.body.textContent).toContain("最優先 / 侵攻中");
   });
 
@@ -231,7 +230,19 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("12");
   });
 
-  it("loads alert thresholds from localStorage", async () => {
+  it("shows alert threshold helper text and boundaries", () => {
+    renderComponent();
+
+    expect(document.body.textContent).toContain("防衛数が設定値を下回ると警告されます。");
+    expect(document.body.textContent).toContain("例: 注意が30の場合、防衛29以下で注意です。");
+    expect(document.body.textContent).toContain("注意: 30未満");
+    expect(document.body.textContent).toContain("危険: 15未満");
+    expect(document.body.textContent).toContain("最優先: 10未満");
+    expect(document.body.textContent).toContain("侵攻中は防衛数に関係なく最優先表示されます。");
+    expect(document.body.textContent).toContain("初期値: 注意30 / 危険15 / 最優先10");
+  });
+
+  it("loads alert thresholds from localStorage", () => {
     window.localStorage.setItem(
       GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY,
       JSON.stringify({
@@ -244,6 +255,7 @@ describe("GuildBattlePlaceholder", () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
     expect(getThresholdInputs().map((input) => input.value)).toEqual(["50", "20", "5"]);
+    expect(document.body.textContent).toContain("注意: 50未満");
   });
 
   it("saves threshold changes and recalculates alerts", async () => {
@@ -267,14 +279,14 @@ describe("GuildBattlePlaceholder", () => {
     );
   });
 
-  it("shows validation errors and keeps the previous threshold", async () => {
+  it("shows friendly validation errors and keeps the previous threshold", () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
-    await act(async () => {
+    act(() => {
       updateInput(getThresholdInputs()[1], "30");
     });
 
-    expect(document.body.textContent).toContain("注意 > 危険 > 最優先");
+    expect(document.body.textContent).toContain("注意 > 危険 > 最優先 の順になるよう設定してください。");
     expect(getThresholdInputs()[1].value).toBe("15");
   });
 
@@ -456,7 +468,7 @@ function getOwnGuildIdInput() {
 }
 
 function getTextInputs() {
-  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input"));
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[type='text']"));
 
   if (inputs.length < 2) {
     throw new Error("expected worldId and own guild ID inputs");
@@ -522,18 +534,6 @@ async function clickButtonByText(label: string) {
 
   if (!button) {
     throw new Error(`button was not found: ${label}`);
-  }
-
-  await act(async () => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-}
-
-async function clickRealtimeStartButton() {
-  const button = document.querySelectorAll<HTMLButtonElement>("button")[1];
-
-  if (!button) {
-    throw new Error("realtime start button was not found");
   }
 
   await act(async () => {

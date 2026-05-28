@@ -279,6 +279,16 @@ function AlertThresholdSettings({
   return (
     <details className="alert-settings">
       <summary>アラート設定</summary>
+      <p className="alert-settings__help">
+        防衛数が設定値を下回ると警告されます。例: 注意が30の場合、防衛29以下で注意です。
+      </p>
+      <ul className="alert-settings__rules" aria-label="alert threshold rules">
+        <li>注意: {thresholds.warningDefenseCount}未満</li>
+        <li>危険: {thresholds.dangerDefenseCount}未満</li>
+        <li>最優先: {thresholds.criticalDefenseCount}未満</li>
+      </ul>
+      <p className="alert-settings__help">侵攻中は防衛数に関係なく最優先表示されます。</p>
+      <p className="alert-settings__help">初期値: 注意30 / 危険15 / 最優先10</p>
       <div className="alert-settings__fields">
         <ThresholdInput
           label="注意"
