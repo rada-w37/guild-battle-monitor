@@ -9,6 +9,7 @@ import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY } from "./alertThresholdStorage";
 import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
+import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "./viewSettingsStorage";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -90,6 +91,49 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("GuildBattleMonitor");
   });
 
+  it("restores world, sort, auto update, and selected guild from localStorage", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    window.localStorage.setItem(
+      GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        world: "37",
+        selectedGuildId: ownGuildId,
+        sortByAlert: true,
+        autoUpdate: false
+      })
+    );
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
+
+    expect(getWorldInput().value).toBe("37");
+    await clickButton("更新");
+
+    expect(getGuildSelect().value).toBe(ownGuildId);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル"]);
+    expect(realtimeClient.subscriptions).toHaveLength(0);
+
+    await clickSettingsButton();
+    expect(getDangerSortCheckbox().checked).toBe(true);
+    expect(getAutoUpdateButton().textContent).toBe("OFF");
+  });
+
+  it("falls back to all castles when restored selected guild is not available", async () => {
+    window.localStorage.setItem(
+      GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        world: "37",
+        selectedGuildId: "missing-guild",
+        sortByAlert: false,
+        autoUpdate: false
+      })
+    );
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+
+    await clickButton("更新");
+
+    expect(getGuildSelect().value).toBe("");
+    expect(document.querySelector(".castle-list--with-owner")).not.toBeNull();
+  });
+
   it("opens settings from the icon button", async () => {
     renderComponent();
 
@@ -111,8 +155,10 @@ describe("GuildBattlePlaceholder", () => {
     expect(getAutoUpdateButton().textContent).toBe("ON");
     await clickButton("ON");
     expect(getAutoUpdateButton().textContent).toBe("OFF");
+    expect(getStoredViewSettings().autoUpdate).toBe(false);
     await clickButton("OFF");
     expect(getAutoUpdateButton().textContent).toBe("ON");
+    expect(getStoredViewSettings().autoUpdate).toBe(true);
   });
 
   it("does not load while typing world and loads with the update button", async () => {
@@ -124,6 +170,7 @@ describe("GuildBattlePlaceholder", () => {
     });
     await flushPromises();
     expect(loadSnapshot).not.toHaveBeenCalled();
+    expect(getStoredViewSettings().world).toBe("37");
 
     await clickButton("更新");
     expect(loadSnapshot).toHaveBeenCalledTimes(1);
@@ -153,6 +200,23 @@ describe("GuildBattlePlaceholder", () => {
     const guildSelect = document.querySelector(".guild-select-field");
     const castleList = document.querySelector(".castle-list");
     expect(guildSelect?.compareDocumentPosition(castleList as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
+
+    expect(getStoredViewSettings().selectedGuildId).toBe(ownGuildId);
+  });
+
+  it("saves danger sort changes", async () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+
+    await clickSettingsButton();
+    await act(async () => {
+      getDangerSortCheckbox().click();
+    });
+
+    expect(getStoredViewSettings().sortByAlert).toBe(true);
   });
 
   it("removes monitor explanation messages", async () => {
@@ -275,6 +339,9 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
       '"warningDefenseCount":40'
+    );
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY) ?? "").not.toContain(
+      "warningDefenseCount"
     );
   });
 });
@@ -413,6 +480,16 @@ function getAutoUpdateButton() {
   return button;
 }
 
+function getDangerSortCheckbox() {
+  const checkbox = getSettingsDialog().querySelector<HTMLInputElement>(".sort-toggle input[type='checkbox']");
+
+  if (!checkbox) {
+    throw new Error("danger sort checkbox was not found");
+  }
+
+  return checkbox;
+}
+
 function getRenderedCastleLabels() {
   return getCastleRows().map((row) => row.querySelector(".castle-list__castle")?.textContent?.trim() ?? "");
 }
@@ -423,6 +500,21 @@ function getCastleRows() {
 
 function getCastleListText() {
   return document.querySelector(".castle-list")?.textContent ?? "";
+}
+
+function getStoredViewSettings() {
+  const storedValue = window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY);
+
+  if (storedValue === null) {
+    throw new Error("view settings were not saved");
+  }
+
+  return JSON.parse(storedValue) as {
+    readonly world: string;
+    readonly selectedGuildId: string;
+    readonly sortByAlert: boolean;
+    readonly autoUpdate: boolean;
+  };
 }
 
 function updateInput(input: HTMLInputElement, value: string) {

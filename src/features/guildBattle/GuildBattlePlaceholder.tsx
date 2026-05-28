@@ -27,6 +27,11 @@ import type {
   GuildBattleCastleViewModel,
   GuildBattleGuildCandidateViewModel
 } from "./types";
+import {
+  loadGuildBattleViewSettings,
+  saveGuildBattleViewSettings,
+  type GuildBattleViewSettings
+} from "./viewSettingsStorage";
 
 const IS_DEV = import.meta.env.DEV;
 const WORLD_ID_BASE = 1000;
@@ -40,12 +45,15 @@ export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient()
 }: GuildBattlePlaceholderProps) {
-  const [world, setWorld] = useState("");
-  const [selectedGuildId, setSelectedGuildId] = useState("");
+  const [initialViewSettings] = useState(() => loadGuildBattleViewSettings());
+  const [world, setWorld] = useState(initialViewSettings.world);
+  const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.selectedGuildId);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
-  const [castleSortMode, setCastleSortMode] = useState<GuildBattleCastleListSortMode>("castleId");
-  const [isAutoUpdateEnabled, setIsAutoUpdateEnabled] = useState(true);
+  const [castleSortMode, setCastleSortMode] = useState<GuildBattleCastleListSortMode>(
+    initialViewSettings.sortByAlert ? "alertLevel" : "castleId"
+  );
+  const [isAutoUpdateEnabled, setIsAutoUpdateEnabled] = useState(initialViewSettings.autoUpdate);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isTestModeEnabled, setIsTestModeEnabled] = useState(false);
   const [editableAlertThresholds, setEditableAlertThresholds] = useState<EditableGuildBattleAlertThresholds>(() =>
@@ -83,7 +91,6 @@ export function GuildBattlePlaceholder({
     try {
       const snapshot = await loadSnapshot(nextWorldId);
       setLoadState({ status: "success", data: snapshot });
-      setSelectedGuildId("");
 
       if (isAutoUpdateEnabled) {
         await startRealtime(snapshot);
@@ -114,6 +121,7 @@ export function GuildBattlePlaceholder({
   async function handleAutoUpdateToggle() {
     const nextEnabled = !isAutoUpdateEnabled;
     setIsAutoUpdateEnabled(nextEnabled);
+    saveViewSettings({ autoUpdate: nextEnabled });
 
     if (!nextEnabled) {
       stopRealtime("auto update disabled", { nextState: "idle" });
@@ -215,6 +223,31 @@ export function GuildBattlePlaceholder({
     saveGuildBattleAlertThresholds(defaultThresholds);
   }
 
+  function handleWorldChange(nextWorld: string) {
+    setWorld(nextWorld);
+    saveViewSettings({ world: nextWorld });
+  }
+
+  function handleGuildChange(nextGuildId: string) {
+    setSelectedGuildId(nextGuildId);
+    saveViewSettings({ selectedGuildId: nextGuildId });
+  }
+
+  function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
+    setCastleSortMode(nextSortMode);
+    saveViewSettings({ sortByAlert: nextSortMode === "alertLevel" });
+  }
+
+  function saveViewSettings(settings: Partial<GuildBattleViewSettings>) {
+    saveGuildBattleViewSettings({
+      world,
+      selectedGuildId,
+      sortByAlert: castleSortMode === "alertLevel",
+      autoUpdate: isAutoUpdateEnabled,
+      ...settings
+    });
+  }
+
   return (
     <main className="app-shell">
       <section className="placeholder monitor-panel" aria-labelledby="app-title">
@@ -248,7 +281,7 @@ export function GuildBattlePlaceholder({
               className="field__input field__input--world"
               type="text"
               value={world}
-              onChange={(event) => setWorld(event.target.value)}
+              onChange={(event) => handleWorldChange(event.target.value)}
               disabled={isLoading}
               inputMode="numeric"
             />
@@ -270,7 +303,7 @@ export function GuildBattlePlaceholder({
             onAlertThresholdReset={handleAlertThresholdReset}
             onAutoUpdateToggle={handleAutoUpdateToggle}
             onClose={() => setIsSettingsDialogOpen(false)}
-            onSortModeChange={setCastleSortMode}
+            onSortModeChange={handleSortModeChange}
             onTestModeChange={setIsTestModeEnabled}
           />
         ) : null}
@@ -286,7 +319,7 @@ export function GuildBattlePlaceholder({
           realtimeState={realtimeState}
           selectedGuildId={guildSelectValue}
           showDevDetails={IS_DEV}
-          onGuildChange={setSelectedGuildId}
+          onGuildChange={handleGuildChange}
           onOpenSettings={() => setIsSettingsDialogOpen(true)}
           onTestModeDefenseIncrease={(castleId, amount) => testModeClientRef.current?.increaseDefense(castleId, amount)}
           onTestModeAttackIncrease={(castleId, amount) => testModeClientRef.current?.increaseAttack(castleId, amount)}
