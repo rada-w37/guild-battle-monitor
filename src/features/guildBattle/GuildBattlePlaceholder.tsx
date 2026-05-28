@@ -632,38 +632,48 @@ function CastleList({
     <div className="castle-list" aria-label="castle list">
       <div className="castle-list__header castle-list__header--owned">
         <span>拠点</span>
-        <span>種別</span>
-        <span>所有ギルドID</span>
-        <span>所有ギルド名</span>
-        <span>防衛数</span>
-        <span>侵攻数</span>
-        <span>状態</span>
         <span>alert</span>
-        <span>攻撃ギルドID</span>
-        <span>攻撃ギルド名</span>
-        <span>最終取得時刻</span>
+        <span>状態</span>
+        <span>防衛</span>
+        <span>侵攻</span>
+        <span>所有</span>
+        <span>攻撃</span>
+        <span>更新</span>
       </div>
       {viewModels.map((viewModel) => (
-        <div className="castle-list__row castle-list__row--owned" key={viewModel.castleId}>
-          <span>
-            {viewModel.castleName} <small>(#{viewModel.castleId})</small>
+        <div
+          className={`castle-list__row castle-list__row--owned castle-list__row--${viewModel.alertLevel}`}
+          key={viewModel.castleId}
+        >
+          <span className="castle-list__castle" data-label="拠点">
+            <strong>{viewModel.castleName}</strong>
+            <small>
+              #{viewModel.castleId} / {viewModel.castleTypeLabel}
+            </small>
           </span>
-          <span className={`castle-type castle-type--${viewModel.castleType}`}>
-            {viewModel.castleTypeLabel}
-          </span>
-          <span>{viewModel.ownerGuildId ?? "-"}</span>
-          <span>{viewModel.ownerGuildName}</span>
-          <span>{viewModel.defenseCount}</span>
-          <span>{viewModel.attackCount}</span>
-          <span className={`battle-status battle-status--${viewModel.statusTone}`}>
-            {viewModel.statusLabel}
-          </span>
-          <span className={`alert-level alert-${viewModel.alertLevel}`}>
+          <span data-label="alert" className={`alert-level alert-${viewModel.alertLevel}`}>
             {formatAlertLevel(viewModel.alertLevel)}
           </span>
-          <span>{viewModel.attackerGuildId ?? "-"}</span>
-          <span>{viewModel.attackerGuildName ?? "-"}</span>
-          <span>{capturedAt}</span>
+          <span data-label="状態" className={`battle-status battle-status--${viewModel.statusTone}`}>
+            {viewModel.statusLabel}
+          </span>
+          <span className="castle-list__count" data-label="防衛">
+            {viewModel.defenseCount}
+          </span>
+          <span className="castle-list__count" data-label="侵攻">
+            {viewModel.attackCount}
+          </span>
+          <span className="castle-list__guild" data-label="所有">
+            {viewModel.ownerGuildName}
+            <small>{viewModel.ownerGuildId ?? "-"}</small>
+          </span>
+          <span className="castle-list__guild" data-label="攻撃">
+            {viewModel.attackerGuildName ?? "-"}
+            <small>{viewModel.attackerGuildId ?? "-"}</small>
+          </span>
+          <span className="castle-list__updated" data-label="更新">
+            {capturedAt}
+          </span>
         </div>
       ))}
     </div>

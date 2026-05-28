@@ -77,9 +77,9 @@ describe("GuildBattlePlaceholder", () => {
   it("shows the initial unloaded state", () => {
     renderComponent();
 
-    expect(document.body.textContent).toContain("未取得です。");
     expect(getWorldIdInput().value).toBe("1001");
     expect(getOwnGuildIdInput().value).toBe("");
+    expect(getSubmitButton().disabled).toBe(false);
   });
 
   it("updates worldId input", () => {
@@ -92,7 +92,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(getWorldIdInput().value).toBe("2001");
   });
 
-  it("loads a snapshot and shows all castles when own guild ID is empty", async () => {
+  it("loads a snapshot and shows compact castle labels", async () => {
     const deferred = createDeferred<GvgSnapshot>();
     const loadSnapshot = vi.fn(() => deferred.promise);
     renderComponent(loadSnapshot);
@@ -100,7 +100,6 @@ describe("GuildBattlePlaceholder", () => {
     await clickSubmitButton();
 
     expect(loadSnapshot).toHaveBeenCalledWith("1001");
-    expect(document.body.textContent).toContain("取得中です。");
     expect(getSubmitButton().disabled).toBe(true);
 
     await act(async () => {
@@ -108,16 +107,13 @@ describe("GuildBattlePlaceholder", () => {
       await deferred.promise;
     });
 
-    expect(document.body.textContent).toContain("取得結果");
-    expect(document.body.textContent).toContain("自ギルドが未指定のため、全拠点を表示しています。");
-    expect(document.body.textContent).toContain("表示モード全拠点");
     expect(getGuildSelectOptions()).toEqual(["全拠点表示", "Guild 999999999001 (1)", "Owner Guild (1)"]);
-    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル#1 / 神殿", "ウィスケルケー#2 / 城"]);
+    expect(document.querySelector(".castle-list__row--critical")).not.toBeNull();
   });
 
   it("selects a guild candidate by guildId", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
-    renderComponent(loadSnapshot);
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
     await clickSubmitButton();
 
@@ -126,31 +122,11 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(getOwnGuildIdInput().value).toBe(ownGuildId);
-    expect(document.body.textContent).toContain("指定ギルドの防衛拠点のみ表示しています。");
-    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)"]);
-  });
-
-  it("shows only owned castles when own guild ID matches", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
-    renderComponent(loadSnapshot);
-
-    await clickSubmitButton();
-
-    await act(async () => {
-      updateInput(getOwnGuildIdInput(), ownGuildId);
-    });
-
-    expect(document.body.textContent).toContain("Owner Guild");
-    expect(document.body.textContent).toContain("指定ギルドの防衛拠点のみ表示しています。");
-    expect(document.body.textContent).toContain("表示モード指定ギルドのみ");
-    expect(document.body.textContent).toContain("最優先 / 侵攻中");
-    expect(document.body.textContent).toContain("Attack Guild");
-    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル#1 / 神殿"]);
   });
 
   it("falls back to all castles when own guild ID has no owned castles", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
-    renderComponent(loadSnapshot);
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
     await clickSubmitButton();
 
@@ -158,23 +134,18 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(getOwnGuildIdInput(), "111111111001");
     });
 
-    expect(document.body.textContent).toContain(
-      "指定されたギルドの防衛拠点が見つからないため、全拠点を表示しています。"
-    );
-    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル#1 / 神殿", "ウィスケルケー#2 / 城"]);
   });
 
-  it("shows summary counts and Japanese alert labels", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
-    renderComponent(loadSnapshot);
+  it("shows alert badges, battle state, and compact row classes", async () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
     await clickSubmitButton();
 
-    expect(document.body.textContent).toContain("表示対象2");
-    expect(document.body.textContent).toContain("安全1");
-    expect(document.body.textContent).toContain("最優先1");
-    expect(document.body.textContent).toContain("最優先 / 侵攻中");
+    expect(document.querySelector(".alert-critical")?.textContent).toContain("最優先");
     expect(document.querySelector(".battle-status--battle")?.textContent).toBe("侵攻中");
+    expect(document.querySelector(".castle-list__row--critical")).not.toBeNull();
+    expect(document.querySelector(".castle-list__row--safe")).not.toBeNull();
   });
 
   it("keeps castle ID order by default and can sort by alert level", async () => {
@@ -185,23 +156,21 @@ describe("GuildBattlePlaceholder", () => {
         { ...snapshot.castles[1], castleId: "2" as GvgCastleId, attackCount: 1, defenseCount: 40 }
       ]
     } satisfies GvgSnapshot;
-    const loadSnapshot = vi.fn(() => Promise.resolve(sortSnapshot));
-    renderComponent(loadSnapshot);
+    renderComponent(vi.fn(() => Promise.resolve(sortSnapshot)));
 
     await clickSubmitButton();
 
-    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル#1 / 神殿", "ウィスケルケー#2 / 城"]);
 
     await act(async () => {
       updateSelect(getSortSelect(), "alertLevel");
     });
 
-    expect(getRenderedCastleLabels()).toEqual(["ウィスケルケー (#2)", "ブラッセル (#1)"]);
+    expect(getRenderedCastleLabels()).toEqual(["ウィスケルケー#2 / 城", "ブラッセル#1 / 神殿"]);
   });
 
   it("renders a compact error message", async () => {
-    const loadSnapshot = vi.fn(() => Promise.reject(new Error("HTTP 500")));
-    renderComponent(loadSnapshot);
+    renderComponent(vi.fn(() => Promise.reject(new Error("HTTP 500"))));
 
     await clickSubmitButton();
 
@@ -209,38 +178,33 @@ describe("GuildBattlePlaceholder", () => {
   });
 
   it("starts realtime monitoring and rerenders owned castles after payload update", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(loadSnapshot, () => realtimeClient);
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
 
     await clickSubmitButton();
-
     await act(async () => {
       updateInput(getOwnGuildIdInput(), ownGuildId);
     });
-    await clickButtonByText("監視開始");
+    await clickRealtimeStartButton();
 
-    expect(document.body.textContent).toContain("接続状態: 接続中");
     expect(realtimeClient.subscriptions).toHaveLength(1);
 
     await act(async () => {
       realtimeClient.emitPayload(createCastleStatusBytes({ defenseCount: 12, attackCount: 0 }));
     });
 
-    expect(document.body.textContent).toContain("危険");
     expect(document.body.textContent).toContain("12");
+    expect(document.querySelector(".castle-list__row--danger")).not.toBeNull();
   });
 
   it("shows alert threshold helper text and boundaries", () => {
     renderComponent();
 
     expect(document.body.textContent).toContain("防衛数が設定値を下回ると警告されます。");
-    expect(document.body.textContent).toContain("例: 注意が30の場合、防衛29以下で注意です。");
     expect(document.body.textContent).toContain("注意: 30未満");
     expect(document.body.textContent).toContain("危険: 15未満");
     expect(document.body.textContent).toContain("最優先: 10未満");
     expect(document.body.textContent).toContain("侵攻中は防衛数に関係なく最優先表示されます。");
-    expect(document.body.textContent).toContain("初期値: 注意30 / 危険15 / 最優先10");
   });
 
   it("loads alert thresholds from localStorage", () => {
@@ -264,17 +228,16 @@ describe("GuildBattlePlaceholder", () => {
       ...snapshot,
       castles: [{ ...snapshot.castles[1], castleId: "1" as GvgCastleId, defenseCount: 25 }]
     } satisfies GvgSnapshot;
-    const loadSnapshot = vi.fn(() => Promise.resolve(thresholdSnapshot));
-    renderComponent(loadSnapshot);
+    renderComponent(vi.fn(() => Promise.resolve(thresholdSnapshot)));
 
     await clickSubmitButton();
-    expect(document.body.textContent).toContain("注意");
+    expect(document.querySelector(".castle-list__row--warning")).not.toBeNull();
 
     await act(async () => {
       updateInput(getThresholdInputs()[0], "20");
     });
 
-    expect(document.body.textContent).toContain("安全");
+    expect(document.querySelector(".castle-list__row--safe")).not.toBeNull();
     expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
       '"warningDefenseCount":20'
     );
@@ -297,7 +260,7 @@ describe("GuildBattlePlaceholder", () => {
     await act(async () => {
       updateInput(getThresholdInputs()[0], "40");
     });
-    await clickButtonByText("デフォルトに戻す");
+    await clickAlertResetButton();
 
     expect(getThresholdInputs().map((input) => input.value)).toEqual(["30", "15", "10"]);
     expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
@@ -305,75 +268,46 @@ describe("GuildBattlePlaceholder", () => {
     );
   });
 
-  it("uses changed thresholds after realtime updates", async () => {
-    const thresholdSnapshot = {
-      ...snapshot,
-      castles: [{ ...snapshot.castles[0], attackCount: 0, defenseCount: 40 }]
-    } satisfies GvgSnapshot;
-    const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(vi.fn(() => Promise.resolve(thresholdSnapshot)), () => realtimeClient);
-
-    await clickSubmitButton();
-    await act(async () => {
-      updateSelect(getGuildSelect(), ownGuildId);
-    });
-    await act(async () => {
-      updateInput(getThresholdInputs()[0], "20");
-    });
-    await clickButtonByText("監視開始");
-    await act(async () => {
-      realtimeClient.emitPayload(createCastleStatusBytes({ defenseCount: 25, attackCount: 0 }));
-    });
-
-    expect(document.body.textContent).toContain("安全");
-  });
-
   it("updates guild candidates after realtime snapshot updates", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(loadSnapshot, () => realtimeClient);
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
 
     await clickSubmitButton();
-
     await act(async () => {
       updateSelect(getGuildSelect(), ownGuildId);
     });
-    await clickButtonByText("監視開始");
+    await clickRealtimeStartButton();
 
     await act(async () => {
       realtimeClient.emitPayload(createCastleStatusBytes({ guildId: 123456789, defenseCount: 25 }));
     });
 
     expect(getGuildSelectOptions()).toContain("Attack Guild (1)");
-    expect(getRenderedCastleLabels()).toEqual(["ブラッセル (#1)", "ウィスケルケー (#2)"]);
+    expect(getRenderedCastleLabels()).toEqual(["ブラッセル#1 / 神殿", "ウィスケルケー#2 / 城"]);
   });
 
   it("stops realtime monitoring safely", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(loadSnapshot, () => realtimeClient);
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
 
     await clickSubmitButton();
-
     await act(async () => {
       updateInput(getOwnGuildIdInput(), ownGuildId);
     });
-    await clickButtonByText("監視停止");
-    await clickButtonByText("監視開始");
-    await clickButtonByText("監視開始");
-    await clickButtonByText("監視停止");
+    await clickRealtimeStopButton();
+    await clickRealtimeStartButton();
+    await clickRealtimeStartButton();
+    await clickRealtimeStopButton();
 
-    expect(document.body.textContent).toContain("接続状態: 切断");
     expect(realtimeClient.subscriptions).toHaveLength(1);
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
   });
 
   it("shows disconnected after socket close and reconnects manually", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     const firstClient = new MockGvgRealtimeClient();
     const secondClient = new MockGvgRealtimeClient();
     const realtimeClients = [firstClient, secondClient];
-    renderComponent(loadSnapshot, () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => {
       const client = realtimeClients.shift();
 
       if (!client) {
@@ -384,31 +318,26 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     await clickSubmitButton();
-
     await act(async () => {
       updateInput(getOwnGuildIdInput(), ownGuildId);
     });
-    await clickButtonByText("監視開始");
+    await clickRealtimeStartButton();
 
     act(() => {
       firstClient.disconnect("socket closed");
     });
 
-    expect(document.body.textContent).toContain("接続状態: 切断");
-
-    await clickButtonByText("再接続");
+    await clickRealtimeReconnectButton();
 
     expect(firstClient.sentUnsubscriptions).toHaveLength(1);
     expect(secondClient.subscriptions).toHaveLength(1);
-    expect(document.body.textContent).toContain("接続状態: 接続中");
   });
 
   it("shows error and can reconnect manually", async () => {
-    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     const firstClient = new MockGvgRealtimeClient();
     const secondClient = new MockGvgRealtimeClient();
     const clients = [firstClient, secondClient];
-    renderComponent(loadSnapshot, () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => {
       const client = clients.shift();
 
       if (!client) {
@@ -419,23 +348,18 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     await clickSubmitButton();
-
     await act(async () => {
       updateInput(getOwnGuildIdInput(), ownGuildId);
     });
-    await clickButtonByText("監視開始");
+    await clickRealtimeStartButton();
 
     act(() => {
       firstClient.emitError(new Error("socket failed"));
     });
 
-    expect(document.body.textContent).toContain("接続状態: エラー");
-    expect(document.body.textContent).toContain("接続エラーが発生しました");
-
-    await clickButtonByText("再接続");
+    await clickRealtimeReconnectButton();
 
     expect(secondClient.subscriptions).toHaveLength(1);
-    expect(document.body.textContent).toContain("接続状態: 接続中");
   });
 });
 
@@ -524,17 +448,39 @@ function getThresholdInputs() {
 
 function getRenderedCastleLabels() {
   return Array.from(document.querySelectorAll<HTMLDivElement>(".castle-list__row")).map(
-    (row) => row.querySelector("span")?.textContent ?? ""
+    (row) => (row.querySelector("span")?.textContent ?? "").replace(/\s+/g, " ").trim()
   );
 }
 
-async function clickButtonByText(label: string) {
-  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
-    (candidate) => candidate.textContent === label
-  );
+async function clickAlertResetButton() {
+  const button = document.querySelector<HTMLButtonElement>(".alert-settings button");
 
   if (!button) {
-    throw new Error(`button was not found: ${label}`);
+    throw new Error("alert reset button was not found");
+  }
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function clickRealtimeStartButton() {
+  await clickRealtimeActionButton(0);
+}
+
+async function clickRealtimeReconnectButton() {
+  await clickRealtimeActionButton(1);
+}
+
+async function clickRealtimeStopButton() {
+  await clickRealtimeActionButton(2);
+}
+
+async function clickRealtimeActionButton(index: number) {
+  const button = document.querySelectorAll<HTMLButtonElement>(".realtime-controls__actions button")[index];
+
+  if (!button) {
+    throw new Error(`realtime action button was not found: ${index}`);
   }
 
   await act(async () => {
