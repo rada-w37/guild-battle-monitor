@@ -179,6 +179,17 @@ select {
   color: #a32929;
 }
 
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.list-toolbar__field {
+  min-width: 180px;
+}
+
 .snapshot-summary__title {
   margin: 0 0 12px;
   font-size: 1.25rem;
@@ -189,6 +200,10 @@ select {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   margin: 0;
+}
+
+.summary-grid--alerts {
+  margin-top: 16px;
 }
 
 .summary-grid div {
@@ -225,8 +240,8 @@ select {
 
 .castle-list__header--owned,
 .castle-list__row--owned {
-  grid-template-columns: 80px 80px 80px minmax(120px, 1fr) 100px minmax(150px, 1fr) minmax(150px, 1fr) minmax(190px, 1fr);
-  min-width: 980px;
+  grid-template-columns: 80px minmax(150px, 1fr) minmax(140px, 1fr) 80px 80px minmax(110px, 1fr) 130px minmax(150px, 1fr) minmax(150px, 1fr) minmax(190px, 1fr);
+  min-width: 1280px;
 }
 
 .castle-list__header {
@@ -253,16 +268,20 @@ select {
 
 .alert-safe {
   color: #1f7a3f;
+  background: #e7f6ec;
 }
 
 .alert-warning {
   color: #8a6500;
+  background: #fff4cc;
 }
 
 .alert-danger {
   color: #a32929;
+  background: #fde7e7;
 }
 
 .alert-critical {
   color: #8f1d5c;
+  background: #f9e2ef;
 }

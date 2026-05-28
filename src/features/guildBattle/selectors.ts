@@ -4,9 +4,20 @@ import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
 import type {
   GuildBattleAlertLevel,
   GuildBattleAlertThresholds,
+  GuildBattleCastleDisplayViewModel,
+  GuildBattleCastleListSortMode,
+  GuildBattleCastleSummaryViewModel,
+  GuildBattleCastleViewModel,
   GuildBattleMonitorSettings,
   GuildBattleOwnedCastleViewModel
 } from "./types";
+
+const ALERT_LEVEL_PRIORITY: Record<GuildBattleAlertLevel, number> = {
+  critical: 0,
+  danger: 1,
+  warning: 2,
+  safe: 3
+};
 
 export function isOwnedCastle(castle: GvgCastle, ownGuildId: GvgGuildId): boolean {
   const ownerGuildId = normalizeGvgGuildIdForComparison(castle.ownerGuildId);
@@ -51,16 +62,115 @@ export function createOwnedCastleViewModels(
 ): GuildBattleOwnedCastleViewModel[] {
   return snapshot.castles
     .filter((castle) => isOwnedCastle(castle, settings.ownGuildId))
-    .map((castle) => ({
-      castleId: castle.castleId,
-      ownerGuildId: castle.ownerGuildId as GvgGuildId,
-      ownerGuildName: snapshot.guildNames[castle.ownerGuildId as GvgGuildId] ?? "Unknown guild",
-      attackerGuildId: castle.attackerGuildId,
-      attackerGuildName:
-        castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
-      state: castle.state,
-      defenseCount: castle.defenseCount,
-      attackCount: castle.attackCount,
-      alertLevel: getDefenseAlertLevel(castle, settings.alertThresholds)
-    }));
+    .map((castle) => createCastleViewModel(snapshot, castle, settings.alertThresholds));
+}
+
+export function createAllCastleViewModels(
+  snapshot: GvgSnapshot,
+  thresholds: GuildBattleAlertThresholds = DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+): GuildBattleCastleViewModel[] {
+  return snapshot.castles.map((castle) => createCastleViewModel(snapshot, castle, thresholds));
+}
+
+export function createGuildBattleCastleDisplayViewModel(
+  snapshot: GvgSnapshot,
+  settings: {
+    readonly ownGuildId: GvgGuildId | "";
+    readonly alertThresholds: GuildBattleAlertThresholds;
+  }
+): GuildBattleCastleDisplayViewModel {
+  if (settings.ownGuildId.length === 0) {
+    return {
+      mode: "allCastles",
+      reason: "ownGuildUnspecified",
+      castles: createAllCastleViewModels(snapshot, settings.alertThresholds)
+    };
+  }
+
+  const ownedCastles = createOwnedCastleViewModels(snapshot, {
+    ownGuildId: settings.ownGuildId as GvgGuildId,
+    alertThresholds: settings.alertThresholds
+  });
+
+  if (ownedCastles.length > 0) {
+    return {
+      mode: "ownedCastles",
+      reason: "ownedCastlesFound",
+      castles: ownedCastles
+    };
+  }
+
+  return {
+    mode: "allCastles",
+    reason: "ownedCastlesNotFound",
+    castles: createAllCastleViewModels(snapshot, settings.alertThresholds)
+  };
+}
+
+export function sortGuildBattleCastleViewModels(
+  viewModels: readonly GuildBattleCastleViewModel[],
+  sortMode: GuildBattleCastleListSortMode
+): GuildBattleCastleViewModel[] {
+  return [...viewModels].sort((left, right) => {
+    if (sortMode === "alertLevel") {
+      const alertDiff = ALERT_LEVEL_PRIORITY[left.alertLevel] - ALERT_LEVEL_PRIORITY[right.alertLevel];
+
+      if (alertDiff !== 0) {
+        return alertDiff;
+      }
+    }
+
+    return compareCastleId(left.castleId, right.castleId);
+  });
+}
+
+export function createGuildBattleCastleSummaryViewModel(
+  viewModels: readonly GuildBattleCastleViewModel[],
+  mode: GuildBattleCastleDisplayViewModel["mode"]
+): GuildBattleCastleSummaryViewModel {
+  return {
+    totalCount: viewModels.length,
+    safeCount: countAlertLevel(viewModels, "safe"),
+    warningCount: countAlertLevel(viewModels, "warning"),
+    dangerCount: countAlertLevel(viewModels, "danger"),
+    criticalCount: countAlertLevel(viewModels, "critical"),
+    mode
+  };
+}
+
+function createCastleViewModel(
+  snapshot: GvgSnapshot,
+  castle: GvgCastle,
+  thresholds: GuildBattleAlertThresholds
+): GuildBattleCastleViewModel {
+  return {
+    castleId: castle.castleId,
+    ownerGuildId: castle.ownerGuildId,
+    ownerGuildName: castle.ownerGuildId === null ? "Unknown guild" : snapshot.guildNames[castle.ownerGuildId] ?? "Unknown guild",
+    attackerGuildId: castle.attackerGuildId,
+    attackerGuildName:
+      castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
+    state: castle.state,
+    defenseCount: castle.defenseCount,
+    attackCount: castle.attackCount,
+    alertLevel: getDefenseAlertLevel(castle, thresholds)
+  };
+}
+
+function compareCastleId(left: string, right: string): number {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+
+  return left.localeCompare(right);
+}
+
+function countAlertLevel(
+  viewModels: readonly GuildBattleCastleViewModel[],
+  alertLevel: GuildBattleAlertLevel
+): number {
+  return viewModels.filter((viewModel) => viewModel.alertLevel === alertLevel).length;
 }

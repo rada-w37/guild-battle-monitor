@@ -13,9 +13,15 @@ export interface GuildBattleMonitorSettings {
   readonly alertThresholds: GuildBattleAlertThresholds;
 }
 
-export interface GuildBattleOwnedCastleViewModel {
+export type GuildBattleCastleDisplayMode = "allCastles" | "ownedCastles";
+
+export type GuildBattleCastleDisplayReason = "ownGuildUnspecified" | "ownedCastlesFound" | "ownedCastlesNotFound";
+
+export type GuildBattleCastleListSortMode = "castleId" | "alertLevel";
+
+export interface GuildBattleCastleViewModel {
   readonly castleId: GvgCastleId;
-  readonly ownerGuildId: GvgGuildId;
+  readonly ownerGuildId: GvgGuildId | null;
   readonly ownerGuildName: string;
   readonly attackerGuildId: GvgGuildId | null;
   readonly attackerGuildName: string | null;
@@ -23,4 +29,21 @@ export interface GuildBattleOwnedCastleViewModel {
   readonly defenseCount: number;
   readonly attackCount: number;
   readonly alertLevel: GuildBattleAlertLevel;
+}
+
+export type GuildBattleOwnedCastleViewModel = GuildBattleCastleViewModel;
+
+export interface GuildBattleCastleDisplayViewModel {
+  readonly mode: GuildBattleCastleDisplayMode;
+  readonly reason: GuildBattleCastleDisplayReason;
+  readonly castles: readonly GuildBattleCastleViewModel[];
+}
+
+export interface GuildBattleCastleSummaryViewModel {
+  readonly totalCount: number;
+  readonly safeCount: number;
+  readonly warningCount: number;
+  readonly dangerCount: number;
+  readonly criticalCount: number;
+  readonly mode: GuildBattleCastleDisplayMode;
 }

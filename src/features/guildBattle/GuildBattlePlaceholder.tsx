@@ -7,8 +7,17 @@ import type { GvgRealtimeClient, GvgRealtimeConnectionState } from "../gvg/realt
 import { GvgRealtimeSnapshotRuntime } from "../gvg/realtimeSnapshotRuntime";
 import type { GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
-import { createOwnedCastleViewModels } from "./selectors";
-import type { GuildBattleOwnedCastleViewModel } from "./types";
+import {
+  createGuildBattleCastleDisplayViewModel,
+  createGuildBattleCastleSummaryViewModel,
+  sortGuildBattleCastleViewModels
+} from "./selectors";
+import type {
+  GuildBattleAlertLevel,
+  GuildBattleCastleDisplayReason,
+  GuildBattleCastleListSortMode,
+  GuildBattleCastleViewModel
+} from "./types";
 
 interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
@@ -23,6 +32,7 @@ export function GuildBattlePlaceholder({
   const [ownGuildId, setOwnGuildId] = useState("");
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
+  const [castleSortMode, setCastleSortMode] = useState<GuildBattleCastleListSortMode>("castleId");
   const runtimeRef = useRef<GvgRealtimeSnapshotRuntime | null>(null);
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
 
@@ -31,8 +41,7 @@ export function GuildBattlePlaceholder({
   const isLoading = loadState.status === "loading";
   const hasLoadedSnapshot = loadState.status === "success";
   const hasRealtimeInputs = trimmedWorldId.length > 0 && trimmedOwnGuildId.length > 0;
-  const canStartRealtime =
-    hasLoadedSnapshot && hasRealtimeInputs && realtimeState.status === "idle";
+  const canStartRealtime = hasLoadedSnapshot && hasRealtimeInputs && realtimeState.status === "idle";
   const canReconnectRealtime =
     hasLoadedSnapshot &&
     hasRealtimeInputs &&
@@ -123,7 +132,7 @@ export function GuildBattlePlaceholder({
     stopRealtime("manual stop");
   }
 
-  function stopRealtime(reason: string, options: { readonly nextState?: "idle" | "disconnected" } = {}) {
+  function stopRealtime(reason: string, options: { readonly nextState?: "idle" } = {}) {
     runtimeRef.current?.dispose(reason);
     runtimeRef.current = null;
     removeRealtimeListenerRef.current?.();
@@ -147,7 +156,7 @@ export function GuildBattlePlaceholder({
           GuildBattleMonitor
         </h1>
         <p className="placeholder__description">
-          REST初期状態から正規化済みスナップショットを取得し、自ギルドの防衛拠点だけを表示します。
+          REST初期状態から正規化済みスナップショットを取得し、拠点一覧と防衛状態を確認します。
         </p>
 
         <form className="load-form" onSubmit={handleSubmit}>
@@ -173,23 +182,24 @@ export function GuildBattlePlaceholder({
               inputMode="numeric"
             />
           </label>
-          <button
-            className="load-form__button"
-            type="submit"
-            disabled={isLoading || trimmedWorldId.length === 0}
-          >
+          <button className="load-form__button" type="submit" disabled={isLoading || trimmedWorldId.length === 0}>
             初期状態を取得
           </button>
         </form>
 
-        <SnapshotStatus loadState={loadState} ownGuildId={trimmedOwnGuildId} />
+        <SnapshotStatus
+          castleSortMode={castleSortMode}
+          loadState={loadState}
+          ownGuildId={trimmedOwnGuildId}
+          onCastleSortModeChange={setCastleSortMode}
+        />
         <RealtimeControls
-          canStart={canStartRealtime}
           canReconnect={canReconnectRealtime}
+          canStart={canStartRealtime}
           canStop={canStopRealtime}
           realtimeState={realtimeState}
-          onStart={handleStartRealtime}
           onReconnect={handleReconnectRealtime}
+          onStart={handleStartRealtime}
           onStop={handleStopRealtime}
         />
       </section>
@@ -198,20 +208,20 @@ export function GuildBattlePlaceholder({
 }
 
 function RealtimeControls({
-  canStart,
   canReconnect,
+  canStart,
   canStop,
   realtimeState,
-  onStart,
   onReconnect,
+  onStart,
   onStop
 }: {
-  readonly canStart: boolean;
   readonly canReconnect: boolean;
+  readonly canStart: boolean;
   readonly canStop: boolean;
   readonly realtimeState: GvgRealtimeConnectionState;
-  readonly onStart: () => void;
   readonly onReconnect: () => void;
+  readonly onStart: () => void;
   readonly onStop: () => void;
 }) {
   const stateView = getRealtimeStateView(realtimeState);
@@ -264,11 +274,15 @@ function getRealtimeStateView(state: GvgRealtimeConnectionState): {
 }
 
 function SnapshotStatus({
+  castleSortMode,
   loadState,
-  ownGuildId
+  ownGuildId,
+  onCastleSortModeChange
 }: {
+  readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly loadState: AsyncLoadState<GvgSnapshot>;
   readonly ownGuildId: string;
+  readonly onCastleSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
 }) {
   if (loadState.status === "idle") {
     return <p className="status-message">未取得です。</p>;
@@ -290,26 +304,41 @@ function SnapshotStatus({
     );
   }
 
-  return <SnapshotSummary ownGuildId={ownGuildId} snapshot={loadState.data} />;
+  return (
+    <SnapshotSummary
+      castleSortMode={castleSortMode}
+      ownGuildId={ownGuildId}
+      snapshot={loadState.data}
+      onCastleSortModeChange={onCastleSortModeChange}
+    />
+  );
 }
 
 function SnapshotSummary({
+  castleSortMode,
   ownGuildId,
-  snapshot
+  snapshot,
+  onCastleSortModeChange
 }: {
+  readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly ownGuildId: string;
   readonly snapshot: GvgSnapshot;
+  readonly onCastleSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
 }) {
-  const ownedCastleViewModels = useMemo(() => {
-    if (ownGuildId.length === 0) {
-      return [];
-    }
-
-    return createOwnedCastleViewModels(snapshot, {
-      ownGuildId: ownGuildId as GvgGuildId,
+  const castleDisplay = useMemo(() => {
+    return createGuildBattleCastleDisplayViewModel(snapshot, {
+      ownGuildId: ownGuildId.length === 0 ? "" : (ownGuildId as GvgGuildId),
       alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
     });
   }, [ownGuildId, snapshot]);
+  const sortedCastles = useMemo(
+    () => sortGuildBattleCastleViewModels(castleDisplay.castles, castleSortMode),
+    [castleDisplay.castles, castleSortMode]
+  );
+  const summary = useMemo(
+    () => createGuildBattleCastleSummaryViewModel(castleDisplay.castles, castleDisplay.mode),
+    [castleDisplay.castles, castleDisplay.mode]
+  );
 
   return (
     <section className="snapshot-summary" aria-labelledby="snapshot-title">
@@ -335,34 +364,110 @@ function SnapshotSummary({
         </div>
       </dl>
 
-      {ownGuildId.length === 0 ? (
-        <p className="status-message">自ギルドIDを入力してください。</p>
-      ) : (
-        <OwnedCastleList capturedAt={snapshot.capturedAt} viewModels={ownedCastleViewModels} />
-      )}
+      <CastleDisplayNotice reason={castleDisplay.reason} />
+      <CastleListToolbar sortMode={castleSortMode} onSortModeChange={onCastleSortModeChange} />
+      <CastleSummary summary={summary} />
+      <CastleList capturedAt={snapshot.capturedAt} viewModels={sortedCastles} />
     </section>
   );
 }
 
-function OwnedCastleList({
+function CastleDisplayNotice({ reason }: { readonly reason: GuildBattleCastleDisplayReason }) {
+  if (reason === "ownGuildUnspecified") {
+    return <p className="status-message">自ギルドが未指定のため、全拠点を表示しています。</p>;
+  }
+
+  if (reason === "ownedCastlesNotFound") {
+    return (
+      <p className="status-message">
+        指定されたギルドの防衛拠点が見つからないため、全拠点を表示しています。
+      </p>
+    );
+  }
+
+  return <p className="status-message">指定ギルドの防衛拠点のみ表示しています。</p>;
+}
+
+function CastleListToolbar({
+  sortMode,
+  onSortModeChange
+}: {
+  readonly sortMode: GuildBattleCastleListSortMode;
+  readonly onSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
+}) {
+  return (
+    <div className="list-toolbar">
+      <label className="field list-toolbar__field">
+        <span className="field__label">並び順</span>
+        <select
+          className="field__input"
+          value={sortMode}
+          onChange={(event) => onSortModeChange(event.target.value as GuildBattleCastleListSortMode)}
+        >
+          <option value="castleId">拠点ID順</option>
+          <option value="alertLevel">危険度順</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function CastleSummary({
+  summary
+}: {
+  readonly summary: ReturnType<typeof createGuildBattleCastleSummaryViewModel>;
+}) {
+  return (
+    <dl className="summary-grid summary-grid--alerts" aria-label="castle alert summary">
+      <div>
+        <dt>表示モード</dt>
+        <dd>{summary.mode === "allCastles" ? "全拠点" : "指定ギルドのみ"}</dd>
+      </div>
+      <div>
+        <dt>表示対象</dt>
+        <dd>{summary.totalCount}</dd>
+      </div>
+      <div>
+        <dt>安全</dt>
+        <dd>{summary.safeCount}</dd>
+      </div>
+      <div>
+        <dt>注意</dt>
+        <dd>{summary.warningCount}</dd>
+      </div>
+      <div>
+        <dt>危険</dt>
+        <dd>{summary.dangerCount}</dd>
+      </div>
+      <div>
+        <dt>最優先</dt>
+        <dd>{summary.criticalCount}</dd>
+      </div>
+    </dl>
+  );
+}
+
+function CastleList({
   capturedAt,
   viewModels
 }: {
   readonly capturedAt: string;
-  readonly viewModels: readonly GuildBattleOwnedCastleViewModel[];
+  readonly viewModels: readonly GuildBattleCastleViewModel[];
 }) {
   if (viewModels.length === 0) {
-    return <p className="status-message">自ギルドの防衛拠点はありません。</p>;
+    return <p className="status-message">表示できる拠点がありません。</p>;
   }
 
   return (
-    <div className="castle-list" aria-label="owned castle list">
+    <div className="castle-list" aria-label="castle list">
       <div className="castle-list__header castle-list__header--owned">
         <span>拠点ID</span>
+        <span>所有ギルドID</span>
+        <span>所有ギルド名</span>
         <span>防衛数</span>
         <span>侵攻数</span>
         <span>状態</span>
-        <span>アラート</span>
+        <span>alert</span>
         <span>攻撃ギルドID</span>
         <span>攻撃ギルド名</span>
         <span>最終取得時刻</span>
@@ -370,11 +475,13 @@ function OwnedCastleList({
       {viewModels.map((viewModel) => (
         <div className="castle-list__row castle-list__row--owned" key={viewModel.castleId}>
           <span>{viewModel.castleId}</span>
+          <span>{viewModel.ownerGuildId ?? "-"}</span>
+          <span>{viewModel.ownerGuildName}</span>
           <span>{viewModel.defenseCount}</span>
           <span>{viewModel.attackCount}</span>
           <span>{viewModel.state}</span>
           <span className={`alert-level alert-${viewModel.alertLevel}`}>
-            {viewModel.alertLevel}
+            {formatAlertLevel(viewModel.alertLevel)}
           </span>
           <span>{viewModel.attackerGuildId ?? "-"}</span>
           <span>{viewModel.attackerGuildName ?? "-"}</span>
@@ -383,4 +490,17 @@ function OwnedCastleList({
       ))}
     </div>
   );
+}
+
+function formatAlertLevel(alertLevel: GuildBattleAlertLevel): string {
+  switch (alertLevel) {
+    case "safe":
+      return "安全";
+    case "warning":
+      return "注意";
+    case "danger":
+      return "危険";
+    case "critical":
+      return "最優先 / 侵攻中";
+  }
 }

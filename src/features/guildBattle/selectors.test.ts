@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { GvgCastle, GvgCastleId, GvgGuildId, GvgWorldId } from "../gvg/types";
 import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
 import {
+  createAllCastleViewModels,
+  createGuildBattleCastleDisplayViewModel,
+  createGuildBattleCastleSummaryViewModel,
   createOwnedCastleViewModels,
   getDefenseAlertLevel,
   isCastleFallen,
   isCastleUnderAttack,
-  isOwnedCastle
+  isOwnedCastle,
+  sortGuildBattleCastleViewModels
 } from "./selectors";
 import type { GuildBattleMonitorSettings } from "./types";
 
@@ -104,5 +108,102 @@ describe("guild battle selectors", () => {
         alertLevel: "critical"
       }
     ]);
+  });
+
+  it("creates all castle view models when own guild is unspecified", () => {
+    const display = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ castleId: "2" as GvgCastleId, ownerGuildId: "456" as GvgGuildId }),
+          createCastle({ castleId: "1" as GvgCastleId, ownerGuildId: ownGuildId })
+        ],
+        guildNames: {
+          [ownGuildId]: "Own Guild",
+          ["456" as GvgGuildId]: "Other Guild"
+        }
+      },
+      {
+        ownGuildId: "",
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+      }
+    );
+
+    expect(display.mode).toBe("allCastles");
+    expect(display.reason).toBe("ownGuildUnspecified");
+    expect(display.castles).toHaveLength(2);
+  });
+
+  it("falls back to all castles when owned castles are not found", () => {
+    const display = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [createCastle({ ownerGuildId: "456" as GvgGuildId })],
+        guildNames: {}
+      },
+      {
+        ownGuildId,
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+      }
+    );
+
+    expect(display.mode).toBe("allCastles");
+    expect(display.reason).toBe("ownedCastlesNotFound");
+    expect(display.castles).toHaveLength(1);
+  });
+
+  it("sorts by castle ID by default and by alert level on request", () => {
+    const viewModels = createAllCastleViewModels(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ castleId: "2" as GvgCastleId, defenseCount: 31 }),
+          createCastle({ castleId: "1" as GvgCastleId, attackCount: 1 }),
+          createCastle({ castleId: "3" as GvgCastleId, defenseCount: 10 })
+        ],
+        guildNames: {}
+      },
+      DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+    );
+
+    expect(sortGuildBattleCastleViewModels(viewModels, "castleId").map((viewModel) => viewModel.castleId)).toEqual([
+      "1",
+      "2",
+      "3"
+    ]);
+    expect(sortGuildBattleCastleViewModels(viewModels, "alertLevel").map((viewModel) => viewModel.castleId)).toEqual([
+      "1",
+      "3",
+      "2"
+    ]);
+  });
+
+  it("creates summary counts", () => {
+    const viewModels = createAllCastleViewModels(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ defenseCount: 31 }),
+          createCastle({ defenseCount: 30 }),
+          createCastle({ defenseCount: 10 }),
+          createCastle({ attackCount: 1 })
+        ],
+        guildNames: {}
+      },
+      DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+    );
+
+    expect(createGuildBattleCastleSummaryViewModel(viewModels, "allCastles")).toEqual({
+      totalCount: 4,
+      safeCount: 1,
+      warningCount: 1,
+      dangerCount: 1,
+      criticalCount: 1,
+      mode: "allCastles"
+    });
   });
 });

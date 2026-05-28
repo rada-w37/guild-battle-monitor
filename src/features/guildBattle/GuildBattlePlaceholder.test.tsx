@@ -2,12 +2,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
+import type { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import { MockGvgRealtimeClient } from "../gvg/mockRealtimeClient";
+import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
 import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
-import type { loadLocalGvgSnapshot } from "../gvg/localGvgService";
-import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
+import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -90,7 +90,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(getWorldIdInput().value).toBe("2001");
   });
 
-  it("calls the loader and renders loading then success guidance without own guild ID", async () => {
+  it("loads a snapshot and shows all castles when own guild ID is empty", async () => {
     const deferred = createDeferred<GvgSnapshot>();
     const loadSnapshot = vi.fn(() => deferred.promise);
     renderComponent(loadSnapshot);
@@ -107,11 +107,12 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(document.body.textContent).toContain("取得結果");
-    expect(document.body.textContent).toContain("castles");
-    expect(document.body.textContent).toContain("自ギルドIDを入力してください。");
+    expect(document.body.textContent).toContain("自ギルドが未指定のため、全拠点を表示しています。");
+    expect(document.body.textContent).toContain("表示モード全拠点");
+    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
   });
 
-  it("renders owned castle view models after own guild ID input", async () => {
+  it("shows only owned castles when own guild ID matches", async () => {
     const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     renderComponent(loadSnapshot);
 
@@ -121,13 +122,14 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(getOwnGuildIdInput(), ownGuildId);
     });
 
-    expect(document.body.textContent).toContain("critical");
+    expect(document.body.textContent).toContain("指定ギルドの防衛拠点のみ表示しています。");
+    expect(document.body.textContent).toContain("表示モード指定ギルドのみ");
+    expect(document.body.textContent).toContain("最優先 / 侵攻中");
     expect(document.body.textContent).toContain("Attack Guild");
-    expect(document.body.textContent).toContain("123456789001");
-    expect(document.body.textContent).toContain("2026-05-27T11:15:36.000Z");
+    expect(getRenderedCastleIds()).toEqual(["1"]);
   });
 
-  it("renders an empty owned castle message", async () => {
+  it("falls back to all castles when own guild ID has no owned castles", async () => {
     const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     renderComponent(loadSnapshot);
 
@@ -137,7 +139,46 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(getOwnGuildIdInput(), "111111111001");
     });
 
-    expect(document.body.textContent).toContain("自ギルドの防衛拠点はありません。");
+    expect(document.body.textContent).toContain(
+      "指定されたギルドの防衛拠点が見つからないため、全拠点を表示しています。"
+    );
+    expect(document.body.textContent).toContain("表示モード全拠点");
+    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
+  });
+
+  it("shows summary counts and Japanese alert labels", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    renderComponent(loadSnapshot);
+
+    await clickSubmitButton();
+
+    expect(document.body.textContent).toContain("表示対象2");
+    expect(document.body.textContent).toContain("安全1");
+    expect(document.body.textContent).toContain("最優先1");
+    expect(document.body.textContent).toContain("安全");
+    expect(document.body.textContent).toContain("最優先 / 侵攻中");
+  });
+
+  it("keeps castle ID order by default and can sort by alert level", async () => {
+    const sortSnapshot = {
+      ...snapshot,
+      castles: [
+        { ...snapshot.castles[0], castleId: "1" as GvgCastleId, attackCount: 0, defenseCount: 40 },
+        { ...snapshot.castles[1], castleId: "2" as GvgCastleId, attackCount: 1, defenseCount: 40 }
+      ]
+    } satisfies GvgSnapshot;
+    const loadSnapshot = vi.fn(() => Promise.resolve(sortSnapshot));
+    renderComponent(loadSnapshot);
+
+    await clickSubmitButton();
+
+    expect(getRenderedCastleIds()).toEqual(["1", "2"]);
+
+    await act(async () => {
+      updateSelect(getSortSelect(), "alertLevel");
+    });
+
+    expect(getRenderedCastleIds()).toEqual(["2", "1"]);
   });
 
   it("renders a compact error message", async () => {
@@ -168,7 +209,7 @@ describe("GuildBattlePlaceholder", () => {
       realtimeClient.emitPayload(createCastleStatusBytes({ defenseCount: 12, attackCount: 0 }));
     });
 
-    expect(document.body.textContent).toContain("warning");
+    expect(document.body.textContent).toContain("注意");
     expect(document.body.textContent).toContain("12");
   });
 
@@ -303,13 +344,29 @@ function getTextInputs() {
 }
 
 function getSubmitButton() {
-  const button = document.querySelector<HTMLButtonElement>("button");
+  const button = document.querySelector<HTMLButtonElement>("button[type='submit']");
 
   if (!button) {
     throw new Error("submit button was not found");
   }
 
   return button;
+}
+
+function getSortSelect() {
+  const select = document.querySelector<HTMLSelectElement>("select");
+
+  if (!select) {
+    throw new Error("sort select was not found");
+  }
+
+  return select;
+}
+
+function getRenderedCastleIds() {
+  return Array.from(document.querySelectorAll<HTMLDivElement>(".castle-list__row")).map(
+    (row) => row.querySelector("span")?.textContent ?? ""
+  );
 }
 
 async function clickButtonByText(label: string) {
@@ -330,6 +387,12 @@ function updateInput(input: HTMLInputElement, value: string) {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   valueSetter?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function updateSelect(select: HTMLSelectElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+  valueSetter?.call(select, value);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function createDeferred<TValue>() {
