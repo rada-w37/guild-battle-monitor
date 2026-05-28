@@ -50,12 +50,18 @@ describe("guild battle selectors", () => {
   });
 
   it("calculates alert levels by defense count", () => {
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 31 }))).toBe("safe");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 29 }))).toBe("warning");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 14 }))).toBe("danger");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 9 }))).toBe("critical");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 31, attackCount: 1 }))).toBe("safe");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 31, state: "inBattle" }))).toBe("safe");
+    const attackerGuildId = "789" as GvgGuildId;
+
+    expect(getDefenseAlertLevel(createCastle({ attackerGuildId, defenseCount: 31 }))).toBe("safe");
+    expect(getDefenseAlertLevel(createCastle({ attackerGuildId, defenseCount: 29 }))).toBe("warning");
+    expect(getDefenseAlertLevel(createCastle({ attackerGuildId, defenseCount: 14 }))).toBe("danger");
+    expect(getDefenseAlertLevel(createCastle({ attackerGuildId, defenseCount: 9 }))).toBe("critical");
+    expect(getDefenseAlertLevel(createCastle({ attackerGuildId, defenseCount: 31, attackCount: 1 }))).toBe("safe");
+    expect(getDefenseAlertLevel(createCastle({ attackerGuildId, defenseCount: 31, state: "inBattle" }))).toBe("safe");
+  });
+
+  it("treats castles without declaration as safe even with low defense", () => {
+    expect(getDefenseAlertLevel(createCastle({ attackerGuildId: null, attackCount: 0, defenseCount: 1 }))).toBe("safe");
   });
 
   it("creates owned castle view models only", () => {
@@ -100,6 +106,7 @@ describe("guild battle selectors", () => {
         defenseCount: 9,
         attackCount: 1,
         lastWinPartyKnockOutCount: 0,
+        koDisplay: null,
         alertLevel: "critical"
       }
     ]);
@@ -178,14 +185,15 @@ describe("guild battle selectors", () => {
   });
 
   it("sorts by castle ID by default and by alert level on request", () => {
+    const attackerGuildId = "789" as GvgGuildId;
     const viewModels = createAllCastleViewModels(
       {
         worldId,
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [
-          createCastle({ castleId: "2" as GvgCastleId, defenseCount: 31 }),
-          createCastle({ castleId: "1" as GvgCastleId, defenseCount: 9 }),
-          createCastle({ castleId: "3" as GvgCastleId, defenseCount: 10 })
+          createCastle({ attackerGuildId, castleId: "2" as GvgCastleId, defenseCount: 31 }),
+          createCastle({ attackerGuildId, castleId: "1" as GvgCastleId, defenseCount: 9 }),
+          createCastle({ attackerGuildId, castleId: "3" as GvgCastleId, defenseCount: 10 })
         ],
         guildNames: {}
       },
@@ -205,15 +213,16 @@ describe("guild battle selectors", () => {
   });
 
   it("creates summary counts", () => {
+    const attackerGuildId = "789" as GvgGuildId;
     const viewModels = createAllCastleViewModels(
       {
         worldId,
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [
-          createCastle({ defenseCount: 31 }),
-          createCastle({ defenseCount: 29 }),
-          createCastle({ defenseCount: 14 }),
-          createCastle({ defenseCount: 9 })
+          createCastle({ attackerGuildId, defenseCount: 31 }),
+          createCastle({ attackerGuildId, defenseCount: 29 }),
+          createCastle({ attackerGuildId, defenseCount: 14 }),
+          createCastle({ attackerGuildId, defenseCount: 9 })
         ],
         guildNames: {}
       },

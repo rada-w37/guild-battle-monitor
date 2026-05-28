@@ -43,7 +43,13 @@ export interface GuildBattleCastleViewModel {
   readonly defenseCount: number;
   readonly attackCount: number;
   readonly lastWinPartyKnockOutCount: number;
+  readonly koDisplay: GuildBattleCastleKoViewModel | null;
   readonly alertLevel: GuildBattleAlertLevel;
+}
+
+export interface GuildBattleCastleKoViewModel {
+  readonly count: number;
+  readonly tone: "attack" | "defense";
 }
 
 export type GuildBattleOwnedCastleViewModel = GuildBattleCastleViewModel;

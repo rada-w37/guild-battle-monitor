@@ -124,3 +124,23 @@ Changes:
 - Adjusted mobile rows so `防 656` and `攻 123` stay on one line with `white-space: nowrap` and fixed minimum count widths.
 
 The auto update default remains ON. If the user turns it OFF before pressing `更新`, REST loading still works but WebSocket monitoring is not started. If it is ON when the snapshot loads, the realtime runtime starts after the REST snapshot is available.
+
+## Step8-E final UI pass
+
+Step8-E moves settings out of the monitoring surface so the castle list stays dominant on PC and iPhone.
+
+Changes:
+
+- Removed the world input placeholder. The field is now visually empty until the user enters a world number.
+- Moved alert thresholds, danger sorting, and auto update into a settings dialog opened from the gear-style button in the header.
+- Kept `自動更新` as a single toggle button. Inside the dialog it displays only `ON` / `OFF` because the section label already provides context.
+- Renamed the guild selector label to `防衛ギルド`.
+- Removed display-mode explanation messages above the list.
+- Kept alert and battle-state text out of the normal rows. Severity remains visible through row background and left border only.
+- Fixed the count columns so `防 0`, `防 40`, `防 656`, `攻 39`, and `50 KO` keep stable horizontal positions.
+- KO is shown only when the available KO count is 10 or higher. Values below 10 are hidden to keep the row compact.
+- The current data model exposes `lastWinPartyKnockOutCount`; Step8-E displays that compactly as `n KO` and keeps future attack/defense-specific KO naming open until the realtime model is clarified.
+- Castles without an attacker guild and without attack parties are treated as `safe` even if defense count is below thresholds. They are not urgent targets without a declaration.
+- Owner-based filtering remains tied to the latest `GvgSnapshot`, so a castle captured by the selected defense guild appears after realtime ownership updates.
+
+DevTest mode is intentionally not fixed in this step. The UI surface is still settling, so TestMode behavior will be handled separately after the monitor layout is stable.

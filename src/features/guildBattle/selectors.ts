@@ -21,6 +21,7 @@ const ALERT_LEVEL_PRIORITY: Record<GuildBattleAlertLevel, number> = {
   warning: 2,
   safe: 3
 };
+const KO_DISPLAY_THRESHOLD = 10;
 
 export function isOwnedCastle(castle: GvgCastle, ownGuildId: GvgGuildId): boolean {
   const ownerGuildId = normalizeGvgGuildIdForComparison(castle.ownerGuildId);
@@ -41,9 +42,13 @@ export function isCastleFallen(castle: GvgCastle): boolean {
 }
 
 export function getDefenseAlertLevel(
-  castle: Pick<GvgCastle, "defenseCount">,
+  castle: Pick<GvgCastle, "attackerGuildId" | "attackCount" | "defenseCount">,
   thresholds: GuildBattleAlertThresholds = DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
 ): GuildBattleAlertLevel {
+  if (castle.attackerGuildId === null && castle.attackCount === 0) {
+    return "safe";
+  }
+
   if (castle.defenseCount < thresholds.criticalDefenseCount) {
     return "critical";
   }
@@ -232,7 +237,19 @@ function createCastleViewModel(
     defenseCount: castle.defenseCount,
     attackCount: castle.attackCount,
     lastWinPartyKnockOutCount: castle.lastWinPartyKnockOutCount,
+    koDisplay: createKoDisplay(castle),
     alertLevel: getDefenseAlertLevel(castle, thresholds)
+  };
+}
+
+function createKoDisplay(castle: Pick<GvgCastle, "lastWinPartyKnockOutCount">): GuildBattleCastleViewModel["koDisplay"] {
+  if (castle.lastWinPartyKnockOutCount < KO_DISPLAY_THRESHOLD) {
+    return null;
+  }
+
+  return {
+    count: castle.lastWinPartyKnockOutCount,
+    tone: "defense"
   };
 }
 

@@ -23,7 +23,6 @@ import type {
   GuildBattleAlertLevel,
   GuildBattleAlertThresholds,
   GuildBattleCastleDisplayMode,
-  GuildBattleCastleDisplayReason,
   GuildBattleCastleListSortMode,
   GuildBattleCastleViewModel,
   GuildBattleGuildCandidateViewModel
@@ -47,6 +46,7 @@ export function GuildBattlePlaceholder({
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [castleSortMode, setCastleSortMode] = useState<GuildBattleCastleListSortMode>("castleId");
   const [isAutoUpdateEnabled, setIsAutoUpdateEnabled] = useState(true);
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isTestModeEnabled, setIsTestModeEnabled] = useState(false);
   const [editableAlertThresholds, setEditableAlertThresholds] = useState<EditableGuildBattleAlertThresholds>(() =>
     loadGuildBattleAlertThresholds()
@@ -218,9 +218,21 @@ export function GuildBattlePlaceholder({
   return (
     <main className="app-shell">
       <section className="placeholder monitor-panel" aria-labelledby="app-title">
-        <h1 className="placeholder__title" id="app-title">
-          GuildBattleMonitor
-        </h1>
+        <div className="monitor-header">
+          <h1 className="placeholder__title" id="app-title">
+            GuildBattleMonitor
+          </h1>
+          <button
+            className="settings-button"
+            type="button"
+            aria-label="設定を開く"
+            onClick={() => setIsSettingsDialogOpen(true)}
+          >
+            <svg aria-hidden="true" className="settings-button__icon" viewBox="0 0 24 24">
+              <path d="M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.6A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a9.3 9.3 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.4 2.6h4l.4-2.6a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" />
+            </svg>
+          </button>
+        </div>
 
         <div className="startup-panel" aria-label="起動">
           <label className="field">
@@ -232,7 +244,6 @@ export function GuildBattlePlaceholder({
               onChange={(event) => setWorld(event.target.value)}
               disabled={isLoading}
               inputMode="numeric"
-              placeholder="37"
             />
           </label>
           <button className="load-form__button" type="button" disabled={isLoading || world.trim().length === 0} onClick={handleRefresh}>
@@ -240,39 +251,23 @@ export function GuildBattlePlaceholder({
           </button>
         </div>
 
-        <div className="settings-panel" aria-label="設定">
-          <AlertThresholdSettings
-            error={alertThresholdError}
-            thresholds={editableAlertThresholds}
-            onChange={handleAlertThresholdChange}
-            onReset={handleAlertThresholdReset}
+        {isSettingsDialogOpen ? (
+          <SettingsDialog
+            alertThresholdError={alertThresholdError}
+            castleSortMode={castleSortMode}
+            editableAlertThresholds={editableAlertThresholds}
+            isAutoUpdateEnabled={isAutoUpdateEnabled}
+            isRealtimeActive={isRealtimeActive}
+            isTestModeEnabled={isTestModeEnabled}
+            realtimeState={realtimeState}
+            onAlertThresholdChange={handleAlertThresholdChange}
+            onAlertThresholdReset={handleAlertThresholdReset}
+            onAutoUpdateToggle={handleAutoUpdateToggle}
+            onClose={() => setIsSettingsDialogOpen(false)}
+            onSortModeChange={setCastleSortMode}
+            onTestModeChange={setIsTestModeEnabled}
           />
-          <label className="sort-toggle">
-            <input
-              type="checkbox"
-              checked={castleSortMode === "alertLevel"}
-              onChange={(event) => setCastleSortMode(event.target.checked ? "alertLevel" : "castleId")}
-            />
-            <span>危険度順で表示</span>
-          </label>
-          <button
-            className={`auto-update-toggle ${isAutoUpdateEnabled ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
-            type="button"
-            onClick={handleAutoUpdateToggle}
-          >
-            自動更新 {isAutoUpdateEnabled ? "ON" : "OFF"}
-          </button>
-          <span className={`auto-update-state auto-update-state--${getRealtimeStateTone(realtimeState)}`}>
-            {getRealtimeStateLabel(realtimeState)}
-          </span>
-          {IS_DEV ? (
-            <TestModeSettings
-              checked={isTestModeEnabled}
-              disabled={isRealtimeActive}
-              onChange={setIsTestModeEnabled}
-            />
-          ) : null}
-        </div>
+        ) : null}
 
         <SnapshotStatus
           alertThresholds={alertThresholds}
@@ -334,6 +329,98 @@ function TestModeSettings({
   );
 }
 
+function SettingsDialog({
+  alertThresholdError,
+  castleSortMode,
+  editableAlertThresholds,
+  isAutoUpdateEnabled,
+  isRealtimeActive,
+  isTestModeEnabled,
+  realtimeState,
+  onAlertThresholdChange,
+  onAlertThresholdReset,
+  onAutoUpdateToggle,
+  onClose,
+  onSortModeChange,
+  onTestModeChange
+}: {
+  readonly alertThresholdError: string | null;
+  readonly castleSortMode: GuildBattleCastleListSortMode;
+  readonly editableAlertThresholds: EditableGuildBattleAlertThresholds;
+  readonly isAutoUpdateEnabled: boolean;
+  readonly isRealtimeActive: boolean;
+  readonly isTestModeEnabled: boolean;
+  readonly realtimeState: GvgRealtimeConnectionState;
+  readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => void;
+  readonly onAlertThresholdReset: () => void;
+  readonly onAutoUpdateToggle: () => void;
+  readonly onClose: () => void;
+  readonly onSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
+  readonly onTestModeChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="settings-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        aria-labelledby="settings-dialog-title"
+        aria-modal="true"
+        className="settings-dialog"
+        role="dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="settings-dialog__header">
+          <h2 id="settings-dialog-title">設定</h2>
+          <button className="settings-dialog__close" type="button" aria-label="設定を閉じる" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div className="settings-dialog__body">
+          <AlertThresholdSettings
+            error={alertThresholdError}
+            thresholds={editableAlertThresholds}
+            onChange={onAlertThresholdChange}
+            onReset={onAlertThresholdReset}
+          />
+          <section className="settings-section">
+            <h3>並び順</h3>
+            <label className="sort-toggle">
+              <input
+                type="checkbox"
+                checked={castleSortMode === "alertLevel"}
+                onChange={(event) => onSortModeChange(event.target.checked ? "alertLevel" : "castleId")}
+              />
+              <span>危険度順で表示</span>
+            </label>
+          </section>
+          <section className="settings-section">
+            <h3>自動更新</h3>
+            <div className="auto-update-setting">
+              <button
+                className={`auto-update-toggle ${isAutoUpdateEnabled ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
+                type="button"
+                onClick={onAutoUpdateToggle}
+              >
+                {isAutoUpdateEnabled ? "ON" : "OFF"}
+              </button>
+              <span className={`auto-update-state auto-update-state--${getRealtimeStateTone(realtimeState)}`}>
+                {getRealtimeStateLabel(realtimeState)}
+              </span>
+            </div>
+          </section>
+          {IS_DEV ? (
+            <section className="settings-section">
+              <TestModeSettings
+                checked={isTestModeEnabled}
+                disabled={isRealtimeActive}
+                onChange={onTestModeChange}
+              />
+            </section>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function AlertThresholdSettings({
   error,
   thresholds,
@@ -346,8 +433,8 @@ function AlertThresholdSettings({
   readonly onReset: () => void;
 }) {
   return (
-    <details className="alert-settings">
-      <summary>アラート設定</summary>
+    <section className="settings-section alert-settings">
+      <h3>アラート設定</h3>
       <p className="alert-settings__help">防衛数が設定値未満になると色が変わります。</p>
       <div className="alert-settings__fields">
         <ThresholdInput
@@ -374,7 +461,7 @@ function AlertThresholdSettings({
           {error}
         </p>
       ) : null}
-    </details>
+    </section>
   );
 }
 
@@ -398,7 +485,6 @@ function ThresholdInput({
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
         />
-        <span>未満</span>
       </span>
     </label>
   );
@@ -417,7 +503,7 @@ function GuildCandidateSelect({
 }) {
   return (
     <label className="field guild-select-field">
-      <span className="field__label">ギルド</span>
+      <span className="field__label">防衛ギルド</span>
       <select
         className="field__input field__input--wide"
         disabled={disabled}
@@ -545,7 +631,6 @@ function SnapshotSummary({
       <h2 className="snapshot-summary__title" id="snapshot-title">
         拠点監視
       </h2>
-      <CastleDisplayNotice reason={castleDisplay.reason} />
       <GuildCandidateSelect
         candidates={guildCandidates}
         disabled={false}
@@ -591,18 +676,6 @@ function DevSnapshotDetails({ snapshot }: { readonly snapshot: GvgSnapshot }) {
       </dl>
     </details>
   );
-}
-
-function CastleDisplayNotice({ reason }: { readonly reason: GuildBattleCastleDisplayReason }) {
-  if (reason === "ownGuildUnspecified") {
-    return <p className="status-message">全拠点を表示しています。</p>;
-  }
-
-  if (reason === "ownedCastlesNotFound") {
-    return <p className="status-message">指定ギルドの防衛拠点がないため、全拠点を表示しています。</p>;
-  }
-
-  return <p className="status-message">指定ギルドの防衛拠点のみ表示しています。</p>;
 }
 
 function CastleList({
@@ -661,8 +734,11 @@ function CastleList({
             {viewModel.attackCount}
           </span>
           <span className="castle-list__ko" data-label="KO">
-            <span className="ko-badge ko-badge--attack">攻 {viewModel.attackCount} KO</span>
-            <span className="ko-badge ko-badge--defense">防 {viewModel.lastWinPartyKnockOutCount} KO</span>
+            {viewModel.koDisplay !== null ? (
+              <span className={`ko-badge ko-badge--${viewModel.koDisplay.tone}`}>
+                {viewModel.koDisplay.count} KO
+              </span>
+            ) : null}
           </span>
           {showOwnerGuild ? (
             <span className="castle-list__guild" data-label="所有">

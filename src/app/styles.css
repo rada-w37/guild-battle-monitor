@@ -66,6 +66,37 @@ select {
   width: min(100%, 1180px);
 }
 
+.monitor-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-button {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #c8d2de;
+  border-radius: 8px;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.settings-button:hover {
+  border-color: #1f6feb;
+  color: #1f6feb;
+}
+
+.settings-button__icon {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
 .startup-panel,
 .load-form {
   display: flex;
@@ -85,6 +116,66 @@ select {
   border: 1px solid #d8e0ea;
   border-radius: 6px;
   background: #f8fafc;
+}
+
+.settings-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: start center;
+  padding: 56px 12px 12px;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.settings-dialog {
+  width: min(100%, 560px);
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+}
+
+.settings-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #d8e0ea;
+}
+
+.settings-dialog__header h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.settings-dialog__close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #c8d2de;
+  border-radius: 6px;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.settings-dialog__body {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.settings-section {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 .field {
@@ -157,11 +248,6 @@ select {
   margin: 0;
 }
 
-.alert-settings summary {
-  cursor: pointer;
-  font-weight: 700;
-}
-
 .alert-settings__fields {
   display: flex;
   flex-wrap: wrap;
@@ -185,6 +271,13 @@ select {
 .threshold-field__control {
   display: flex;
   gap: 6px;
+  align-items: center;
+}
+
+.auto-update-setting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
 }
 
@@ -448,9 +541,9 @@ select {
   display: grid;
   grid-template-columns:
     minmax(132px, 1.3fr)
-    64px
-    64px
-    minmax(116px, 0.9fr)
+    74px
+    74px
+    68px
     minmax(110px, 1fr);
   align-items: center;
   min-width: 0;
@@ -460,9 +553,9 @@ select {
 .castle-list--with-owner .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    64px
-    64px
-    minmax(116px, 0.9fr)
+    74px
+    74px
+    68px
     minmax(110px, 1fr)
     minmax(110px, 1fr);
 }
@@ -471,9 +564,9 @@ select {
 .castle-list--with-dev .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    64px
-    64px
-    minmax(116px, 0.9fr)
+    74px
+    74px
+    68px
     minmax(110px, 1fr)
     minmax(116px, 0.8fr);
 }
@@ -482,9 +575,9 @@ select {
 .castle-list--with-owner.castle-list--with-dev .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    64px
-    64px
-    minmax(116px, 0.9fr)
+    74px
+    74px
+    68px
     minmax(110px, 1fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr);
@@ -494,9 +587,9 @@ select {
 .castle-list--with-test .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    64px
-    64px
-    minmax(116px, 0.9fr)
+    74px
+    74px
+    68px
     minmax(110px, 1fr)
     minmax(116px, 0.8fr)
     minmax(170px, 1.2fr);
@@ -506,9 +599,9 @@ select {
 .castle-list--with-owner.castle-list--with-test .castle-list__row {
   grid-template-columns:
     minmax(132px, 1.3fr)
-    64px
-    64px
-    minmax(116px, 0.9fr)
+    74px
+    74px
+    68px
     minmax(110px, 1fr)
     minmax(110px, 1fr)
     minmax(116px, 0.8fr)
@@ -572,24 +665,36 @@ select {
 }
 
 .castle-list__count {
-  min-width: 54px;
+  min-width: 66px;
+  overflow-wrap: normal;
   font-size: 1rem;
   font-weight: 800;
   text-align: right;
   white-space: nowrap;
 }
 
+.castle-list__count::before {
+  float: left;
+  color: #667789;
+  content: attr(data-label);
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
 .castle-list__ko {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
+  min-width: 62px;
+  overflow-wrap: normal;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .ko-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   width: fit-content;
+  min-width: 54px;
   padding: 2px 6px;
   border-radius: 5px;
   font-size: 0.75rem;
@@ -688,6 +793,15 @@ select {
     gap: 10px;
   }
 
+  .settings-dialog-backdrop {
+    align-items: start;
+    padding: 44px 8px 8px;
+  }
+
+  .settings-dialog {
+    max-height: calc(100vh - 56px);
+  }
+
   .field__input,
   .field__input--wide {
     width: 100%;
@@ -716,7 +830,7 @@ select {
 
   .castle-list__row {
     display: grid;
-    grid-template-columns: minmax(92px, 1fr) minmax(56px, auto) minmax(56px, auto);
+    grid-template-columns: minmax(92px, 1fr) 64px 64px 58px;
     gap: 4px;
     align-items: center;
     padding: 6px 7px;
@@ -731,19 +845,11 @@ select {
   .castle-list--with-owner.castle-list--with-dev .castle-list__row,
   .castle-list--with-test .castle-list__row,
   .castle-list--with-owner.castle-list--with-test .castle-list__row {
-    grid-template-columns: minmax(92px, 1fr) minmax(56px, auto) minmax(56px, auto);
+    grid-template-columns: minmax(92px, 1fr) 64px 64px 58px;
   }
 
   .castle-list__row span {
     padding: 0;
-  }
-
-  .castle-list__count::before {
-    color: #667789;
-    content: attr(data-label);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    margin-right: 2px;
   }
 
   .castle-list__castle {
@@ -751,11 +857,25 @@ select {
   }
 
   .castle-list__count {
-    min-width: 56px;
+    min-width: 58px;
     font-size: 0.9375rem;
   }
 
-  .castle-list__ko,
+  .castle-list__count::before {
+    font-size: 0.6875rem;
+    margin-right: 2px;
+  }
+
+  .castle-list__ko {
+    min-width: 54px;
+  }
+
+  .ko-badge {
+    min-width: 50px;
+    padding: 1px 4px;
+    font-size: 0.6875rem;
+  }
+
   .castle-list__guild,
   .castle-list__updated {
     display: none;

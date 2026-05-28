@@ -40,7 +40,7 @@ describe("processRealtimePayload", () => {
     const initialSnapshot = createSnapshot({ defenseCount: 30, attackCount: 0 });
     const result = processRealtimePayload(
       initialSnapshot,
-      createCastleStatusBytes({ defenseCount: 12, attackCount: 0 }),
+      createCastleStatusBytes({ attackerGuildId: 123456789, defenseCount: 12, attackCount: 0 }),
       receivedAt
     );
     const viewModels = createOwnedCastleViewModels(result.snapshot, createSettings());
