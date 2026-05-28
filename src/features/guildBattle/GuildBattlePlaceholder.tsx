@@ -6,15 +6,23 @@ import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgRealtimeClient, GvgRealtimeConnectionState } from "../gvg/realtimeClientTypes";
 import { GvgRealtimeSnapshotRuntime } from "../gvg/realtimeSnapshotRuntime";
 import type { GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
-import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
+import {
+  createGuildBattleAlertThresholds,
+  getDefaultEditableGuildBattleAlertThresholds,
+  loadGuildBattleAlertThresholds,
+  saveGuildBattleAlertThresholds,
+  validateGuildBattleAlertThresholds,
+  type EditableGuildBattleAlertThresholds
+} from "./alertThresholdStorage";
 import {
   createGuildBattleCastleDisplayViewModel,
-  createGuildBattleGuildCandidates,
   createGuildBattleCastleSummaryViewModel,
+  createGuildBattleGuildCandidates,
   sortGuildBattleCastleViewModels
 } from "./selectors";
 import type {
   GuildBattleAlertLevel,
+  GuildBattleAlertThresholds,
   GuildBattleCastleDisplayReason,
   GuildBattleCastleListSortMode,
   GuildBattleCastleViewModel,
@@ -35,6 +43,10 @@ export function GuildBattlePlaceholder({
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [castleSortMode, setCastleSortMode] = useState<GuildBattleCastleListSortMode>("castleId");
+  const [editableAlertThresholds, setEditableAlertThresholds] = useState<EditableGuildBattleAlertThresholds>(() =>
+    loadGuildBattleAlertThresholds()
+  );
+  const [alertThresholdError, setAlertThresholdError] = useState<string | null>(null);
   const runtimeRef = useRef<GvgRealtimeSnapshotRuntime | null>(null);
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
 
@@ -48,6 +60,10 @@ export function GuildBattlePlaceholder({
   );
   const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === trimmedOwnGuildId);
   const guildSelectValue = selectedGuildCandidate?.guildId ?? "";
+  const alertThresholds = useMemo(
+    () => createGuildBattleAlertThresholds(editableAlertThresholds),
+    [editableAlertThresholds]
+  );
   const hasRealtimeInputs = trimmedWorldId.length > 0 && trimmedOwnGuildId.length > 0;
   const canStartRealtime = hasLoadedSnapshot && hasRealtimeInputs && realtimeState.status === "idle";
   const canReconnectRealtime =
@@ -156,6 +172,26 @@ export function GuildBattlePlaceholder({
     }
   }
 
+  function handleAlertThresholdChange(nextThresholds: EditableGuildBattleAlertThresholds) {
+    const validation = validateGuildBattleAlertThresholds(nextThresholds);
+
+    if (!validation.valid) {
+      setAlertThresholdError(validation.error);
+      return;
+    }
+
+    setAlertThresholdError(null);
+    setEditableAlertThresholds(validation.thresholds);
+    saveGuildBattleAlertThresholds(validation.thresholds);
+  }
+
+  function handleAlertThresholdReset() {
+    const defaultThresholds = getDefaultEditableGuildBattleAlertThresholds();
+    setAlertThresholdError(null);
+    setEditableAlertThresholds(defaultThresholds);
+    saveGuildBattleAlertThresholds(defaultThresholds);
+  }
+
   return (
     <main className="app-shell">
       <section className="placeholder monitor-panel" aria-labelledby="app-title">
@@ -201,7 +237,15 @@ export function GuildBattlePlaceholder({
           </button>
         </form>
 
+        <AlertThresholdSettings
+          error={alertThresholdError}
+          thresholds={editableAlertThresholds}
+          onChange={handleAlertThresholdChange}
+          onReset={handleAlertThresholdReset}
+        />
+
         <SnapshotStatus
+          alertThresholds={alertThresholds}
           castleSortMode={castleSortMode}
           loadState={loadState}
           ownGuildId={trimmedOwnGuildId}
@@ -218,6 +262,72 @@ export function GuildBattlePlaceholder({
         />
       </section>
     </main>
+  );
+}
+
+function AlertThresholdSettings({
+  error,
+  thresholds,
+  onChange,
+  onReset
+}: {
+  readonly error: string | null;
+  readonly thresholds: EditableGuildBattleAlertThresholds;
+  readonly onChange: (thresholds: EditableGuildBattleAlertThresholds) => void;
+  readonly onReset: () => void;
+}) {
+  return (
+    <details className="alert-settings">
+      <summary>アラート設定</summary>
+      <div className="alert-settings__fields">
+        <ThresholdInput
+          label="注意"
+          value={thresholds.warningDefenseCount}
+          onChange={(warningDefenseCount) => onChange({ ...thresholds, warningDefenseCount })}
+        />
+        <ThresholdInput
+          label="危険"
+          value={thresholds.dangerDefenseCount}
+          onChange={(dangerDefenseCount) => onChange({ ...thresholds, dangerDefenseCount })}
+        />
+        <ThresholdInput
+          label="最優先"
+          value={thresholds.criticalDefenseCount}
+          onChange={(criticalDefenseCount) => onChange({ ...thresholds, criticalDefenseCount })}
+        />
+        <button className="load-form__button load-form__button--secondary" type="button" onClick={onReset}>
+          デフォルトに戻す
+        </button>
+      </div>
+      {error !== null ? (
+        <p className="status-message status-message--error alert-settings__error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </details>
+  );
+}
+
+function ThresholdInput({
+  label,
+  value,
+  onChange
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly onChange: (value: number) => void;
+}) {
+  return (
+    <label className="field">
+      <span className="field__label">{label}</span>
+      <input
+        className="field__input field__input--narrow"
+        min="0"
+        type="number"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
   );
 }
 
@@ -319,11 +429,13 @@ function getRealtimeStateView(state: GvgRealtimeConnectionState): {
 }
 
 function SnapshotStatus({
+  alertThresholds,
   castleSortMode,
   loadState,
   ownGuildId,
   onCastleSortModeChange
 }: {
+  readonly alertThresholds: GuildBattleAlertThresholds;
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly loadState: AsyncLoadState<GvgSnapshot>;
   readonly ownGuildId: string;
@@ -351,6 +463,7 @@ function SnapshotStatus({
 
   return (
     <SnapshotSummary
+      alertThresholds={alertThresholds}
       castleSortMode={castleSortMode}
       ownGuildId={ownGuildId}
       snapshot={loadState.data}
@@ -360,11 +473,13 @@ function SnapshotStatus({
 }
 
 function SnapshotSummary({
+  alertThresholds,
   castleSortMode,
   ownGuildId,
   snapshot,
   onCastleSortModeChange
 }: {
+  readonly alertThresholds: GuildBattleAlertThresholds;
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly ownGuildId: string;
   readonly snapshot: GvgSnapshot;
@@ -373,9 +488,9 @@ function SnapshotSummary({
   const castleDisplay = useMemo(() => {
     return createGuildBattleCastleDisplayViewModel(snapshot, {
       ownGuildId: ownGuildId.length === 0 ? "" : (ownGuildId as GvgGuildId),
-      alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+      alertThresholds
     });
-  }, [ownGuildId, snapshot]);
+  }, [alertThresholds, ownGuildId, snapshot]);
   const sortedCastles = useMemo(
     () => sortGuildBattleCastleViewModels(castleDisplay.castles, castleSortMode),
     [castleDisplay.castles, castleSortMode]

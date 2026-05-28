@@ -97,6 +97,10 @@ select {
   width: min(100%, 240px);
 }
 
+.field__input--narrow {
+  width: min(100%, 120px);
+}
+
 .load-form__button {
   min-height: 42px;
   padding: 10px 14px;
@@ -130,6 +134,29 @@ select {
 
 .snapshot-summary {
   margin-top: 24px;
+}
+
+.alert-settings {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #d8e0ea;
+}
+
+.alert-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.alert-settings__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-top: 12px;
+}
+
+.alert-settings__error {
+  margin-top: 8px;
 }
 
 .realtime-controls {

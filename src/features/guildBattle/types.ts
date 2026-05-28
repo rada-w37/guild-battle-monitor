@@ -5,6 +5,7 @@ export type GuildBattleAlertLevel = "safe" | "warning" | "danger" | "critical";
 export interface GuildBattleAlertThresholds {
   readonly warningDefenseCount: number;
   readonly dangerDefenseCount: number;
+  readonly criticalDefenseCount: number;
   readonly criticalStates: readonly GvgCastleState[];
 }
 

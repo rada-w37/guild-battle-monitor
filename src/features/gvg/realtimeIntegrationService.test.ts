@@ -48,7 +48,7 @@ describe("processRealtimePayload", () => {
     expect(result.parserResult.status).toBe("ok");
     expect(result.snapshot.castles[0].defenseCount).toBe(12);
     expect(viewModels[0].defenseCount).toBe(12);
-    expect(viewModels[0].alertLevel).toBe("warning");
+    expect(viewModels[0].alertLevel).toBe("danger");
   });
 
   it("updates attack count and becomes critical", () => {

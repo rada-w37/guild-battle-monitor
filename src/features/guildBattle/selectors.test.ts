@@ -60,8 +60,9 @@ describe("guild battle selectors", () => {
 
   it("calculates alert levels with critical priority", () => {
     expect(getDefenseAlertLevel(createCastle({ defenseCount: 31 }))).toBe("safe");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 30 }))).toBe("warning");
-    expect(getDefenseAlertLevel(createCastle({ defenseCount: 10 }))).toBe("danger");
+    expect(getDefenseAlertLevel(createCastle({ defenseCount: 29 }))).toBe("warning");
+    expect(getDefenseAlertLevel(createCastle({ defenseCount: 14 }))).toBe("danger");
+    expect(getDefenseAlertLevel(createCastle({ defenseCount: 9 }))).toBe("critical");
     expect(getDefenseAlertLevel(createCastle({ defenseCount: 31, attackCount: 1 }))).toBe(
       "critical"
     );
@@ -189,8 +190,8 @@ describe("guild battle selectors", () => {
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [
           createCastle({ defenseCount: 31 }),
-          createCastle({ defenseCount: 30 }),
-          createCastle({ defenseCount: 10 }),
+          createCastle({ defenseCount: 29 }),
+          createCastle({ defenseCount: 14 }),
           createCastle({ attackCount: 1 })
         ],
         guildNames: {}

@@ -7,6 +7,7 @@ import { MockGvgRealtimeClient } from "../gvg/mockRealtimeClient";
 import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
 import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
+import { GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY } from "./alertThresholdStorage";
 import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -67,6 +68,7 @@ afterEach(() => {
     act(() => root?.unmount());
   }
   container?.remove();
+  window.localStorage.clear();
   root = null;
   container = null;
 });
@@ -225,8 +227,92 @@ describe("GuildBattlePlaceholder", () => {
       realtimeClient.emitPayload(createCastleStatusBytes({ defenseCount: 12, attackCount: 0 }));
     });
 
-    expect(document.body.textContent).toContain("注意");
+    expect(document.body.textContent).toContain("危険");
     expect(document.body.textContent).toContain("12");
+  });
+
+  it("loads alert thresholds from localStorage", async () => {
+    window.localStorage.setItem(
+      GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY,
+      JSON.stringify({
+        warningDefenseCount: 50,
+        dangerDefenseCount: 20,
+        criticalDefenseCount: 5
+      })
+    );
+
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+
+    expect(getThresholdInputs().map((input) => input.value)).toEqual(["50", "20", "5"]);
+  });
+
+  it("saves threshold changes and recalculates alerts", async () => {
+    const thresholdSnapshot = {
+      ...snapshot,
+      castles: [{ ...snapshot.castles[1], castleId: "1" as GvgCastleId, defenseCount: 25 }]
+    } satisfies GvgSnapshot;
+    const loadSnapshot = vi.fn(() => Promise.resolve(thresholdSnapshot));
+    renderComponent(loadSnapshot);
+
+    await clickSubmitButton();
+    expect(document.body.textContent).toContain("注意");
+
+    await act(async () => {
+      updateInput(getThresholdInputs()[0], "20");
+    });
+
+    expect(document.body.textContent).toContain("安全");
+    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
+      '"warningDefenseCount":20'
+    );
+  });
+
+  it("shows validation errors and keeps the previous threshold", async () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+
+    await act(async () => {
+      updateInput(getThresholdInputs()[1], "30");
+    });
+
+    expect(document.body.textContent).toContain("注意 > 危険 > 最優先");
+    expect(getThresholdInputs()[1].value).toBe("15");
+  });
+
+  it("resets alert thresholds to defaults", async () => {
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+
+    await act(async () => {
+      updateInput(getThresholdInputs()[0], "40");
+    });
+    await clickButtonByText("デフォルトに戻す");
+
+    expect(getThresholdInputs().map((input) => input.value)).toEqual(["30", "15", "10"]);
+    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
+      '"warningDefenseCount":30'
+    );
+  });
+
+  it("uses changed thresholds after realtime updates", async () => {
+    const thresholdSnapshot = {
+      ...snapshot,
+      castles: [{ ...snapshot.castles[0], attackCount: 0, defenseCount: 40 }]
+    } satisfies GvgSnapshot;
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(vi.fn(() => Promise.resolve(thresholdSnapshot)), () => realtimeClient);
+
+    await clickSubmitButton();
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
+    await act(async () => {
+      updateInput(getThresholdInputs()[0], "20");
+    });
+    await clickButtonByText("監視開始");
+    await act(async () => {
+      realtimeClient.emitPayload(createCastleStatusBytes({ defenseCount: 25, attackCount: 0 }));
+    });
+
+    expect(document.body.textContent).toContain("安全");
   });
 
   it("updates guild candidates after realtime snapshot updates", async () => {
@@ -239,7 +325,7 @@ describe("GuildBattlePlaceholder", () => {
     await act(async () => {
       updateSelect(getGuildSelect(), ownGuildId);
     });
-    await clickRealtimeStartButton();
+    await clickButtonByText("監視開始");
 
     await act(async () => {
       realtimeClient.emitPayload(createCastleStatusBytes({ guildId: 123456789, defenseCount: 25 }));
@@ -411,6 +497,16 @@ function getGuildSelect() {
 
 function getGuildSelectOptions() {
   return Array.from(getGuildSelect().options).map((option) => option.textContent ?? "");
+}
+
+function getThresholdInputs() {
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[type='number']"));
+
+  if (inputs.length !== 3) {
+    throw new Error("expected three threshold inputs");
+  }
+
+  return inputs;
 }
 
 function getRenderedCastleIds() {

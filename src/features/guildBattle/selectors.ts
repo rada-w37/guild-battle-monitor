@@ -42,15 +42,19 @@ export function getDefenseAlertLevel(
   castle: Pick<GvgCastle, "attackCount" | "defenseCount" | "state">,
   thresholds: GuildBattleAlertThresholds = DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
 ): GuildBattleAlertLevel {
-  if (castle.attackCount > 0 || thresholds.criticalStates.includes(castle.state)) {
+  if (
+    castle.attackCount > 0 ||
+    thresholds.criticalStates.includes(castle.state) ||
+    castle.defenseCount < thresholds.criticalDefenseCount
+  ) {
     return "critical";
   }
 
-  if (castle.defenseCount <= thresholds.dangerDefenseCount) {
+  if (castle.defenseCount < thresholds.dangerDefenseCount) {
     return "danger";
   }
 
-  if (castle.defenseCount <= thresholds.warningDefenseCount) {
+  if (castle.defenseCount < thresholds.warningDefenseCount) {
     return "warning";
   }
 
