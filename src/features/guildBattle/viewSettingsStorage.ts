@@ -7,6 +7,22 @@ export interface GuildBattleViewSettings {
   readonly autoUpdate: boolean;
 }
 
+export type BattleMonitorCastleListSortMode = "castleId" | "alertLevel";
+
+export interface BattleMonitorSharedViewSettings {
+  readonly worldInput: string;
+  readonly worldNumber: number | null;
+  readonly autoUpdate: boolean;
+  readonly sortMode: BattleMonitorCastleListSortMode;
+}
+
+export interface BattleMonitorViewSettings {
+  readonly shared: BattleMonitorSharedViewSettings;
+  readonly guildBattle: {
+    readonly selectedGuildId: string;
+  };
+}
+
 export function loadGuildBattleViewSettings(
   storage: Pick<Storage, "getItem"> = window.localStorage
 ): GuildBattleViewSettings {
@@ -30,11 +46,44 @@ export function loadGuildBattleViewSettings(
   }
 }
 
+export function loadBattleMonitorViewSettings(
+  storage: Pick<Storage, "getItem"> = window.localStorage
+): BattleMonitorViewSettings {
+  const guildBattleSettings = loadGuildBattleViewSettings(storage);
+
+  return {
+    shared: {
+      worldInput: guildBattleSettings.world,
+      worldNumber: parseWorldNumber(guildBattleSettings.world),
+      autoUpdate: guildBattleSettings.autoUpdate,
+      sortMode: guildBattleSettings.sortByAlert ? "alertLevel" : "castleId"
+    },
+    guildBattle: {
+      selectedGuildId: guildBattleSettings.selectedGuildId
+    }
+  };
+}
+
 export function saveGuildBattleViewSettings(
   settings: GuildBattleViewSettings,
   storage: Pick<Storage, "setItem"> = window.localStorage
 ): void {
   storage.setItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+}
+
+export function saveBattleMonitorViewSettings(
+  settings: BattleMonitorViewSettings,
+  storage: Pick<Storage, "setItem"> = window.localStorage
+): void {
+  saveGuildBattleViewSettings(
+    {
+      world: settings.shared.worldInput,
+      selectedGuildId: settings.guildBattle.selectedGuildId,
+      sortByAlert: settings.shared.sortMode === "alertLevel",
+      autoUpdate: settings.shared.autoUpdate
+    },
+    storage
+  );
 }
 
 export function getDefaultGuildBattleViewSettings(): GuildBattleViewSettings {
@@ -46,6 +95,24 @@ export function getDefaultGuildBattleViewSettings(): GuildBattleViewSettings {
   };
 }
 
+export function getDefaultBattleMonitorViewSettings(): BattleMonitorViewSettings {
+  return loadBattleMonitorViewSettings({
+    getItem: () => null
+  });
+}
+
 function normalizeStoredString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function parseWorldNumber(worldInput: string): number | null {
+  const trimmedWorld = worldInput.trim();
+
+  if (trimmedWorld.length === 0 || !/^\d+$/.test(trimmedWorld)) {
+    return null;
+  }
+
+  const worldNumber = Number(trimmedWorld);
+
+  return Number.isSafeInteger(worldNumber) && worldNumber > 0 ? worldNumber : null;
 }

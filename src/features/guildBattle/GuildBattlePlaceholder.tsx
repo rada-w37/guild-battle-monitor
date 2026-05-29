@@ -28,15 +28,17 @@ import type {
   GuildBattleGuildCandidateViewModel
 } from "./types";
 import {
-  loadGuildBattleViewSettings,
-  saveGuildBattleViewSettings,
-  type GuildBattleViewSettings
+  loadBattleMonitorViewSettings,
+  saveBattleMonitorViewSettings,
+  type BattleMonitorSharedViewSettings
 } from "./viewSettingsStorage";
 
 const IS_DEV = import.meta.env.DEV;
 const WORLD_ID_BASE = 1000;
 
 type BattleMonitorMode = "guildBattle" | "grandBattle";
+
+type BattleMonitorSharedState = BattleMonitorSharedViewSettings;
 
 interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
@@ -47,16 +49,12 @@ export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient()
 }: GuildBattlePlaceholderProps) {
-  const [initialViewSettings] = useState(() => loadGuildBattleViewSettings());
+  const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
-  const [world, setWorld] = useState(initialViewSettings.world);
-  const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.selectedGuildId);
+  const [shared, setShared] = useState<BattleMonitorSharedState>(initialViewSettings.shared);
+  const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
-  const [castleSortMode, setCastleSortMode] = useState<GuildBattleCastleListSortMode>(
-    initialViewSettings.sortByAlert ? "alertLevel" : "castleId"
-  );
-  const [isAutoUpdateEnabled, setIsAutoUpdateEnabled] = useState(initialViewSettings.autoUpdate);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isTestModeEnabled, setIsTestModeEnabled] = useState(false);
   const [editableAlertThresholds, setEditableAlertThresholds] = useState<EditableGuildBattleAlertThresholds>(() =>
@@ -67,7 +65,10 @@ export function GuildBattlePlaceholder({
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
 
-  const worldId = useMemo(() => createWorldIdFromWorld(world), [world]);
+  const world = shared.worldInput;
+  const worldId = useMemo(() => createWorldIdFromWorldNumber(shared.worldNumber), [shared.worldNumber]);
+  const castleSortMode = shared.sortMode;
+  const isAutoUpdateEnabled = shared.autoUpdate;
   const isLoading = loadState.status === "loading";
   const guildCandidates = useMemo(
     () => (loadState.status === "success" ? createGuildBattleGuildCandidates(loadState.data) : []),
@@ -123,8 +124,12 @@ export function GuildBattlePlaceholder({
 
   async function handleAutoUpdateToggle() {
     const nextEnabled = !isAutoUpdateEnabled;
-    setIsAutoUpdateEnabled(nextEnabled);
-    saveViewSettings({ autoUpdate: nextEnabled });
+    const nextShared = {
+      ...shared,
+      autoUpdate: nextEnabled
+    };
+    setShared(nextShared);
+    saveViewSettings({ shared: nextShared });
 
     if (!nextEnabled) {
       stopRealtime("auto update disabled", { nextState: "idle" });
@@ -227,8 +232,13 @@ export function GuildBattlePlaceholder({
   }
 
   function handleWorldChange(nextWorld: string) {
-    setWorld(nextWorld);
-    saveViewSettings({ world: nextWorld });
+    const nextShared = {
+      ...shared,
+      worldInput: nextWorld,
+      worldNumber: createWorldNumberFromWorldInput(nextWorld)
+    };
+    setShared(nextShared);
+    saveViewSettings({ shared: nextShared });
   }
 
   function handleGuildChange(nextGuildId: string) {
@@ -237,17 +247,23 @@ export function GuildBattlePlaceholder({
   }
 
   function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
-    setCastleSortMode(nextSortMode);
-    saveViewSettings({ sortByAlert: nextSortMode === "alertLevel" });
+    const nextShared = {
+      ...shared,
+      sortMode: nextSortMode
+    };
+    setShared(nextShared);
+    saveViewSettings({ shared: nextShared });
   }
 
-  function saveViewSettings(settings: Partial<GuildBattleViewSettings>) {
-    saveGuildBattleViewSettings({
-      world,
-      selectedGuildId,
-      sortByAlert: castleSortMode === "alertLevel",
-      autoUpdate: isAutoUpdateEnabled,
-      ...settings
+  function saveViewSettings(settings: {
+    readonly shared?: BattleMonitorSharedState;
+    readonly selectedGuildId?: string;
+  }) {
+    saveBattleMonitorViewSettings({
+      shared: settings.shared ?? shared,
+      guildBattle: {
+        selectedGuildId: settings.selectedGuildId ?? selectedGuildId
+      }
     });
   }
 
@@ -378,7 +394,11 @@ export function GuildBattlePlaceholder({
   );
 }
 
-function createWorldIdFromWorld(world: string): GvgWorldId | null {
+function createWorldIdFromWorldNumber(worldNumber: number | null): GvgWorldId | null {
+  return worldNumber === null ? null : (String(WORLD_ID_BASE + worldNumber) as GvgWorldId);
+}
+
+function createWorldNumberFromWorldInput(world: string): number | null {
   const trimmedWorld = world.trim();
 
   if (trimmedWorld.length === 0 || !/^\d+$/.test(trimmedWorld)) {
@@ -391,7 +411,7 @@ function createWorldIdFromWorld(world: string): GvgWorldId | null {
     return null;
   }
 
-  return String(WORLD_ID_BASE + worldNumber) as GvgWorldId;
+  return worldNumber;
 }
 
 function TestModeSettings({
