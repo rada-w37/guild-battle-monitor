@@ -91,10 +91,68 @@ select {
   color: #1f6feb;
 }
 
+.settings-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .settings-button__icon {
   width: 20px;
   height: 20px;
   fill: currentColor;
+}
+
+.mode-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 3px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.mode-tabs__button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #3d4d5c;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.mode-tabs__button:hover {
+  color: #1f6feb;
+}
+
+.mode-tabs__button--active {
+  border-color: #c8d2de;
+  color: #1d2733;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.grand-battle-placeholder {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.grand-battle-placeholder__title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.grand-battle-placeholder__description {
+  margin: 0;
+  color: #3d4d5c;
+  line-height: 1.6;
 }
 
 .startup-panel,

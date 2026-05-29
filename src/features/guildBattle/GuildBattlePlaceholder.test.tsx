@@ -88,7 +88,48 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(getWorldInput().value).toBe("");
     expect(getWorldInput().getAttribute("placeholder")).toBeNull();
-    expect(document.body.textContent).toContain("GuildBattleMonitor");
+    expect(document.body.textContent).toContain("Guild Battle Monitor");
+  });
+
+  it("shows mode tabs and starts in GuildBattle mode", () => {
+    renderComponent();
+
+    expect(getModeButton("GuildBattle").getAttribute("aria-pressed")).toBe("true");
+    expect(getModeButton("GrandBattle").getAttribute("aria-pressed")).toBe("false");
+    expect(getWorldInput()).not.toBeNull();
+    expect(document.body.textContent).not.toContain("GrandBattleMonitor（準備中）");
+    expect(getSettingsButton().disabled).toBe(false);
+  });
+
+  it("shows only the GrandBattle placeholder and disables settings in GrandBattle mode", async () => {
+    renderComponent();
+
+    await clickButton("GrandBattle");
+
+    expect(getModeButton("GuildBattle").getAttribute("aria-pressed")).toBe("false");
+    expect(getModeButton("GrandBattle").getAttribute("aria-pressed")).toBe("true");
+    expect(document.body.textContent).toContain("GrandBattleMonitor（準備中）");
+    expect(document.body.textContent).toContain("Grand Battle Monitor");
+    expect(document.body.textContent).toContain("GrandBattleMonitor UIは Step7 以降で追加予定です。");
+    expect(document.querySelector(".startup-panel")).toBeNull();
+    expect(getSettingsButton().disabled).toBe(true);
+
+    await clickSettingsButton();
+    expect(document.querySelector("[role='dialog']")).toBeNull();
+  });
+
+  it("returns to GuildBattle mode with the existing UI and settings enabled", async () => {
+    renderComponent();
+
+    await clickButton("GrandBattle");
+    await clickButton("GuildBattle");
+
+    expect(getModeButton("GuildBattle").getAttribute("aria-pressed")).toBe("true");
+    expect(getWorldInput()).not.toBeNull();
+    expect(getSettingsButton().disabled).toBe(false);
+
+    await clickSettingsButton();
+    expect(getSettingsDialog()).not.toBeNull();
   });
 
   it("restores world, sort, auto update, and selected guild from localStorage", async () => {
@@ -378,6 +419,28 @@ async function clickSettingsButton() {
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+}
+
+function getSettingsButton() {
+  const button = document.querySelector<HTMLButtonElement>(".settings-button");
+
+  if (!button) {
+    throw new Error("settings button was not found");
+  }
+
+  return button;
+}
+
+function getModeButton(label: "GuildBattle" | "GrandBattle") {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-tabs__button")).find(
+    (candidate) => candidate.textContent === label
+  );
+
+  if (!button) {
+    throw new Error(`mode button was not found: ${label}`);
+  }
+
+  return button;
 }
 
 async function clickButton(label: string) {
