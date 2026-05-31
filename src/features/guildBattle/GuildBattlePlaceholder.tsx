@@ -563,12 +563,20 @@ export function GuildBattlePlaceholder({
     setActiveMode(nextMode);
 
     if (nextMode === "grandBattle") {
-      setIsSettingsDialogOpen(false);
-      setGrandBattleDraftSource((currentSource) => ({
-        ...currentSource,
+      const nextDraftSource = {
+        ...grandBattleDraftSource,
         worldInput: shared.worldInput,
         worldNumber: shared.worldNumber
-      }));
+      };
+      setIsSettingsDialogOpen(false);
+      setGrandBattleDraftSource(nextDraftSource);
+
+      if (nextDraftSource.worldNumber !== null) {
+        void loadGrandBattleParticipantsForSource({
+          ...nextDraftSource,
+          worldNumber: nextDraftSource.worldNumber
+        });
+      }
     }
   }
 

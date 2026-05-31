@@ -959,9 +959,18 @@ select {
     max-height: calc(100vh - 56px);
   }
 
-  .grand-battle-setup__form,
   .grand-battle-participants__grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grand-battle-setup__form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .grand-battle-setup__form .field__input,
+  .grand-battle-setup__form .field__input--wide {
+    min-width: 0;
   }
 
   .field__input,
@@ -975,6 +984,10 @@ select {
 
   .field__input--world {
     width: 68px;
+  }
+
+  .grand-battle-setup__form .field__input--world {
+    max-width: 100%;
   }
 
   .summary-grid {

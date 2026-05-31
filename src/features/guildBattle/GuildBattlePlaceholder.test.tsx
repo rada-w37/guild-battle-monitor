@@ -177,6 +177,35 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.querySelector("[role='dialog']")).toBeNull();
   });
 
+  it("loads GrandBattle participant guilds from restored world when opening GrandBattle mode", async () => {
+    const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
+    window.localStorage.setItem(
+      GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        world: "50",
+        selectedGuildId: "",
+        sortByAlert: false,
+        autoUpdate: true
+      })
+    );
+    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+
+    await clickButton("GrandBattle");
+
+    expect(getGrandBattleWorldInput().value).toBe("50");
+    expect(loadGrandBattleParticipants).toHaveBeenCalledWith({
+      serverId: "japan",
+      worldInput: "50",
+      worldNumber: 50,
+      classId: 3,
+      blockId: 0
+    });
+    expect(getGrandBattleParticipantNames()).toEqual(
+      grandBattleParticipants.map((participant) => participant.guildName)
+    );
+    expect(getGrandBattleUpdateButton().disabled).toBe(false);
+  });
+
   it("shows all GrandBattle class options", async () => {
     renderComponent();
 
