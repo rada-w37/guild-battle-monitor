@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
-import { loadGrandBattleParticipantGuilds } from "../grandBattle/grandBattleParticipantService";
+import {
+  loadGrandBattleParticipantGuilds,
+  loadGrandBattleSnapshot
+} from "../grandBattle/grandBattleParticipantService";
+import {
+  createGrandBattleCastleListViewModels,
+  createGrandBattleGuildCandidates
+} from "../grandBattle/selectors";
 import type {
   GrandBattleBlockId,
   GrandBattleClassId,
   GrandBattleParticipantGuildCandidate,
   GrandBattleResolvedSource,
   GrandBattleServerId,
-  GrandBattleSource
+  GrandBattleSource,
+  GrandBattleSnapshot
 } from "../grandBattle/types";
 import { BrowserGvgRealtimeClient } from "../gvg/browserRealtimeClient";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
@@ -79,6 +87,7 @@ type BattleMonitorSharedState = BattleMonitorSharedViewSettings;
 interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly loadGrandBattleParticipants?: typeof loadGrandBattleParticipantGuilds;
+  readonly loadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
 }
 
@@ -91,6 +100,7 @@ interface GuildBattleRuntimeService {
 export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot,
   loadGrandBattleParticipants = loadGrandBattleParticipantGuilds,
+  loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient()
 }: GuildBattlePlaceholderProps) {
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
@@ -106,6 +116,10 @@ export function GuildBattlePlaceholder({
   const [grandBattleParticipantLoadState, setGrandBattleParticipantLoadState] = useState<
     AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>
   >({ status: "idle" });
+  const [grandBattleSnapshotLoadState, setGrandBattleSnapshotLoadState] = useState<
+    AsyncLoadState<GrandBattleSnapshot>
+  >({ status: "idle" });
+  const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
@@ -119,6 +133,7 @@ export function GuildBattlePlaceholder({
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
   const grandBattleParticipantRequestSeqRef = useRef(0);
+  const grandBattleSnapshotRequestSeqRef = useRef(0);
 
   const runtimeService = useMemo<GuildBattleRuntimeService>(
     () => ({
@@ -332,6 +347,8 @@ export function GuildBattlePlaceholder({
     if (nextDraftSource.worldInput.trim().length === 0) {
       setGrandBattleCandidateSource(null);
       setGrandBattleParticipantLoadState({ status: "idle" });
+      setGrandBattleSnapshotLoadState({ status: "idle" });
+      setSelectedGrandBattleGuildId("");
       return;
     }
 
@@ -341,6 +358,8 @@ export function GuildBattlePlaceholder({
         status: "error",
         error: new Error("worldは数字で入力してください。")
       });
+      setGrandBattleSnapshotLoadState({ status: "idle" });
+      setSelectedGrandBattleGuildId("");
       return;
     }
 
@@ -394,6 +413,8 @@ export function GuildBattlePlaceholder({
     grandBattleParticipantRequestSeqRef.current = requestSeq;
     setGrandBattleCandidateSource(source);
     setGrandBattleParticipantLoadState({ status: "loading" });
+    setGrandBattleSnapshotLoadState({ status: "idle" });
+    setSelectedGrandBattleGuildId("");
 
     try {
       const participants = await loadGrandBattleParticipants(source);
@@ -414,6 +435,29 @@ export function GuildBattlePlaceholder({
   function handleGrandBattleApplySource() {
     if (grandBattleCandidateSource !== null && grandBattleParticipantLoadState.status === "success") {
       setGrandBattleAppliedSource(grandBattleCandidateSource);
+      setSelectedGrandBattleGuildId("");
+      void loadGrandBattleSnapshotForSource(grandBattleCandidateSource);
+    }
+  }
+
+  async function loadGrandBattleSnapshotForSource(source: GrandBattleResolvedSource) {
+    const requestSeq = grandBattleSnapshotRequestSeqRef.current + 1;
+    grandBattleSnapshotRequestSeqRef.current = requestSeq;
+    setGrandBattleSnapshotLoadState({ status: "loading" });
+
+    try {
+      const snapshot = await loadGrandBattleLatestSnapshot(source);
+
+      if (grandBattleSnapshotRequestSeqRef.current === requestSeq) {
+        setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
+      }
+    } catch (error) {
+      if (grandBattleSnapshotRequestSeqRef.current === requestSeq) {
+        setGrandBattleSnapshotLoadState({
+          status: "error",
+          error: error instanceof Error ? error : new Error("GrandBattle snapshotの取得に失敗しました。")
+        });
+      }
     }
   }
 
@@ -569,10 +613,16 @@ export function GuildBattlePlaceholder({
           <GrandBattleSetupPanel
             canApplySource={canApplyGrandBattleSource}
             draftSource={grandBattleDraftSource}
+            participantCandidates={
+              grandBattleParticipantLoadState.status === "success" ? grandBattleParticipantLoadState.data : []
+            }
             participantLoadState={grandBattleParticipantLoadState}
+            selectedGuildId={selectedGrandBattleGuildId}
+            snapshotLoadState={grandBattleSnapshotLoadState}
             onApplySource={handleGrandBattleApplySource}
             onBlockChange={handleGrandBattleBlockChange}
             onClassChange={handleGrandBattleClassChange}
+            onGuildChange={setSelectedGrandBattleGuildId}
             onServerChange={handleGrandBattleServerChange}
             onWorldCommit={handleGrandBattleWorldCommit}
             onWorldInputChange={handleGrandBattleWorldInputChange}
@@ -612,20 +662,28 @@ function isSameGrandBattleSource(
 function GrandBattleSetupPanel({
   canApplySource,
   draftSource,
+  participantCandidates,
   participantLoadState,
+  selectedGuildId,
+  snapshotLoadState,
   onApplySource,
   onBlockChange,
   onClassChange,
+  onGuildChange,
   onServerChange,
   onWorldCommit,
   onWorldInputChange
 }: {
   readonly canApplySource: boolean;
   readonly draftSource: GrandBattleSource;
+  readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
   readonly participantLoadState: AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>;
+  readonly selectedGuildId: GvgGuildId | "";
+  readonly snapshotLoadState: AsyncLoadState<GrandBattleSnapshot>;
   readonly onApplySource: () => void;
   readonly onBlockChange: (blockId: GrandBattleBlockId) => void;
   readonly onClassChange: (classId: GrandBattleClassId) => void;
+  readonly onGuildChange: (guildId: GvgGuildId | "") => void;
   readonly onServerChange: (serverId: GrandBattleServerId) => void;
   readonly onWorldCommit: () => void;
   readonly onWorldInputChange: (worldInput: string) => void;
@@ -709,6 +767,13 @@ function GrandBattleSetupPanel({
       >
         更新
       </button>
+
+      <GrandBattleSnapshotStatus
+        participantCandidates={participantCandidates}
+        selectedGuildId={selectedGuildId}
+        snapshotLoadState={snapshotLoadState}
+        onGuildChange={onGuildChange}
+      />
     </section>
   );
 }
@@ -747,6 +812,103 @@ function GrandBattleParticipantList({
       ))}
     </div>
   );
+}
+
+function GrandBattleSnapshotStatus({
+  participantCandidates,
+  selectedGuildId,
+  snapshotLoadState,
+  onGuildChange
+}: {
+  readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
+  readonly selectedGuildId: GvgGuildId | "";
+  readonly snapshotLoadState: AsyncLoadState<GrandBattleSnapshot>;
+  readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+}) {
+  if (snapshotLoadState.status === "idle") {
+    return null;
+  }
+
+  if (snapshotLoadState.status === "loading") {
+    return (
+      <p className="status-message" aria-live="polite">
+        取得中です。
+      </p>
+    );
+  }
+
+  if (snapshotLoadState.status === "error") {
+    return (
+      <p className="status-message status-message--error" role="alert">
+        {snapshotLoadState.error.message}
+      </p>
+    );
+  }
+
+  return (
+    <GrandBattleSnapshotSummary
+      participantCandidates={participantCandidates}
+      selectedGuildId={selectedGuildId}
+      snapshot={snapshotLoadState.data}
+      onGuildChange={onGuildChange}
+    />
+  );
+}
+
+function GrandBattleSnapshotSummary({
+  participantCandidates,
+  selectedGuildId,
+  snapshot,
+  onGuildChange
+}: {
+  readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
+  readonly selectedGuildId: GvgGuildId | "";
+  readonly snapshot: GrandBattleSnapshot;
+  readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+}) {
+  const guildCandidates = useMemo(
+    () => createGrandBattleGuildCandidates(participantCandidates, snapshot),
+    [participantCandidates, snapshot]
+  );
+  const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === selectedGuildId);
+  const guildSelectValue = selectedGuildCandidate?.guildId ?? "";
+  const viewModels = useMemo(
+    () => createGrandBattleCastleListViewModels(snapshot, guildSelectValue),
+    [guildSelectValue, snapshot]
+  );
+
+  return (
+    <section className="snapshot-summary" aria-labelledby="grand-battle-snapshot-title">
+      <div className="snapshot-summary__header">
+        <h2 className="snapshot-summary__title" id="grand-battle-snapshot-title">
+          拠点監視
+        </h2>
+        <span className="snapshot-summary__captured-at">更新: {snapshot.capturedAt}</span>
+      </div>
+      <BattleMonitorGuildSelect
+        candidates={guildCandidates}
+        disabled={false}
+        value={guildSelectValue}
+        onChange={onGuildChange}
+      />
+      <BattleMonitorCastleList
+        capturedAt={snapshot.capturedAt}
+        isTestModeEnabled={false}
+        showDevDetails={false}
+        showOwnerGuild={guildSelectValue.length === 0}
+        viewModels={viewModels}
+        onTestModeDefenseIncrease={noopGrandBattleCastleAction}
+        onTestModeAttackIncrease={noopGrandBattleCastleAction}
+        onTestModeRevive={noopGrandBattleReviveAction}
+      />
+    </section>
+  );
+}
+
+function noopGrandBattleCastleAction(_castleId: GvgCastleId, _amount: number) {
+}
+
+function noopGrandBattleReviveAction(_castleId: GvgCastleId) {
 }
 
 function createWorldIdFromWorldNumber(worldNumber: number | null): GvgWorldId | null {

@@ -1,4 +1,4 @@
-import type { GvgGuildId } from "../gvg/types";
+import type { GvgCastleId, GvgCastleState, GvgGuildId } from "../gvg/types";
 
 export type GrandBattleServerId = "japan";
 export type GrandBattleClassId = 1 | 2 | 3;
@@ -19,4 +19,23 @@ export interface GrandBattleResolvedSource extends GrandBattleSource {
 export interface GrandBattleParticipantGuildCandidate {
   readonly guildId: GvgGuildId;
   readonly guildName: string;
+}
+
+export interface GrandBattleCastle {
+  readonly castleId: GvgCastleId;
+  readonly state: GvgCastleState;
+  readonly ownerGuildId: GvgGuildId | null;
+  readonly attackerGuildId: GvgGuildId | null;
+  readonly defenseCount: number;
+  readonly attackCount: number;
+  readonly fallenAt: string | null;
+  readonly lastWinPartyKnockOutCount: number;
+  readonly updatedAt: string;
+}
+
+export interface GrandBattleSnapshot {
+  readonly source: GrandBattleResolvedSource;
+  readonly capturedAt: string;
+  readonly castles: readonly GrandBattleCastle[];
+  readonly guildNames: Readonly<Record<GvgGuildId, string>>;
 }

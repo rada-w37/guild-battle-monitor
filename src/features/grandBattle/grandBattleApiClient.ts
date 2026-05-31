@@ -26,8 +26,22 @@ export interface GrandBattleWorldGroupResponse extends Record<string, unknown> {
 
 export interface GrandBattleLatestDataResponse extends Record<string, unknown> {
   readonly matching_number?: unknown;
+  readonly castles?: readonly GrandBattleCastleResponse[] | null;
   readonly guilds?: Record<string, string> | null;
 }
+
+export interface GrandBattleCastleResponse extends Record<string, unknown> {
+  readonly CastleId?: GrandBattleApiScalar;
+  readonly GuildId?: GrandBattleApiScalar;
+  readonly AttackerGuildId?: GrandBattleApiScalar;
+  readonly AttackPartyCount?: GrandBattleApiScalar;
+  readonly DefensePartyCount?: GrandBattleApiScalar;
+  readonly GvgCastleState?: GrandBattleApiScalar;
+  readonly UtcFallenTimeStamp?: GrandBattleApiScalar;
+  readonly LastWinPartyKnockOutCount?: GrandBattleApiScalar;
+}
+
+export type GrandBattleApiScalar = string | number | boolean | null;
 
 export class GrandBattleApiError extends Error {
   constructor(

@@ -600,6 +600,11 @@ select {
   margin-bottom: 10px;
 }
 
+.snapshot-summary__captured-at {
+  color: #667789;
+  font-size: 0.8125rem;
+}
+
 .connection-indicator {
   display: inline-grid;
   flex: 0 0 auto;

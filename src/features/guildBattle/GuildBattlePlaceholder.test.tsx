@@ -2,8 +2,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { loadGrandBattleParticipantGuilds } from "../grandBattle/grandBattleParticipantService";
-import type { GrandBattleParticipantGuildCandidate } from "../grandBattle/types";
+import type {
+  loadGrandBattleParticipantGuilds,
+  loadGrandBattleSnapshot
+} from "../grandBattle/grandBattleParticipantService";
+import type { GrandBattleParticipantGuildCandidate, GrandBattleSnapshot } from "../grandBattle/types";
 import type { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import { MockGvgRealtimeClient } from "../gvg/mockRealtimeClient";
 import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
@@ -25,6 +28,47 @@ const grandBattleParticipants = [
   { guildId: "333333333050" as GvgGuildId, guildName: "ギルドC" },
   { guildId: "444444444050" as GvgGuildId, guildName: "ギルドD" }
 ] satisfies readonly GrandBattleParticipantGuildCandidate[];
+
+const grandBattleSnapshot = {
+  source: {
+    serverId: "japan",
+    worldInput: "50",
+    worldNumber: 50,
+    classId: 3,
+    blockId: 0
+  },
+  capturedAt: "2026-05-27T11:15:36.000Z",
+  guildNames: {
+    [grandBattleParticipants[0].guildId]: "ギルドA",
+    [grandBattleParticipants[1].guildId]: "ギルドB",
+    [grandBattleParticipants[2].guildId]: "ギルドC",
+    [grandBattleParticipants[3].guildId]: "ギルドD"
+  },
+  castles: [
+    {
+      castleId: "1" as GvgCastleId,
+      state: "idle",
+      ownerGuildId: grandBattleParticipants[0].guildId,
+      attackerGuildId: grandBattleParticipants[1].guildId,
+      defenseCount: 120,
+      attackCount: 5,
+      fallenAt: null,
+      lastWinPartyKnockOutCount: 30,
+      updatedAt: "2026-05-27T11:15:36.000Z"
+    },
+    {
+      castleId: "2" as GvgCastleId,
+      state: "idle",
+      ownerGuildId: grandBattleParticipants[1].guildId,
+      attackerGuildId: null,
+      defenseCount: 80,
+      attackCount: 0,
+      fallenAt: null,
+      lastWinPartyKnockOutCount: 0,
+      updatedAt: "2026-05-27T11:15:36.000Z"
+    }
+  ]
+} satisfies GrandBattleSnapshot;
 
 const snapshot = {
   worldId: "1037" as GvgWorldId,
@@ -243,6 +287,69 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB"]);
     expect(getGrandBattleUpdateButton().disabled).toBe(false);
+    expect(document.querySelector(".castle-list")).toBeNull();
+  });
+
+  it("loads and renders the GrandBattle snapshot after applying the source", async () => {
+    const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
+    const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
+    renderComponent(undefined, undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+
+    expect(loadGrandBattleLatestSnapshot).toHaveBeenCalledWith({
+      serverId: "japan",
+      worldInput: "50",
+      worldNumber: 50,
+      classId: 3,
+      blockId: 0
+    });
+    expect(document.body.textContent).toContain("拠点監視");
+    expect(document.body.textContent).toContain("更新: 2026-05-27T11:15:36.000Z");
+    expect(getGuildSelectOptions()).toEqual([
+      "全拠点表示",
+      "ギルドA (1)",
+      "ギルドB (1)",
+      "ギルドC (0)",
+      "ギルドD (0)"
+    ]);
+    expect(document.querySelector(".castle-list--with-owner")).not.toBeNull();
+    expect(getRenderedCastleLabels()).toEqual(["拠点 1", "拠点 2"]);
+    expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("120");
+    expect(getCastleRows()[0].querySelector("[data-label='攻']")?.textContent).toBe("5");
+    expect(getCastleRows()[0].querySelector(".castle-list__ko")?.textContent).toBe("30");
+    expect(document.body.textContent).toContain("ギルドA");
+    expect(document.body.textContent).toContain("ギルドB");
+
+    await act(async () => {
+      updateSelect(getGuildSelect(), grandBattleParticipants[0].guildId);
+    });
+
+    expect(document.querySelector(".castle-list--with-owner")).toBeNull();
+    expect(getRenderedCastleLabels()).toEqual(["拠点 1"]);
+  });
+
+  it("shows GrandBattle snapshot errors without clearing participant candidates", async () => {
+    const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
+    const loadGrandBattleLatestSnapshot = vi
+      .fn<typeof loadGrandBattleSnapshot>()
+      .mockRejectedValue(new Error("GrandBattle snapshotの取得に失敗しました。"));
+    renderComponent(undefined, undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+
+    expect(document.body.textContent).toContain("GrandBattle snapshotの取得に失敗しました。");
+    expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
     expect(document.querySelector(".castle-list")).toBeNull();
   });
 
@@ -507,6 +614,9 @@ function renderComponent(
   createRealtimeClient: () => GvgRealtimeClient = () => new MockGvgRealtimeClient(),
   loadGrandBattleParticipants: typeof loadGrandBattleParticipantGuilds = vi.fn(() =>
     Promise.resolve(grandBattleParticipants)
+  ),
+  loadGrandBattleLatestSnapshot: typeof loadGrandBattleSnapshot = vi.fn(() =>
+    Promise.resolve(grandBattleSnapshot)
   )
 ) {
   container = document.createElement("div");
@@ -518,6 +628,7 @@ function renderComponent(
       <GuildBattlePlaceholder
         loadSnapshot={loadSnapshot}
         loadGrandBattleParticipants={loadGrandBattleParticipants}
+        loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
         createRealtimeClient={createRealtimeClient}
       />
     );
@@ -622,6 +733,7 @@ async function commitGrandBattleWorldWithKey(key: "Enter" | "Tab") {
 async function clickGrandBattleUpdateButton() {
   await act(async () => {
     getGrandBattleUpdateButton().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
     await Promise.resolve();
   });
 }

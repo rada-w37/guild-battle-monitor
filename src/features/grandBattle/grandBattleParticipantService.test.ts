@@ -4,6 +4,7 @@ import {
   createGrandBattleWorldId,
   findGrandBattleWorldGroupId,
   loadGrandBattleParticipantGuilds,
+  loadGrandBattleSnapshot,
   normalizeGrandBattleParticipantGuilds
 } from "./grandBattleParticipantService";
 
@@ -76,6 +77,65 @@ describe("grandBattleParticipantService", () => {
       { guildId: "111111111050", guildName: "ギルドA" },
       { guildId: "222222222050", guildName: "ギルドB" }
     ]);
+    expect(requestedUrls).toEqual([
+      "https://api.mentemori.icu/wgroups",
+      "https://api.mentemori.icu/wg/12/globalgvg/3/0/latest"
+    ]);
+  });
+
+  it("loads a GrandBattle snapshot through wgroups and globalgvg/latest", async () => {
+    const requestedUrls: string[] = [];
+    const fetcher: GrandBattleFetcher = async (input) => {
+      requestedUrls.push(String(input));
+
+      if (String(input).endsWith("/wgroups")) {
+        return createMockResponse({ status: 200, data: [{ group_id: 12, worlds: [1050] }] });
+      }
+
+      return createMockResponse({
+        status: 200,
+        timestamp: 1779880536,
+        data: {
+          guilds: {
+            "111111111050": "ギルドA"
+          },
+          castles: [
+            {
+              CastleId: 1,
+              GuildId: 111111111050,
+              DefensePartyCount: 120,
+              AttackPartyCount: 0
+            }
+          ]
+        }
+      });
+    };
+
+    await expect(
+      loadGrandBattleSnapshot(
+        {
+          serverId: "japan",
+          worldInput: "50",
+          worldNumber: 50,
+          classId: 3,
+          blockId: 0
+        },
+        { fetcher }
+      )
+    ).resolves.toMatchObject({
+      capturedAt: "2026-05-27T11:15:36.000Z",
+      guildNames: {
+        "111111111050": "ギルドA"
+      },
+      castles: [
+        {
+          castleId: "1",
+          ownerGuildId: "111111111050",
+          defenseCount: 120,
+          attackCount: 0
+        }
+      ]
+    });
     expect(requestedUrls).toEqual([
       "https://api.mentemori.icu/wgroups",
       "https://api.mentemori.icu/wg/12/globalgvg/3/0/latest"

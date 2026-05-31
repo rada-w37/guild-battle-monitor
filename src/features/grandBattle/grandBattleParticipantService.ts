@@ -6,10 +6,12 @@ import {
   type FetchGrandBattleOptions,
   type GrandBattleWorldGroupResponse
 } from "./grandBattleApiClient";
+import { normalizeGrandBattleSnapshot } from "./normalizeGrandBattleSnapshot";
 import type {
   GrandBattleParticipantGuildCandidate,
   GrandBattleResolvedSource,
-  GrandBattleServerId
+  GrandBattleServerId,
+  GrandBattleSnapshot
 } from "./types";
 
 const SERVER_WORLD_BASE: Record<GrandBattleServerId, number> = {
@@ -20,13 +22,7 @@ export async function loadGrandBattleParticipantGuilds(
   source: GrandBattleResolvedSource,
   options: FetchGrandBattleOptions = {}
 ): Promise<readonly GrandBattleParticipantGuildCandidate[]> {
-  const worldId = createGrandBattleWorldId(source.serverId, source.worldNumber);
-  const worldGroupsResponse = await fetchGrandBattleWorldGroups(options);
-  const worldGroupId = findGrandBattleWorldGroupId(worldGroupsResponse.data, worldId);
-
-  if (worldGroupId === null) {
-    throw new GrandBattleApiError("対象worldのワールドグループが見つかりません。");
-  }
+  const worldGroupId = await resolveGrandBattleWorldGroupId(source, options);
 
   const latestResponse = await fetchGrandBattleLatest(
     {
@@ -38,6 +34,23 @@ export async function loadGrandBattleParticipantGuilds(
   );
 
   return normalizeGrandBattleParticipantGuilds(latestResponse.data?.guilds);
+}
+
+export async function loadGrandBattleSnapshot(
+  source: GrandBattleResolvedSource,
+  options: FetchGrandBattleOptions = {}
+): Promise<GrandBattleSnapshot> {
+  const worldGroupId = await resolveGrandBattleWorldGroupId(source, options);
+  const latestResponse = await fetchGrandBattleLatest(
+    {
+      worldGroupId,
+      classId: source.classId,
+      blockId: source.blockId
+    },
+    options
+  );
+
+  return normalizeGrandBattleSnapshot(latestResponse, source);
 }
 
 export function createGrandBattleWorldId(serverId: GrandBattleServerId, worldNumber: number): number {
@@ -79,6 +92,21 @@ export function normalizeGrandBattleParticipantGuilds(
       guildId: guildId.trim() as GvgGuildId,
       guildName
     }));
+}
+
+async function resolveGrandBattleWorldGroupId(
+  source: GrandBattleResolvedSource,
+  options: FetchGrandBattleOptions
+): Promise<number> {
+  const worldId = createGrandBattleWorldId(source.serverId, source.worldNumber);
+  const worldGroupsResponse = await fetchGrandBattleWorldGroups(options);
+  const worldGroupId = findGrandBattleWorldGroupId(worldGroupsResponse.data, worldId);
+
+  if (worldGroupId === null) {
+    throw new GrandBattleApiError("対象worldのワールドグループが見つかりません。");
+  }
+
+  return worldGroupId;
 }
 
 function toNumber(value: unknown): number | null {
