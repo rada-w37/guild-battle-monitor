@@ -304,17 +304,18 @@ export function GuildBattlePlaceholder({
     return { client: runtimeService.createRealtimeClient(), testModeClient: null };
   }
 
-  function handleAlertThresholdChange(nextThresholds: EditableGuildBattleAlertThresholds) {
+  function handleAlertThresholdChange(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
     const validation = validateGuildBattleAlertThresholds(nextThresholds);
 
     if (!validation.valid) {
       setAlertThresholdError(validation.error);
-      return;
+      return false;
     }
 
     setAlertThresholdError(null);
     setEditableAlertThresholds(validation.thresholds);
     saveGuildBattleAlertThresholds(validation.thresholds);
+    return true;
   }
 
   function handleAlertThresholdReset() {
@@ -429,7 +430,9 @@ export function GuildBattlePlaceholder({
     grandBattleParticipantRequestSeqRef.current = requestSeq;
     setGrandBattleCandidateSource(source);
     setGrandBattleParticipantLoadState({ status: "loading" });
-    setGrandBattleSnapshotLoadState({ status: "idle" });
+    if (grandBattleSnapshotLoadState.status !== "success") {
+      setGrandBattleSnapshotLoadState({ status: "idle" });
+    }
     setSelectedGrandBattleGuildId("");
     stopGrandBattleRealtime("grand battle candidate changed", { nextState: "idle" });
 
@@ -461,7 +464,9 @@ export function GuildBattlePlaceholder({
     stopGrandBattleRealtime("grand battle snapshot reload", { nextState: "idle" });
     const requestSeq = grandBattleSnapshotRequestSeqRef.current + 1;
     grandBattleSnapshotRequestSeqRef.current = requestSeq;
-    setGrandBattleSnapshotLoadState({ status: "loading" });
+    if (grandBattleSnapshotLoadState.status !== "success") {
+      setGrandBattleSnapshotLoadState({ status: "loading" });
+    }
 
     try {
       const snapshot = await loadGrandBattleLatestSnapshot(source);
@@ -473,7 +478,7 @@ export function GuildBattlePlaceholder({
         }
       }
     } catch (error) {
-      if (grandBattleSnapshotRequestSeqRef.current === requestSeq) {
+      if (grandBattleSnapshotRequestSeqRef.current === requestSeq && grandBattleSnapshotLoadState.status !== "success") {
         setGrandBattleSnapshotLoadState({
           status: "error",
           error: error instanceof Error ? error : new Error("GrandBattle snapshotの取得に失敗しました。")
@@ -1127,7 +1132,7 @@ function SettingsDialog({
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
   readonly showGuildBattleOnlySettings: boolean;
-  readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => void;
+  readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
   readonly onAlertThresholdReset: () => void;
   readonly onAutoUpdateToggle: () => void;
   readonly onClose: () => void;
@@ -1204,7 +1209,7 @@ function AlertThresholdSettings({
 }: {
   readonly error: string | null;
   readonly thresholds: EditableGuildBattleAlertThresholds;
-  readonly onChange: (thresholds: EditableGuildBattleAlertThresholds) => void;
+  readonly onChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
   readonly onReset: () => void;
 }) {
   return (
@@ -1215,17 +1220,17 @@ function AlertThresholdSettings({
         <ThresholdInput
           label="注意"
           value={thresholds.warningDefenseCount}
-          onChange={(warningDefenseCount) => onChange({ ...thresholds, warningDefenseCount })}
+          onCommit={(warningDefenseCount) => onChange({ ...thresholds, warningDefenseCount })}
         />
         <ThresholdInput
           label="危険"
           value={thresholds.dangerDefenseCount}
-          onChange={(dangerDefenseCount) => onChange({ ...thresholds, dangerDefenseCount })}
+          onCommit={(dangerDefenseCount) => onChange({ ...thresholds, dangerDefenseCount })}
         />
         <ThresholdInput
           label="最優先"
           value={thresholds.criticalDefenseCount}
-          onChange={(criticalDefenseCount) => onChange({ ...thresholds, criticalDefenseCount })}
+          onCommit={(criticalDefenseCount) => onChange({ ...thresholds, criticalDefenseCount })}
         />
         <button className="load-form__button load-form__button--secondary" type="button" onClick={onReset}>
           デフォルト
@@ -1243,12 +1248,35 @@ function AlertThresholdSettings({
 function ThresholdInput({
   label,
   value,
-  onChange
+  onCommit
 }: {
   readonly label: string;
   readonly value: number;
-  readonly onChange: (value: number) => void;
+  readonly onCommit: (value: number) => boolean;
 }) {
+  const [draftValue, setDraftValue] = useState(String(value));
+
+  useEffect(() => {
+    setDraftValue(String(value));
+  }, [value]);
+
+  function commitDraftValue() {
+    const trimmedValue = draftValue.trim();
+    const nextValue = Number(trimmedValue);
+
+    if (
+      trimmedValue.length === 0 ||
+      !Number.isSafeInteger(nextValue) ||
+      nextValue < 0 ||
+      !onCommit(nextValue)
+    ) {
+      setDraftValue(String(value));
+      return;
+    }
+
+    setDraftValue(String(nextValue));
+  }
+
   return (
     <label className="field threshold-field">
       <span className="field__label">{label}</span>
@@ -1257,8 +1285,19 @@ function ThresholdInput({
           className="field__input field__input--narrow"
           min="0"
           type="number"
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
+          value={draftValue}
+          onBlur={commitDraftValue}
+          onChange={(event) => setDraftValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitDraftValue();
+            }
+
+            if (event.key === "Tab") {
+              commitDraftValue();
+            }
+          }}
         />
       </span>
     </label>

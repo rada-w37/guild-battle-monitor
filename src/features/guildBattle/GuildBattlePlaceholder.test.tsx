@@ -506,6 +506,56 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.querySelector(".castle-list")).toBeNull();
   });
 
+  it("keeps the current GrandBattle list visible while refreshing a later snapshot", async () => {
+    const nextSnapshot = {
+      ...grandBattleSnapshot,
+      source: {
+        ...grandBattleSnapshot.source,
+        blockId: 1 as const
+      },
+      capturedAt: "2026-05-27T11:20:36.000Z",
+      castles: [
+        {
+          ...grandBattleSnapshot.castles[0],
+          defenseCount: 55
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+    const deferredSnapshot = createDeferred<GrandBattleSnapshot>();
+    const loadGrandBattleLatestSnapshot = vi
+      .fn<typeof loadGrandBattleSnapshot>()
+      .mockResolvedValueOnce(grandBattleSnapshot)
+      .mockReturnValueOnce(deferredSnapshot.promise);
+    renderComponent(undefined, undefined, undefined, loadGrandBattleLatestSnapshot);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+    expect(getRenderedCastleLabels()).toEqual(["拠点 1", "拠点 2"]);
+
+    await act(async () => {
+      updateSelect(getGrandBattleSelect("ブロック"), "1");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await clickGrandBattleUpdateButton();
+
+    expect(getRenderedCastleLabels()).toEqual(["拠点 1", "拠点 2"]);
+    expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("120");
+
+    await act(async () => {
+      deferredSnapshot.resolve(nextSnapshot);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getRenderedCastleLabels()).toEqual(["拠点 1"]);
+    expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("55");
+  });
+
   it("stops GuildBattle realtime when switching to GrandBattle", async () => {
     const realtimeClient = new MockGvgRealtimeClient();
     renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
@@ -793,7 +843,11 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(getThresholdInputs()[1], "30");
     });
 
-    expect(getSettingsDialog().textContent).toContain("注意 > 危険 > 最優先");
+    expect(getSettingsDialog().textContent ?? "").not.toContain("注意 > 危険 > 最優先");
+    expect(getThresholdInputs()[1].value).toBe("30");
+
+    await blurThresholdInput(1);
+
     expect(getThresholdInputs()[1].value).toBe("15");
   });
 
@@ -804,6 +858,10 @@ describe("GuildBattlePlaceholder", () => {
     act(() => {
       updateInput(getThresholdInputs()[0], "40");
     });
+    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY) ?? "").not.toContain(
+      '"warningDefenseCount":40'
+    );
+    await commitThresholdInputWithKey(0, "Enter");
 
     expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
       '"warningDefenseCount":40'
@@ -1033,6 +1091,20 @@ function getThresholdInputs() {
   return inputs;
 }
 
+async function blurThresholdInput(index: number) {
+  await act(async () => {
+    getThresholdInputs()[index].dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    await Promise.resolve();
+  });
+}
+
+async function commitThresholdInputWithKey(index: number, key: "Enter" | "Tab") {
+  await act(async () => {
+    getThresholdInputs()[index].dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    await Promise.resolve();
+  });
+}
+
 function getAutoUpdateButton() {
   const button = getSettingsDialog().querySelector<HTMLButtonElement>(".auto-update-toggle");
 
@@ -1090,6 +1162,17 @@ function updateSelect(select: HTMLSelectElement, value: string) {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
   valueSetter?.call(select, value);
   select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: unknown) => void = () => {};
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
 }
 
 function createCastleStatusBytes({
