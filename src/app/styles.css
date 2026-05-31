@@ -824,12 +824,15 @@ select {
 
 .castle-list__count {
   display: inline-flex;
-  justify-content: space-between;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
   min-width: 68px;
   overflow-wrap: normal;
   font-size: 1rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -844,18 +847,21 @@ select {
 
 .castle-list__ko {
   display: inline-flex;
-  justify-content: space-between;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
   min-width: 62px;
   overflow-wrap: normal;
   font-size: 1rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  text-align: center;
   white-space: nowrap;
 }
 
 .ko-value {
   min-width: 18px;
-  text-align: right;
+  text-align: center;
 }
 
 .ko-value--attack {
