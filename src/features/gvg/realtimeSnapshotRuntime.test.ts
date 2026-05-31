@@ -45,9 +45,37 @@ describe("GvgRealtimeSnapshotRuntime", () => {
     client.emitPayload(createCastleStatusBytes({ defenseCount: 12 }));
 
     expect(client.subscriptions).toHaveLength(1);
+    expect(client.subscriptions[0].streamId).toBe(guildStreamId);
     expect(runtime.snapshot?.castles[0].defenseCount).toBe(12);
     expect(snapshots[0].castles[0].defenseCount).toBe(12);
     expect(initialSnapshot.castles[0].defenseCount).toBe(30);
+  });
+
+  it("uses an injected subscription factory", async () => {
+    const client = new MockGvgRealtimeClient();
+    const customStreamId = buildGvgStreamId({
+      castleId: 0,
+      block: 2,
+      worldGroupId: 12,
+      gvgClass: 3,
+      worldId: 0
+    });
+    const customSubscription = {
+      streamId: customStreamId,
+      payload: new Uint8Array([1, 2, 3, 4])
+    };
+    const runtime = new GvgRealtimeSnapshotRuntime({
+      client,
+      createSubscription: () => customSubscription,
+      getReceivedAt: () => receivedAt
+    });
+
+    await runtime.start(createSnapshot());
+
+    expect(client.subscriptions).toEqual([customSubscription]);
+
+    runtime.stop();
+    expect(client.sentUnsubscriptions).toEqual([customSubscription]);
   });
 
   it("updates attack count through the runtime pipeline", async () => {

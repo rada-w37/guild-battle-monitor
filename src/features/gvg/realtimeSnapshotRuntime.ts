@@ -4,6 +4,7 @@ import type { GvgSnapshot } from "./types";
 
 export interface GvgRealtimeSnapshotRuntimeOptions {
   readonly client: GvgRealtimeClient;
+  readonly createSubscription?: (snapshot: GvgSnapshot) => GvgRealtimeSubscription;
   readonly getReceivedAt?: () => string;
   readonly onSnapshotUpdated?: (snapshot: GvgSnapshot, result: RealtimePayloadProcessResult) => void;
   readonly onError?: (error: Error) => void;
@@ -11,6 +12,7 @@ export interface GvgRealtimeSnapshotRuntimeOptions {
 
 export class GvgRealtimeSnapshotRuntime {
   private readonly client: GvgRealtimeClient;
+  private readonly createSubscription: (snapshot: GvgSnapshot) => GvgRealtimeSubscription;
   private readonly getReceivedAt: () => string;
   private readonly onSnapshotUpdated?: (snapshot: GvgSnapshot, result: RealtimePayloadProcessResult) => void;
   private readonly onError?: (error: Error) => void;
@@ -21,6 +23,8 @@ export class GvgRealtimeSnapshotRuntime {
 
   constructor(options: GvgRealtimeSnapshotRuntimeOptions) {
     this.client = options.client;
+    this.createSubscription =
+      options.createSubscription ?? ((snapshot) => createGuildBattleSubscription(snapshot.worldId));
     this.getReceivedAt = options.getReceivedAt ?? (() => new Date().toISOString());
     this.onSnapshotUpdated = options.onSnapshotUpdated;
     this.onError = options.onError;
@@ -45,7 +49,7 @@ export class GvgRealtimeSnapshotRuntime {
     }
 
     this.isStarted = true;
-    const subscription = createGuildBattleSubscription(initialSnapshot.worldId);
+    const subscription = this.createSubscription(initialSnapshot);
     this.currentSubscription = subscription;
 
     await this.client.connect();

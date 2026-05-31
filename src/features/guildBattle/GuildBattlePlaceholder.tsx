@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BrowserGvgRealtimeClient } from "../gvg/browserRealtimeClient";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
-import type { GvgRealtimeClient, GvgRealtimeConnectionState } from "../gvg/realtimeClientTypes";
+import {
+  createGuildBattleSubscription,
+  type GvgRealtimeClient,
+  type GvgRealtimeConnectionState,
+  type GvgRealtimeSubscription
+} from "../gvg/realtimeClientTypes";
 import { GvgRealtimeSnapshotRuntime } from "../gvg/realtimeSnapshotRuntime";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import {
@@ -45,6 +50,12 @@ interface GuildBattlePlaceholderProps {
   readonly createRealtimeClient?: () => GvgRealtimeClient;
 }
 
+interface GuildBattleRuntimeService {
+  readonly loadSnapshot: typeof loadLocalGvgSnapshot;
+  readonly createRealtimeClient: () => GvgRealtimeClient;
+  readonly createSubscription: (snapshot: GvgSnapshot) => GvgRealtimeSubscription;
+}
+
 export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient()
@@ -65,6 +76,14 @@ export function GuildBattlePlaceholder({
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
 
+  const runtimeService = useMemo<GuildBattleRuntimeService>(
+    () => ({
+      loadSnapshot,
+      createRealtimeClient,
+      createSubscription: (snapshot) => createGuildBattleSubscription(snapshot.worldId)
+    }),
+    [createRealtimeClient, loadSnapshot]
+  );
   const world = shared.worldInput;
   const worldId = useMemo(() => createWorldIdFromWorldNumber(shared.worldNumber), [shared.worldNumber]);
   const castleSortMode = shared.sortMode;
@@ -93,7 +112,7 @@ export function GuildBattlePlaceholder({
     setLoadState({ status: "loading" });
 
     try {
-      const snapshot = await loadSnapshot(nextWorldId);
+      const snapshot = await runtimeService.loadSnapshot(nextWorldId);
       setLoadState({ status: "success", data: snapshot });
 
       if (isAutoUpdateEnabled) {
@@ -158,6 +177,7 @@ export function GuildBattlePlaceholder({
     });
     const runtime = new GvgRealtimeSnapshotRuntime({
       client,
+      createSubscription: runtimeService.createSubscription,
       onSnapshotUpdated: (snapshot) => {
         setLoadState({ status: "success", data: snapshot });
       },
@@ -208,7 +228,7 @@ export function GuildBattlePlaceholder({
       return { client: testModeClient, testModeClient };
     }
 
-    return { client: createRealtimeClient(), testModeClient: null };
+    return { client: runtimeService.createRealtimeClient(), testModeClient: null };
   }
 
   function handleAlertThresholdChange(nextThresholds: EditableGuildBattleAlertThresholds) {
