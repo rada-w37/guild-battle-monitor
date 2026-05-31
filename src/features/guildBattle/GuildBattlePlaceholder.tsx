@@ -165,6 +165,8 @@ export function GuildBattlePlaceholder({
     [editableAlertThresholds]
   );
   const isRealtimeActive = realtimeState.status === "connecting" || realtimeState.status === "connected";
+  const isGrandBattleRealtimeActive =
+    grandBattleRealtimeState.status === "connecting" || grandBattleRealtimeState.status === "connected";
 
   useEffect(() => {
     return () => {
@@ -218,11 +220,16 @@ export function GuildBattlePlaceholder({
 
     if (!nextEnabled) {
       stopRealtime("auto update disabled", { nextState: "idle" });
+      stopGrandBattleRealtime("auto update disabled", { nextState: "idle" });
       return;
     }
 
-    if (loadState.status === "success") {
+    if (activeMode === "guildBattle" && loadState.status === "success" && loadState.data.worldId === worldId) {
       await startRealtime(loadState.data);
+    }
+
+    if (activeMode === "grandBattle" && grandBattleSnapshotLoadState.status === "success") {
+      await startGrandBattleRealtime(grandBattleSnapshotLoadState.data);
     }
   }
 
@@ -461,7 +468,9 @@ export function GuildBattlePlaceholder({
 
       if (grandBattleSnapshotRequestSeqRef.current === requestSeq) {
         setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
-        await startGrandBattleRealtime(snapshot);
+        if (isAutoUpdateEnabled) {
+          await startGrandBattleRealtime(snapshot);
+        }
       }
     } catch (error) {
       if (grandBattleSnapshotRequestSeqRef.current === requestSeq) {
@@ -552,6 +561,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleModeChange(nextMode: BattleMonitorMode) {
+    if (activeMode === nextMode) {
+      return;
+    }
+
     if (activeMode === "guildBattle" && nextMode === "grandBattle") {
       stopRealtime("mode changed to grand battle", { nextState: "idle" });
     }
@@ -561,6 +574,13 @@ export function GuildBattlePlaceholder({
     }
 
     setActiveMode(nextMode);
+
+    if (nextMode === "guildBattle") {
+      if (isAutoUpdateEnabled && loadState.status === "success" && loadState.data.worldId === worldId) {
+        void startRealtime(loadState.data);
+      }
+      return;
+    }
 
     if (nextMode === "grandBattle") {
       const nextDraftSource = {
@@ -576,6 +596,18 @@ export function GuildBattlePlaceholder({
           ...nextDraftSource,
           worldNumber: nextDraftSource.worldNumber
         });
+      }
+
+      if (
+        isAutoUpdateEnabled &&
+        nextDraftSource.worldNumber !== null &&
+        grandBattleSnapshotLoadState.status === "success" &&
+        isSameGrandBattleSource(grandBattleSnapshotLoadState.data.source, {
+          ...nextDraftSource,
+          worldNumber: nextDraftSource.worldNumber
+        })
+      ) {
+        void startGrandBattleRealtime(grandBattleSnapshotLoadState.data);
       }
     }
   }
@@ -596,12 +628,7 @@ export function GuildBattlePlaceholder({
             className="settings-button"
             type="button"
             aria-label="設定を開く"
-            disabled={activeMode === "grandBattle"}
-            onClick={() => {
-              if (activeMode === "guildBattle") {
-                setIsSettingsDialogOpen(true);
-              }
-            }}
+            onClick={() => setIsSettingsDialogOpen(true)}
           >
             <svg aria-hidden="true" className="settings-button__icon" viewBox="0 0 24 24">
               <path d="M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.6A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a9.3 9.3 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.4 2.6h4l.4-2.6a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" />
@@ -628,6 +655,24 @@ export function GuildBattlePlaceholder({
           </button>
         </div>
 
+        {isSettingsDialogOpen ? (
+          <SettingsDialog
+            alertThresholdError={alertThresholdError}
+            castleSortMode={castleSortMode}
+            editableAlertThresholds={editableAlertThresholds}
+            isAutoUpdateEnabled={isAutoUpdateEnabled}
+            isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
+            isTestModeEnabled={isTestModeEnabled}
+            showGuildBattleOnlySettings={activeMode === "guildBattle"}
+            onAlertThresholdChange={handleAlertThresholdChange}
+            onAlertThresholdReset={handleAlertThresholdReset}
+            onAutoUpdateToggle={handleAutoUpdateToggle}
+            onClose={() => setIsSettingsDialogOpen(false)}
+            onSortModeChange={handleSortModeChange}
+            onTestModeChange={setIsTestModeEnabled}
+          />
+        ) : null}
+
         {activeMode === "guildBattle" ? (
           <>
         <form
@@ -653,23 +698,6 @@ export function GuildBattlePlaceholder({
             更新
           </button>
         </form>
-
-        {isSettingsDialogOpen ? (
-          <SettingsDialog
-            alertThresholdError={alertThresholdError}
-            castleSortMode={castleSortMode}
-            editableAlertThresholds={editableAlertThresholds}
-            isAutoUpdateEnabled={isAutoUpdateEnabled}
-            isRealtimeActive={isRealtimeActive}
-            isTestModeEnabled={isTestModeEnabled}
-            onAlertThresholdChange={handleAlertThresholdChange}
-            onAlertThresholdReset={handleAlertThresholdReset}
-            onAutoUpdateToggle={handleAutoUpdateToggle}
-            onClose={() => setIsSettingsDialogOpen(false)}
-            onSortModeChange={handleSortModeChange}
-            onTestModeChange={setIsTestModeEnabled}
-          />
-        ) : null}
 
         <SnapshotStatus
           alertThresholds={alertThresholds}
@@ -699,10 +727,14 @@ export function GuildBattlePlaceholder({
             participantLoadState={grandBattleParticipantLoadState}
             selectedGuildId={selectedGrandBattleGuildId}
             snapshotLoadState={grandBattleSnapshotLoadState}
+            alertThresholds={alertThresholds}
+            isAutoUpdateEnabled={isAutoUpdateEnabled}
+            realtimeState={grandBattleRealtimeState}
             onApplySource={handleGrandBattleApplySource}
             onBlockChange={handleGrandBattleBlockChange}
             onClassChange={handleGrandBattleClassChange}
             onGuildChange={setSelectedGrandBattleGuildId}
+            onOpenSettings={() => setIsSettingsDialogOpen(true)}
             onServerChange={handleGrandBattleServerChange}
             onWorldCommit={handleGrandBattleWorldCommit}
             onWorldInputChange={handleGrandBattleWorldInputChange}
@@ -740,30 +772,38 @@ function isSameGrandBattleSource(
 }
 
 function GrandBattleSetupPanel({
+  alertThresholds,
   canApplySource,
   draftSource,
+  isAutoUpdateEnabled,
   participantCandidates,
   participantLoadState,
+  realtimeState,
   selectedGuildId,
   snapshotLoadState,
   onApplySource,
   onBlockChange,
   onClassChange,
   onGuildChange,
+  onOpenSettings,
   onServerChange,
   onWorldCommit,
   onWorldInputChange
 }: {
+  readonly alertThresholds: GuildBattleAlertThresholds;
   readonly canApplySource: boolean;
   readonly draftSource: GrandBattleSource;
+  readonly isAutoUpdateEnabled: boolean;
   readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
   readonly participantLoadState: AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>;
+  readonly realtimeState: GvgRealtimeConnectionState;
   readonly selectedGuildId: GvgGuildId | "";
   readonly snapshotLoadState: AsyncLoadState<GrandBattleSnapshot>;
   readonly onApplySource: () => void;
   readonly onBlockChange: (blockId: GrandBattleBlockId) => void;
   readonly onClassChange: (classId: GrandBattleClassId) => void;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+  readonly onOpenSettings: () => void;
   readonly onServerChange: (serverId: GrandBattleServerId) => void;
   readonly onWorldCommit: () => void;
   readonly onWorldInputChange: (worldInput: string) => void;
@@ -849,10 +889,14 @@ function GrandBattleSetupPanel({
       </button>
 
       <GrandBattleSnapshotStatus
+        alertThresholds={alertThresholds}
+        isAutoUpdateEnabled={isAutoUpdateEnabled}
         participantCandidates={participantCandidates}
+        realtimeState={realtimeState}
         selectedGuildId={selectedGuildId}
         snapshotLoadState={snapshotLoadState}
         onGuildChange={onGuildChange}
+        onOpenSettings={onOpenSettings}
       />
     </section>
   );
@@ -895,15 +939,23 @@ function GrandBattleParticipantList({
 }
 
 function GrandBattleSnapshotStatus({
+  alertThresholds,
+  isAutoUpdateEnabled,
   participantCandidates,
+  realtimeState,
   selectedGuildId,
   snapshotLoadState,
-  onGuildChange
+  onGuildChange,
+  onOpenSettings
 }: {
+  readonly alertThresholds: GuildBattleAlertThresholds;
+  readonly isAutoUpdateEnabled: boolean;
   readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
+  readonly realtimeState: GvgRealtimeConnectionState;
   readonly selectedGuildId: GvgGuildId | "";
   readonly snapshotLoadState: AsyncLoadState<GrandBattleSnapshot>;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+  readonly onOpenSettings: () => void;
 }) {
   if (snapshotLoadState.status === "idle") {
     return null;
@@ -927,24 +979,36 @@ function GrandBattleSnapshotStatus({
 
   return (
     <GrandBattleSnapshotSummary
+      alertThresholds={alertThresholds}
+      isAutoUpdateEnabled={isAutoUpdateEnabled}
       participantCandidates={participantCandidates}
+      realtimeState={realtimeState}
       selectedGuildId={selectedGuildId}
       snapshot={snapshotLoadState.data}
       onGuildChange={onGuildChange}
+      onOpenSettings={onOpenSettings}
     />
   );
 }
 
 function GrandBattleSnapshotSummary({
+  alertThresholds,
+  isAutoUpdateEnabled,
   participantCandidates,
+  realtimeState,
   selectedGuildId,
   snapshot,
-  onGuildChange
+  onGuildChange,
+  onOpenSettings
 }: {
+  readonly alertThresholds: GuildBattleAlertThresholds;
+  readonly isAutoUpdateEnabled: boolean;
   readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
+  readonly realtimeState: GvgRealtimeConnectionState;
   readonly selectedGuildId: GvgGuildId | "";
   readonly snapshot: GrandBattleSnapshot;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+  readonly onOpenSettings: () => void;
 }) {
   const guildCandidates = useMemo(
     () => createGrandBattleGuildCandidates(participantCandidates, snapshot),
@@ -953,8 +1017,8 @@ function GrandBattleSnapshotSummary({
   const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === selectedGuildId);
   const guildSelectValue = selectedGuildCandidate?.guildId ?? "";
   const viewModels = useMemo(
-    () => createGrandBattleCastleListViewModels(snapshot, guildSelectValue),
-    [guildSelectValue, snapshot]
+    () => createGrandBattleCastleListViewModels(snapshot, guildSelectValue, alertThresholds),
+    [alertThresholds, guildSelectValue, snapshot]
   );
 
   return (
@@ -963,6 +1027,11 @@ function GrandBattleSnapshotSummary({
         <h2 className="snapshot-summary__title" id="grand-battle-snapshot-title">
           拠点監視
         </h2>
+        <ConnectionIndicator
+          isAutoUpdateEnabled={isAutoUpdateEnabled}
+          state={realtimeState}
+          onClick={onOpenSettings}
+        />
         <span className="snapshot-summary__captured-at">更新: {snapshot.capturedAt}</span>
       </div>
       <BattleMonitorGuildSelect
@@ -1043,6 +1112,7 @@ function SettingsDialog({
   isAutoUpdateEnabled,
   isRealtimeActive,
   isTestModeEnabled,
+  showGuildBattleOnlySettings,
   onAlertThresholdChange,
   onAlertThresholdReset,
   onAutoUpdateToggle,
@@ -1056,6 +1126,7 @@ function SettingsDialog({
   readonly isAutoUpdateEnabled: boolean;
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
+  readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => void;
   readonly onAlertThresholdReset: () => void;
   readonly onAutoUpdateToggle: () => void;
@@ -1085,6 +1156,7 @@ function SettingsDialog({
             onChange={onAlertThresholdChange}
             onReset={onAlertThresholdReset}
           />
+          {showGuildBattleOnlySettings ? (
           <section className="settings-section">
             <h3>並び順</h3>
             <label className="sort-toggle">
@@ -1096,6 +1168,7 @@ function SettingsDialog({
               <span>危険度順で表示</span>
             </label>
           </section>
+          ) : null}
           <section className="settings-section">
             <h3>自動更新</h3>
             <div className="auto-update-setting">
@@ -1108,7 +1181,7 @@ function SettingsDialog({
               </button>
             </div>
           </section>
-          {IS_DEV ? (
+          {IS_DEV && showGuildBattleOnlySettings ? (
             <section className="settings-section">
               <TestModeSettings
                 checked={isTestModeEnabled}

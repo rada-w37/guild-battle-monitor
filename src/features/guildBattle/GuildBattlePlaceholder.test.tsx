@@ -171,10 +171,13 @@ describe("GuildBattlePlaceholder", () => {
     expect(getGrandBattleSelect("ブロック").value).toBe("0");
     expect(getGrandBattleUpdateButton().disabled).toBe(true);
     expect(document.querySelector(".startup-panel")).toBeNull();
-    expect(getSettingsButton().disabled).toBe(true);
+    expect(getSettingsButton().disabled).toBe(false);
 
     await clickSettingsButton();
-    expect(document.querySelector("[role='dialog']")).toBeNull();
+    expect(getSettingsDialog()).not.toBeNull();
+    expect(document.querySelector(".auto-update-toggle")).not.toBeNull();
+    expect(document.querySelector(".sort-toggle")).toBeNull();
+    expect(document.querySelector(".test-mode-settings")).toBeNull();
   });
 
   it("loads GrandBattle participant guilds from restored world when opening GrandBattle mode", async () => {
@@ -402,6 +405,86 @@ describe("GuildBattlePlaceholder", () => {
     expect(getCastleRows()[0].querySelector("[data-label='攻']")?.textContent).toBe("7");
     expect(getCastleRows()[0].querySelector(".castle-list__ko")?.textContent).toBe("10");
     expect(getCastleListText()).toContain("ギルドC");
+
+    await act(async () => {
+      realtimeClient.emitPayload(
+        createGrandBattleCastleStatusBytes({
+          castleId: 1,
+          guildId: 333333333,
+          attackerGuildId: 222222222,
+          defenseCount: 9,
+          attackCount: 7,
+          lastWinPartyKnockOutCount: 10
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(getCastleRows()[0].classList.contains("castle-list__row--critical")).toBe(true);
+  });
+
+  it("does not start GrandBattle realtime when auto update is off", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    window.localStorage.setItem(
+      GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        world: "50",
+        selectedGuildId: "",
+        sortByAlert: false,
+        autoUpdate: false
+      })
+    );
+    renderComponent(undefined, () => realtimeClient);
+
+    await clickButton("GrandBattle");
+    await clickGrandBattleUpdateButton();
+
+    expect(realtimeClient.subscriptions).toHaveLength(0);
+    expect(getConnectionIndicator().classList.contains("connection-indicator--disabled")).toBe(true);
+  });
+
+  it("toggles GrandBattle auto update from the common settings dialog", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    window.localStorage.setItem(
+      GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        world: "50",
+        selectedGuildId: "",
+        sortByAlert: false,
+        autoUpdate: false
+      })
+    );
+    renderComponent(undefined, () => realtimeClient);
+
+    await clickButton("GrandBattle");
+    await clickGrandBattleUpdateButton();
+    expect(realtimeClient.subscriptions).toHaveLength(0);
+
+    await clickSettingsButton();
+    await clickButton("OFF");
+
+    expect(getStoredViewSettings().autoUpdate).toBe(true);
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+  });
+
+  it("stops GrandBattle realtime when auto update is turned off", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(undefined, () => realtimeClient);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await clickSettingsButton();
+    await clickButton("ON");
+
+    expect(getStoredViewSettings().autoUpdate).toBe(false);
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
+    expect(getConnectionIndicator().classList.contains("connection-indicator--disabled")).toBe(true);
   });
 
   it("shows GrandBattle snapshot errors without clearing participant candidates", async () => {
@@ -452,6 +535,27 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
     expect(realtimeClient.state).toEqual({ status: "disconnected", reason: "mode changed to guild battle" });
+  });
+
+  it("restarts GrandBattle realtime on mode return when auto update is on and a snapshot exists", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(undefined, () => realtimeClient);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await clickButton("GuildBattle");
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
+
+    await clickButton("GrandBattle");
+
+    expect(realtimeClient.subscriptions).toHaveLength(2);
+    expect(realtimeClient.state).toEqual({ status: "connected" });
   });
 
   it("restores world, sort, auto update, and selected guild from localStorage", async () => {

@@ -8,6 +8,12 @@ import type { GrandBattleSnapshot } from "./types";
 
 const guildA = "111111111050" as GvgGuildId;
 const guildB = "222222222050" as GvgGuildId;
+const alertThresholds = {
+  warningDefenseCount: 30,
+  dangerDefenseCount: 15,
+  criticalDefenseCount: 10,
+  criticalStates: []
+};
 
 const snapshot = {
   source: {
@@ -66,7 +72,7 @@ describe("grandBattle selectors", () => {
   });
 
   it("creates safe battle monitor castle view models", () => {
-    expect(createGrandBattleCastleListViewModels(snapshot, "")).toEqual([
+    expect(createGrandBattleCastleListViewModels(snapshot, "", alertThresholds)).toEqual([
       {
         castleId: "1",
         castleName: "拠点 1",
@@ -91,9 +97,25 @@ describe("grandBattle selectors", () => {
   });
 
   it("filters by selected owner guild without fallback", () => {
-    expect(createGrandBattleCastleListViewModels(snapshot, guildA).map((castle) => castle.castleId)).toEqual(["1"]);
+    expect(createGrandBattleCastleListViewModels(snapshot, guildA, alertThresholds).map((castle) => castle.castleId)).toEqual(["1"]);
     expect(
-      createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId).map((castle) => castle.castleId)
+      createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId, alertThresholds).map((castle) => castle.castleId)
     ).toEqual([]);
+  });
+
+  it("calculates alert levels from shared defense thresholds", () => {
+    const lowDefenseSnapshot = {
+      ...snapshot,
+      castles: [
+        { ...snapshot.castles[0], castleId: "1" as GvgCastleId, defenseCount: 29 },
+        { ...snapshot.castles[0], castleId: "2" as GvgCastleId, defenseCount: 14 },
+        { ...snapshot.castles[0], castleId: "3" as GvgCastleId, defenseCount: 9 },
+        { ...snapshot.castles[1], castleId: "4" as GvgCastleId, defenseCount: 0 }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(
+      createGrandBattleCastleListViewModels(lowDefenseSnapshot, "", alertThresholds).map((castle) => castle.alertLevel)
+    ).toEqual(["warning", "danger", "critical", "safe"]);
   });
 });

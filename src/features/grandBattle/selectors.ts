@@ -3,7 +3,9 @@ import type {
   BattleMonitorGuildCandidateViewModel
 } from "../battleMonitor/types";
 import type { GvgCastleId, GvgGuildId } from "../gvg/types";
+import type { GuildBattleAlertLevel, GuildBattleAlertThresholds } from "../guildBattle/types";
 import type {
+  GrandBattleCastle,
   GrandBattleParticipantGuildCandidate,
   GrandBattleSnapshot
 } from "./types";
@@ -21,7 +23,8 @@ export function createGrandBattleGuildCandidates(
 
 export function createGrandBattleCastleListViewModels(
   snapshot: GrandBattleSnapshot,
-  selectedGuildId: GvgGuildId | ""
+  selectedGuildId: GvgGuildId | "",
+  alertThresholds: GuildBattleAlertThresholds
 ): BattleMonitorCastleViewModel<GvgCastleId>[] {
   return snapshot.castles
     .filter((castle) => selectedGuildId.length === 0 || castle.ownerGuildId === selectedGuildId)
@@ -37,6 +40,29 @@ export function createGrandBattleCastleListViewModels(
         count: castle.lastWinPartyKnockOutCount,
         tone: castle.lastWinPartyKnockOutCount > 0 ? "defense" : "none"
       },
-      alertLevel: "safe"
+      alertLevel: getGrandBattleDefenseAlertLevel(castle, alertThresholds)
     }));
+}
+
+function getGrandBattleDefenseAlertLevel(
+  castle: Pick<GrandBattleCastle, "attackerGuildId" | "attackCount" | "defenseCount">,
+  thresholds: GuildBattleAlertThresholds
+): GuildBattleAlertLevel {
+  if (castle.attackerGuildId === null && castle.attackCount === 0) {
+    return "safe";
+  }
+
+  if (castle.defenseCount < thresholds.criticalDefenseCount) {
+    return "critical";
+  }
+
+  if (castle.defenseCount < thresholds.dangerDefenseCount) {
+    return "danger";
+  }
+
+  if (castle.defenseCount < thresholds.warningDefenseCount) {
+    return "warning";
+  }
+
+  return "safe";
 }
