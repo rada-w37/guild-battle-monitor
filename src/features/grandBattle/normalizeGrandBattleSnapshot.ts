@@ -11,7 +11,8 @@ const EMPTY_GUILD_ID_VALUES = new Set(["", "0"]);
 
 export function normalizeGrandBattleSnapshot(
   response: GrandBattleApiResponse<GrandBattleLatestDataResponse>,
-  source: GrandBattleResolvedSource
+  source: GrandBattleResolvedSource,
+  worldGroupId: number
 ): GrandBattleSnapshot {
   const data = response.data ?? {};
   const capturedAt = normalizeGrandBattleTimestamp(response.timestamp);
@@ -21,6 +22,7 @@ export function normalizeGrandBattleSnapshot(
 
   return {
     source,
+    worldGroupId,
     capturedAt,
     castles,
     guildNames: normalizeGrandBattleGuildNameMap(data.guilds)

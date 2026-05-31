@@ -37,6 +37,7 @@ const grandBattleSnapshot = {
     classId: 3,
     blockId: 0
   },
+  worldGroupId: 12,
   capturedAt: "2026-05-27T11:15:36.000Z",
   guildNames: {
     [grandBattleParticipants[0].guildId]: "ギルドA",
@@ -334,6 +335,46 @@ describe("GuildBattlePlaceholder", () => {
     expect(getRenderedCastleLabels()).toEqual(["拠点 1"]);
   });
 
+  it("updates the GrandBattle snapshot list from realtime payloads", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
+    const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
+    renderComponent(
+      undefined,
+      () => realtimeClient,
+      loadGrandBattleParticipants,
+      loadGrandBattleLatestSnapshot
+    );
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await act(async () => {
+      realtimeClient.emitPayload(
+        createGrandBattleCastleStatusBytes({
+          castleId: 1,
+          guildId: 333333333,
+          attackerGuildId: 222222222,
+          defenseCount: 66,
+          attackCount: 7,
+          lastWinPartyKnockOutCount: 10
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("66");
+    expect(getCastleRows()[0].querySelector("[data-label='攻']")?.textContent).toBe("7");
+    expect(getCastleRows()[0].querySelector(".castle-list__ko")?.textContent).toBe("10");
+    expect(getCastleListText()).toContain("ギルドC");
+  });
+
   it("shows GrandBattle snapshot errors without clearing participant candidates", async () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
     const loadGrandBattleLatestSnapshot = vi
@@ -351,6 +392,37 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("GrandBattle snapshotの取得に失敗しました。");
     expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
     expect(document.querySelector(".castle-list")).toBeNull();
+  });
+
+  it("stops GuildBattle realtime when switching to GrandBattle", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
+
+    await loadWorld37();
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await clickButton("GrandBattle");
+
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
+    expect(realtimeClient.state).toEqual({ status: "disconnected", reason: "mode changed to grand battle" });
+  });
+
+  it("disposes GrandBattle realtime when switching to GuildBattle", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderComponent(undefined, () => realtimeClient);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await clickButton("GuildBattle");
+
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
+    expect(realtimeClient.state).toEqual({ status: "disconnected", reason: "mode changed to guild battle" });
   });
 
   it("restores world, sort, auto update, and selected guild from localStorage", async () => {
@@ -912,6 +984,44 @@ function createCastleStatusBytes({
         worldGroupId: 0,
         gvgClass: 0,
         worldId: 1037
+      })
+    ),
+    ...writeUint32(guildId),
+    ...writeUint32(attackerGuildId),
+    ...writeUint32(0),
+    ...writeUint16(defenseCount),
+    ...writeUint16(attackCount),
+    rawState,
+    0,
+    ...writeUint16(lastWinPartyKnockOutCount)
+  ];
+}
+
+function createGrandBattleCastleStatusBytes({
+  castleId,
+  guildId,
+  attackerGuildId = 0,
+  defenseCount,
+  attackCount = 0,
+  rawState = 0,
+  lastWinPartyKnockOutCount = 0
+}: {
+  readonly castleId: number;
+  readonly guildId: number;
+  readonly attackerGuildId?: number;
+  readonly defenseCount: number;
+  readonly attackCount?: number;
+  readonly rawState?: number;
+  readonly lastWinPartyKnockOutCount?: number;
+}): number[] {
+  return [
+    ...writeUint32(
+      buildGvgStreamId({
+        castleId,
+        block: 0,
+        worldGroupId: 12,
+        gvgClass: 3,
+        worldId: 0
       })
     ),
     ...writeUint32(guildId),

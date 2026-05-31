@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGvgStreamId,
+  createGrandBattleAllCastlesStreamScope,
   createGuildBattleAllCastlesStreamScope,
   decodeGvgStreamId
 } from "./streamId";
@@ -50,6 +51,24 @@ describe("GvG stream ID", () => {
 
     expect(decodeGvgStreamId(streamId)).toEqual({
       castleId: 7,
+      block: 2,
+      worldGroupId: 12,
+      gvgClass: 3,
+      worldId: 0
+    });
+  });
+
+  it("builds a Grand Battle all-castles scope", () => {
+    const streamId = buildGvgStreamId(
+      createGrandBattleAllCastlesStreamScope({
+        worldGroupId: 12,
+        gvgClass: 3,
+        block: 2
+      })
+    );
+
+    expect(decodeGvgStreamId(streamId)).toEqual({
+      castleId: 0,
       block: 2,
       worldGroupId: 12,
       gvgClass: 3,

@@ -35,6 +35,7 @@ export interface GrandBattleCastle {
 
 export interface GrandBattleSnapshot {
   readonly source: GrandBattleResolvedSource;
+  readonly worldGroupId: number;
   readonly capturedAt: string;
   readonly castles: readonly GrandBattleCastle[];
   readonly guildNames: Readonly<Record<GvgGuildId, string>>;

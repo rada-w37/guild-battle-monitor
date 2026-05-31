@@ -123,6 +123,7 @@ describe("grandBattleParticipantService", () => {
         { fetcher }
       )
     ).resolves.toMatchObject({
+      worldGroupId: 12,
       capturedAt: "2026-05-27T11:15:36.000Z",
       guildNames: {
         "111111111050": "ギルドA"

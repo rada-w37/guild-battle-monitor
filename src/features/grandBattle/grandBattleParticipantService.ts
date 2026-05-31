@@ -50,7 +50,7 @@ export async function loadGrandBattleSnapshot(
     options
   );
 
-  return normalizeGrandBattleSnapshot(latestResponse, source);
+  return normalizeGrandBattleSnapshot(latestResponse, source, worldGroupId);
 }
 
 export function createGrandBattleWorldId(serverId: GrandBattleServerId, worldNumber: number): number {

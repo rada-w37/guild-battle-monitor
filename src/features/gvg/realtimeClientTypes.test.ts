@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createGrandBattleSubscription,
   createGuildBattleSubscription,
   createStreamIdPayload,
   DEFAULT_GVG_REALTIME_RECONNECT_CONFIG,
@@ -19,6 +20,23 @@ describe("GvG realtime client boundary types", () => {
       worldGroupId: 0,
       gvgClass: 0,
       worldId: 1001
+    });
+    expect(Array.from(subscription.payload)).toEqual(Array.from(createStreamIdPayload(subscription.streamId)));
+  });
+
+  it("creates a Grand Battle all-castles subscription", () => {
+    const subscription = createGrandBattleSubscription({
+      worldGroupId: 12,
+      classId: 3,
+      blockId: 2
+    });
+
+    expect(decodeGvgStreamId(subscription.streamId)).toEqual({
+      castleId: 0,
+      block: 2,
+      worldGroupId: 12,
+      gvgClass: 3,
+      worldId: 0
     });
     expect(Array.from(subscription.payload)).toEqual(Array.from(createStreamIdPayload(subscription.streamId)));
   });

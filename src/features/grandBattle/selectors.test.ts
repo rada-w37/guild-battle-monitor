@@ -17,6 +17,7 @@ const snapshot = {
     classId: 3,
     blockId: 0
   },
+  worldGroupId: 12,
   capturedAt: "2026-05-27T11:15:36.000Z",
   guildNames: {
     [guildA]: "ギルドA",

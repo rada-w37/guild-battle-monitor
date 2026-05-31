@@ -5,6 +5,7 @@ import {
   loadGrandBattleParticipantGuilds,
   loadGrandBattleSnapshot
 } from "../grandBattle/grandBattleParticipantService";
+import { GrandBattleRealtimeSnapshotRuntime } from "../grandBattle/realtimeSnapshotRuntime";
 import {
   createGrandBattleCastleListViewModels,
   createGrandBattleGuildCandidates
@@ -119,6 +120,9 @@ export function GuildBattlePlaceholder({
   const [grandBattleSnapshotLoadState, setGrandBattleSnapshotLoadState] = useState<
     AsyncLoadState<GrandBattleSnapshot>
   >({ status: "idle" });
+  const [grandBattleRealtimeState, setGrandBattleRealtimeState] = useState<GvgRealtimeConnectionState>({
+    status: "idle"
+  });
   const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
@@ -132,6 +136,8 @@ export function GuildBattlePlaceholder({
   const runtimeRef = useRef<GvgRealtimeSnapshotRuntime | null>(null);
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
+  const grandBattleRuntimeRef = useRef<GrandBattleRealtimeSnapshotRuntime | null>(null);
+  const removeGrandBattleRealtimeListenerRef = useRef<(() => void) | null>(null);
   const grandBattleParticipantRequestSeqRef = useRef(0);
   const grandBattleSnapshotRequestSeqRef = useRef(0);
 
@@ -163,6 +169,7 @@ export function GuildBattlePlaceholder({
   useEffect(() => {
     return () => {
       stopRealtime("component unmounted");
+      stopGrandBattleRealtime("component unmounted", { nextState: "idle" });
     };
   }, []);
 
@@ -349,6 +356,7 @@ export function GuildBattlePlaceholder({
       setGrandBattleParticipantLoadState({ status: "idle" });
       setGrandBattleSnapshotLoadState({ status: "idle" });
       setSelectedGrandBattleGuildId("");
+      stopGrandBattleRealtime("grand battle world cleared", { nextState: "idle" });
       return;
     }
 
@@ -360,6 +368,7 @@ export function GuildBattlePlaceholder({
       });
       setGrandBattleSnapshotLoadState({ status: "idle" });
       setSelectedGrandBattleGuildId("");
+      stopGrandBattleRealtime("grand battle world invalid", { nextState: "idle" });
       return;
     }
 
@@ -415,6 +424,7 @@ export function GuildBattlePlaceholder({
     setGrandBattleParticipantLoadState({ status: "loading" });
     setGrandBattleSnapshotLoadState({ status: "idle" });
     setSelectedGrandBattleGuildId("");
+    stopGrandBattleRealtime("grand battle candidate changed", { nextState: "idle" });
 
     try {
       const participants = await loadGrandBattleParticipants(source);
@@ -441,6 +451,7 @@ export function GuildBattlePlaceholder({
   }
 
   async function loadGrandBattleSnapshotForSource(source: GrandBattleResolvedSource) {
+    stopGrandBattleRealtime("grand battle snapshot reload", { nextState: "idle" });
     const requestSeq = grandBattleSnapshotRequestSeqRef.current + 1;
     grandBattleSnapshotRequestSeqRef.current = requestSeq;
     setGrandBattleSnapshotLoadState({ status: "loading" });
@@ -450,6 +461,7 @@ export function GuildBattlePlaceholder({
 
       if (grandBattleSnapshotRequestSeqRef.current === requestSeq) {
         setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
+        await startGrandBattleRealtime(snapshot);
       }
     } catch (error) {
       if (grandBattleSnapshotRequestSeqRef.current === requestSeq) {
@@ -458,6 +470,58 @@ export function GuildBattlePlaceholder({
           error: error instanceof Error ? error : new Error("GrandBattle snapshotの取得に失敗しました。")
         });
       }
+    }
+  }
+
+  async function startGrandBattleRealtime(snapshot: GrandBattleSnapshot) {
+    stopGrandBattleRealtime("grand battle realtime restart", { nextState: "idle" });
+
+    const client = runtimeService.createRealtimeClient();
+    const removeRealtimeListener = client.addEventListener((event) => {
+      if (event.type === "stateChanged") {
+        setGrandBattleRealtimeState(event.state);
+      }
+
+      if (event.type === "error") {
+        setGrandBattleRealtimeState({ status: "error", error: event.error });
+      }
+    });
+    const runtime = new GrandBattleRealtimeSnapshotRuntime({
+      client,
+      onSnapshotUpdated: (snapshot) => {
+        setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
+      },
+      onError: (error) => {
+        setGrandBattleRealtimeState({ status: "error", error });
+      }
+    });
+
+    removeGrandBattleRealtimeListenerRef.current = removeRealtimeListener;
+    grandBattleRuntimeRef.current = runtime;
+
+    try {
+      await runtime.start(snapshot);
+    } catch (error) {
+      setGrandBattleRealtimeState({
+        status: "error",
+        error: error instanceof Error ? error : new Error("GrandBattle realtime start failed")
+      });
+    }
+  }
+
+  function stopGrandBattleRealtime(reason: string, options: { readonly nextState?: "idle" } = {}) {
+    grandBattleRuntimeRef.current?.dispose(reason);
+    grandBattleRuntimeRef.current = null;
+    removeGrandBattleRealtimeListenerRef.current?.();
+    removeGrandBattleRealtimeListenerRef.current = null;
+
+    if (options.nextState === "idle") {
+      setGrandBattleRealtimeState({ status: "idle" });
+      return;
+    }
+
+    if (grandBattleRealtimeState.status !== "idle" && grandBattleRealtimeState.status !== "disconnected") {
+      setGrandBattleRealtimeState({ status: "disconnected", reason });
     }
   }
 
@@ -488,6 +552,14 @@ export function GuildBattlePlaceholder({
   }
 
   function handleModeChange(nextMode: BattleMonitorMode) {
+    if (activeMode === "guildBattle" && nextMode === "grandBattle") {
+      stopRealtime("mode changed to grand battle", { nextState: "idle" });
+    }
+
+    if (activeMode === "grandBattle" && nextMode === "guildBattle") {
+      stopGrandBattleRealtime("mode changed to guild battle", { nextState: "idle" });
+    }
+
     setActiveMode(nextMode);
 
     if (nextMode === "grandBattle") {

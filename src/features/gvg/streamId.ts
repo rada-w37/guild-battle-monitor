@@ -72,6 +72,20 @@ export function createGuildBattleAllCastlesStreamScope(worldId: GvgWorldId | str
   };
 }
 
+export function createGrandBattleAllCastlesStreamScope(source: {
+  readonly worldGroupId: number;
+  readonly gvgClass: number;
+  readonly block: number;
+}): GvgStreamScope {
+  return {
+    castleId: 0,
+    block: source.block,
+    worldGroupId: source.worldGroupId,
+    gvgClass: source.gvgClass,
+    worldId: 0
+  };
+}
+
 function assertBitRange(name: string, value: number, max: number) {
   if (!Number.isInteger(value) || value < 0 || value > max) {
     throw new Error(`${name} must be an integer between 0 and ${max}`);

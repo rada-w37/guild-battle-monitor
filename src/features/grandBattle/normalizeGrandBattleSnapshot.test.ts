@@ -36,8 +36,9 @@ describe("normalizeGrandBattleSnapshot", () => {
       }
     } satisfies GrandBattleApiResponse<GrandBattleLatestDataResponse>;
 
-    expect(normalizeGrandBattleSnapshot(response, source)).toEqual({
+    expect(normalizeGrandBattleSnapshot(response, source, 12)).toEqual({
       source,
+      worldGroupId: 12,
       capturedAt: "2026-05-27T11:15:36.000Z",
       guildNames: {
         "111111111050": "ギルドA",
@@ -74,7 +75,8 @@ describe("normalizeGrandBattleSnapshot", () => {
       }
     } satisfies GrandBattleApiResponse<GrandBattleLatestDataResponse>;
 
-    expect(normalizeGrandBattleSnapshot(response, source)).toMatchObject({
+    expect(normalizeGrandBattleSnapshot(response, source, 12)).toMatchObject({
+      worldGroupId: 12,
       capturedAt: "1970-01-01T00:00:00.000Z",
       guildNames: {},
       castles: [
@@ -93,8 +95,9 @@ describe("normalizeGrandBattleSnapshot", () => {
   });
 
   it("uses empty arrays and maps when castles or guilds are missing", () => {
-    expect(normalizeGrandBattleSnapshot({ status: 200, data: null }, source)).toEqual({
+    expect(normalizeGrandBattleSnapshot({ status: 200, data: null }, source, 12)).toEqual({
       source,
+      worldGroupId: 12,
       capturedAt: "1970-01-01T00:00:00.000Z",
       castles: [],
       guildNames: {}

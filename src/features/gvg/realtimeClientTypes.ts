@@ -1,5 +1,10 @@
 import type { RealtimePayloadBytes } from "./realtimeParserTypes";
-import { buildGvgStreamId, createGuildBattleAllCastlesStreamScope, type GvgStreamId } from "./streamId";
+import {
+  buildGvgStreamId,
+  createGrandBattleAllCastlesStreamScope,
+  createGuildBattleAllCastlesStreamScope,
+  type GvgStreamId
+} from "./streamId";
 import type { GvgWorldId } from "./types";
 
 export type GvgRealtimeConnectionState =
@@ -47,6 +52,25 @@ export interface GvgRealtimeClient {
 
 export function createGuildBattleSubscription(worldId: GvgWorldId | string): GvgRealtimeSubscription {
   const streamId = buildGvgStreamId(createGuildBattleAllCastlesStreamScope(worldId));
+
+  return {
+    streamId,
+    payload: createStreamIdPayload(streamId)
+  };
+}
+
+export function createGrandBattleSubscription(source: {
+  readonly worldGroupId: number;
+  readonly classId: number;
+  readonly blockId: number;
+}): GvgRealtimeSubscription {
+  const streamId = buildGvgStreamId(
+    createGrandBattleAllCastlesStreamScope({
+      worldGroupId: source.worldGroupId,
+      gvgClass: source.classId,
+      block: source.blockId
+    })
+  );
 
   return {
     streamId,
