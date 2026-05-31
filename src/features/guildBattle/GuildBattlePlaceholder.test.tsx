@@ -230,12 +230,12 @@ describe("GuildBattlePlaceholder", () => {
     expect(loadSnapshot).toHaveBeenCalledWith("1037");
   });
 
-  it("places the defense guild select just before the monitor list", async () => {
+  it("places the display guild select just before the monitor list", async () => {
     renderComponent(vi.fn(() => Promise.resolve(snapshot)));
 
     await loadWorld37();
 
-    expect(document.querySelector(".guild-select-field .field__label")?.textContent).toBe("防衛ギルド");
+    expect(document.querySelector(".guild-select-field .field__label")?.textContent).toBe("表示対象ギルド");
     expect(getGuildSelectOptions()).toEqual(["全拠点表示", "Guild 999999999037 (2)", "Owner Guild (1)"]);
 
     const guildSelect = document.querySelector(".guild-select-field");
@@ -247,6 +247,7 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(getStoredViewSettings().selectedGuildId).toBe(ownGuildId);
+    expect(document.querySelector(".castle-list--with-owner")).toBeNull();
   });
 
   it("saves danger sort changes", async () => {
