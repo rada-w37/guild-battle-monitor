@@ -299,6 +299,44 @@ describe("GuildBattlePlaceholder", () => {
     });
   });
 
+  it("keeps previous GrandBattle participant guilds visible while loading new candidates", async () => {
+    const nextParticipants = grandBattleParticipants.map((participant, index) => ({
+      ...participant,
+      guildName: `次候補${index + 1}`
+    }));
+    const deferredParticipants = createDeferred<readonly GrandBattleParticipantGuildCandidate[]>();
+    const loadGrandBattleParticipants = vi
+      .fn<typeof loadGrandBattleParticipantGuilds>()
+      .mockResolvedValueOnce(grandBattleParticipants)
+      .mockReturnValueOnce(deferredParticipants.promise);
+    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
+
+    await act(async () => {
+      updateSelect(getGrandBattleSelect("ブロック"), "1");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
+    expect(getGrandBattleUpdateButton().disabled).toBe(true);
+
+    await act(async () => {
+      deferredParticipants.resolve(nextParticipants);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getGrandBattleParticipantNames()).toEqual(["次候補1", "次候補2", "次候補3", "次候補4"]);
+    expect(getGrandBattleUpdateButton().disabled).toBe(false);
+  });
+
   it("shows GrandBattle loading, error, and fewer than four participant guilds without starting monitoring", async () => {
     const loadGrandBattleParticipants = vi
       .fn<typeof loadGrandBattleParticipantGuilds>()

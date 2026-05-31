@@ -117,6 +117,9 @@ export function GuildBattlePlaceholder({
   const [grandBattleParticipantLoadState, setGrandBattleParticipantLoadState] = useState<
     AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>
   >({ status: "idle" });
+  const [grandBattleParticipantCandidates, setGrandBattleParticipantCandidates] = useState<
+    readonly GrandBattleParticipantGuildCandidate[]
+  >([]);
   const [grandBattleSnapshotLoadState, setGrandBattleSnapshotLoadState] = useState<
     AsyncLoadState<GrandBattleSnapshot>
   >({ status: "idle" });
@@ -362,6 +365,7 @@ export function GuildBattlePlaceholder({
     if (nextDraftSource.worldInput.trim().length === 0) {
       setGrandBattleCandidateSource(null);
       setGrandBattleParticipantLoadState({ status: "idle" });
+      setGrandBattleParticipantCandidates([]);
       setGrandBattleSnapshotLoadState({ status: "idle" });
       setSelectedGrandBattleGuildId("");
       stopGrandBattleRealtime("grand battle world cleared", { nextState: "idle" });
@@ -374,6 +378,7 @@ export function GuildBattlePlaceholder({
         status: "error",
         error: new Error("worldは数字で入力してください。")
       });
+      setGrandBattleParticipantCandidates([]);
       setGrandBattleSnapshotLoadState({ status: "idle" });
       setSelectedGrandBattleGuildId("");
       stopGrandBattleRealtime("grand battle world invalid", { nextState: "idle" });
@@ -440,6 +445,7 @@ export function GuildBattlePlaceholder({
       const participants = await loadGrandBattleParticipants(source);
 
       if (grandBattleParticipantRequestSeqRef.current === requestSeq) {
+        setGrandBattleParticipantCandidates(participants);
         setGrandBattleParticipantLoadState({ status: "success", data: participants });
       }
     } catch (error) {
@@ -726,9 +732,7 @@ export function GuildBattlePlaceholder({
           <GrandBattleSetupPanel
             canApplySource={canApplyGrandBattleSource}
             draftSource={grandBattleDraftSource}
-            participantCandidates={
-              grandBattleParticipantLoadState.status === "success" ? grandBattleParticipantLoadState.data : []
-            }
+            participantCandidates={grandBattleParticipantCandidates}
             participantLoadState={grandBattleParticipantLoadState}
             selectedGuildId={selectedGrandBattleGuildId}
             snapshotLoadState={grandBattleSnapshotLoadState}
@@ -881,7 +885,7 @@ function GrandBattleSetupPanel({
 
       <div className="grand-battle-participants" aria-live="polite">
         <h3 className="grand-battle-participants__title">参加ギルド</h3>
-        <GrandBattleParticipantList loadState={participantLoadState} />
+        <GrandBattleParticipantList candidates={participantCandidates} loadState={participantLoadState} />
       </div>
 
       <button
@@ -908,19 +912,21 @@ function GrandBattleSetupPanel({
 }
 
 function GrandBattleParticipantList({
+  candidates,
   loadState
 }: {
+  readonly candidates: readonly GrandBattleParticipantGuildCandidate[];
   readonly loadState: AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>;
 }) {
   if (loadState.status === "idle") {
     return <p className="status-message grand-battle-participants__message">参加ギルド候補がありません。</p>;
   }
 
-  if (loadState.status === "loading") {
+  if (loadState.status === "loading" && candidates.length === 0) {
     return <p className="status-message grand-battle-participants__message">参加ギルドを取得中です。</p>;
   }
 
-  if (loadState.status === "error") {
+  if (loadState.status === "error" && candidates.length === 0) {
     return (
       <p className="status-message status-message--error grand-battle-participants__message" role="alert">
         {loadState.error.message}
@@ -928,18 +934,28 @@ function GrandBattleParticipantList({
     );
   }
 
-  if (loadState.data.length === 0) {
+  if (candidates.length === 0) {
     return <p className="status-message grand-battle-participants__message">参加ギルド候補がありません。</p>;
   }
 
   return (
-    <div className="grand-battle-participants__grid">
-      {loadState.data.map((guild) => (
-        <div className="grand-battle-participants__guild" key={guild.guildId}>
-          {guild.guildName}
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="grand-battle-participants__grid">
+        {candidates.map((guild) => (
+          <div className="grand-battle-participants__guild" key={guild.guildId}>
+            {guild.guildName}
+          </div>
+        ))}
+      </div>
+      {loadState.status === "loading" ? (
+        <p className="status-message grand-battle-participants__message">参加ギルドを更新中です。</p>
+      ) : null}
+      {loadState.status === "error" ? (
+        <p className="status-message status-message--error grand-battle-participants__message" role="alert">
+          {loadState.error.message}
+        </p>
+      ) : null}
+    </>
   );
 }
 

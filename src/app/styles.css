@@ -944,6 +944,10 @@ select {
     justify-content: start;
   }
 
+  .settings-dialog .alert-settings__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .settings-panel {
     display: grid;
     grid-template-columns: 1fr;
