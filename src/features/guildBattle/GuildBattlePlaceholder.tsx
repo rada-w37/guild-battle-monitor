@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
+import { loadGrandBattleParticipantGuilds } from "../grandBattle/grandBattleParticipantService";
+import type {
+  GrandBattleBlockId,
+  GrandBattleClassId,
+  GrandBattleParticipantGuildCandidate,
+  GrandBattleResolvedSource,
+  GrandBattleServerId,
+  GrandBattleSource
+} from "../grandBattle/types";
 import { BrowserGvgRealtimeClient } from "../gvg/browserRealtimeClient";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import {
@@ -38,6 +47,30 @@ import {
 
 const IS_DEV = import.meta.env.DEV;
 const WORLD_ID_BASE = 1000;
+const GRAND_BATTLE_DEFAULT_SERVER_ID: GrandBattleServerId = "japan";
+const GRAND_BATTLE_DEFAULT_CLASS_ID: GrandBattleClassId = 3;
+const GRAND_BATTLE_DEFAULT_BLOCK_ID: GrandBattleBlockId = 0;
+const GRAND_BATTLE_SERVER_OPTIONS: readonly {
+  readonly value: GrandBattleServerId;
+  readonly label: string;
+}[] = [{ value: "japan", label: "Japan" }];
+const GRAND_BATTLE_CLASS_OPTIONS: readonly {
+  readonly value: GrandBattleClassId;
+  readonly label: string;
+}[] = [
+  { value: 3, label: "グランドマスター" },
+  { value: 2, label: "エキスパート" },
+  { value: 1, label: "エリート" }
+];
+const GRAND_BATTLE_BLOCK_OPTIONS: readonly {
+  readonly value: GrandBattleBlockId;
+  readonly label: string;
+}[] = [
+  { value: 0, label: "A" },
+  { value: 1, label: "B" },
+  { value: 2, label: "C" },
+  { value: 3, label: "D" }
+];
 
 type BattleMonitorMode = "guildBattle" | "grandBattle";
 
@@ -45,6 +78,7 @@ type BattleMonitorSharedState = BattleMonitorSharedViewSettings;
 
 interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
+  readonly loadGrandBattleParticipants?: typeof loadGrandBattleParticipantGuilds;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
 }
 
@@ -56,11 +90,22 @@ interface GuildBattleRuntimeService {
 
 export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot,
+  loadGrandBattleParticipants = loadGrandBattleParticipantGuilds,
   createRealtimeClient = () => new BrowserGvgRealtimeClient()
 }: GuildBattlePlaceholderProps) {
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
   const [shared, setShared] = useState<BattleMonitorSharedState>(initialViewSettings.shared);
+  const [grandBattleDraftSource, setGrandBattleDraftSource] = useState<GrandBattleSource>(() =>
+    createInitialGrandBattleSource(initialViewSettings.shared)
+  );
+  const [grandBattleCandidateSource, setGrandBattleCandidateSource] =
+    useState<GrandBattleResolvedSource | null>(null);
+  const [grandBattleAppliedSource, setGrandBattleAppliedSource] =
+    useState<GrandBattleResolvedSource | null>(null);
+  const [grandBattleParticipantLoadState, setGrandBattleParticipantLoadState] = useState<
+    AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>
+  >({ status: "idle" });
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
@@ -73,6 +118,7 @@ export function GuildBattlePlaceholder({
   const runtimeRef = useRef<GvgRealtimeSnapshotRuntime | null>(null);
   const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
+  const grandBattleParticipantRequestSeqRef = useRef(0);
 
   const runtimeService = useMemo<GuildBattleRuntimeService>(
     () => ({
@@ -259,6 +305,118 @@ export function GuildBattlePlaceholder({
     saveViewSettings({ shared: nextShared });
   }
 
+  function handleGrandBattleWorldInputChange(nextWorld: string) {
+    setGrandBattleDraftSource((currentSource) => ({
+      ...currentSource,
+      worldInput: nextWorld,
+      worldNumber: createWorldNumberFromWorldInput(nextWorld)
+    }));
+  }
+
+  function handleGrandBattleWorldCommit() {
+    const nextWorldNumber = createWorldNumberFromWorldInput(grandBattleDraftSource.worldInput);
+    const nextDraftSource = {
+      ...grandBattleDraftSource,
+      worldNumber: nextWorldNumber
+    };
+    setGrandBattleDraftSource(nextDraftSource);
+
+    const nextShared = {
+      ...shared,
+      worldInput: nextDraftSource.worldInput,
+      worldNumber: nextWorldNumber
+    };
+    setShared(nextShared);
+    saveViewSettings({ shared: nextShared });
+
+    if (nextDraftSource.worldInput.trim().length === 0) {
+      setGrandBattleCandidateSource(null);
+      setGrandBattleParticipantLoadState({ status: "idle" });
+      return;
+    }
+
+    if (nextWorldNumber === null) {
+      setGrandBattleCandidateSource(null);
+      setGrandBattleParticipantLoadState({
+        status: "error",
+        error: new Error("worldは数字で入力してください。")
+      });
+      return;
+    }
+
+    void loadGrandBattleParticipantsForSource({
+      ...nextDraftSource,
+      worldNumber: nextWorldNumber
+    });
+  }
+
+  function handleGrandBattleServerChange(nextServerId: GrandBattleServerId) {
+    updateGrandBattleSelectSource({ serverId: nextServerId });
+  }
+
+  function handleGrandBattleClassChange(nextClassId: GrandBattleClassId) {
+    updateGrandBattleSelectSource({ classId: nextClassId });
+  }
+
+  function handleGrandBattleBlockChange(nextBlockId: GrandBattleBlockId) {
+    updateGrandBattleSelectSource({ blockId: nextBlockId });
+  }
+
+  function updateGrandBattleSelectSource(
+    nextValues: Partial<Pick<GrandBattleSource, "serverId" | "classId" | "blockId">>
+  ) {
+    const nextDraftSource = {
+      ...grandBattleDraftSource,
+      ...nextValues
+    };
+    setGrandBattleDraftSource(nextDraftSource);
+
+    if (nextDraftSource.worldNumber === null) {
+      return;
+    }
+
+    void loadGrandBattleParticipantsForSource({
+      ...nextDraftSource,
+      worldNumber: nextDraftSource.worldNumber
+    });
+  }
+
+  async function loadGrandBattleParticipantsForSource(source: GrandBattleResolvedSource) {
+    if (
+      grandBattleCandidateSource !== null &&
+      isSameGrandBattleSource(source, grandBattleCandidateSource) &&
+      grandBattleParticipantLoadState.status !== "error"
+    ) {
+      return;
+    }
+
+    const requestSeq = grandBattleParticipantRequestSeqRef.current + 1;
+    grandBattleParticipantRequestSeqRef.current = requestSeq;
+    setGrandBattleCandidateSource(source);
+    setGrandBattleParticipantLoadState({ status: "loading" });
+
+    try {
+      const participants = await loadGrandBattleParticipants(source);
+
+      if (grandBattleParticipantRequestSeqRef.current === requestSeq) {
+        setGrandBattleParticipantLoadState({ status: "success", data: participants });
+      }
+    } catch (error) {
+      if (grandBattleParticipantRequestSeqRef.current === requestSeq) {
+        setGrandBattleParticipantLoadState({
+          status: "error",
+          error: error instanceof Error ? error : new Error("参加ギルド候補の取得に失敗しました。")
+        });
+      }
+    }
+  }
+
+  function handleGrandBattleApplySource() {
+    if (grandBattleCandidateSource !== null && grandBattleParticipantLoadState.status === "success") {
+      setGrandBattleAppliedSource(grandBattleCandidateSource);
+    }
+  }
+
   function handleGuildChange(nextGuildId: string) {
     setSelectedGuildId(nextGuildId);
     saveViewSettings({ selectedGuildId: nextGuildId });
@@ -290,8 +448,18 @@ export function GuildBattlePlaceholder({
 
     if (nextMode === "grandBattle") {
       setIsSettingsDialogOpen(false);
+      setGrandBattleDraftSource((currentSource) => ({
+        ...currentSource,
+        worldInput: shared.worldInput,
+        worldNumber: shared.worldNumber
+      }));
     }
   }
+
+  const canApplyGrandBattleSource =
+    grandBattleCandidateSource !== null &&
+    grandBattleParticipantLoadState.status === "success" &&
+    !isSameGrandBattleSource(grandBattleCandidateSource, grandBattleAppliedSource);
 
   return (
     <main className="app-shell">
@@ -398,17 +566,186 @@ export function GuildBattlePlaceholder({
         />
           </>
         ) : (
-          <section className="grand-battle-placeholder" aria-labelledby="grand-battle-placeholder-title">
-            <h2 className="grand-battle-placeholder__title" id="grand-battle-placeholder-title">
-              GrandBattleMonitor（準備中）
-            </h2>
-            <p className="grand-battle-placeholder__description">
-              GrandBattleMonitor UIは Step7 以降で追加予定です。
-            </p>
-          </section>
+          <GrandBattleSetupPanel
+            canApplySource={canApplyGrandBattleSource}
+            draftSource={grandBattleDraftSource}
+            participantLoadState={grandBattleParticipantLoadState}
+            onApplySource={handleGrandBattleApplySource}
+            onBlockChange={handleGrandBattleBlockChange}
+            onClassChange={handleGrandBattleClassChange}
+            onServerChange={handleGrandBattleServerChange}
+            onWorldCommit={handleGrandBattleWorldCommit}
+            onWorldInputChange={handleGrandBattleWorldInputChange}
+          />
         )}
       </section>
     </main>
+  );
+}
+
+function createInitialGrandBattleSource(shared: BattleMonitorSharedState): GrandBattleSource {
+  return {
+    serverId: GRAND_BATTLE_DEFAULT_SERVER_ID,
+    worldInput: shared.worldInput,
+    worldNumber: shared.worldNumber,
+    classId: GRAND_BATTLE_DEFAULT_CLASS_ID,
+    blockId: GRAND_BATTLE_DEFAULT_BLOCK_ID
+  };
+}
+
+function isSameGrandBattleSource(
+  left: GrandBattleResolvedSource | null,
+  right: GrandBattleResolvedSource | null
+): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
+  return (
+    left.serverId === right.serverId &&
+    left.worldNumber === right.worldNumber &&
+    left.classId === right.classId &&
+    left.blockId === right.blockId
+  );
+}
+
+function GrandBattleSetupPanel({
+  canApplySource,
+  draftSource,
+  participantLoadState,
+  onApplySource,
+  onBlockChange,
+  onClassChange,
+  onServerChange,
+  onWorldCommit,
+  onWorldInputChange
+}: {
+  readonly canApplySource: boolean;
+  readonly draftSource: GrandBattleSource;
+  readonly participantLoadState: AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>;
+  readonly onApplySource: () => void;
+  readonly onBlockChange: (blockId: GrandBattleBlockId) => void;
+  readonly onClassChange: (classId: GrandBattleClassId) => void;
+  readonly onServerChange: (serverId: GrandBattleServerId) => void;
+  readonly onWorldCommit: () => void;
+  readonly onWorldInputChange: (worldInput: string) => void;
+}) {
+  return (
+    <section className="grand-battle-setup" aria-labelledby="grand-battle-setup-title">
+      <h2 className="grand-battle-setup__title" id="grand-battle-setup-title">
+        監視条件
+      </h2>
+      <div className="grand-battle-setup__form" aria-label="GrandBattle監視条件">
+        <label className="field">
+          <span className="field__label">サーバー</span>
+          <select
+            className="field__input field__input--wide"
+            value={draftSource.serverId}
+            onChange={(event) => onServerChange(event.target.value as GrandBattleServerId)}
+          >
+            {GRAND_BATTLE_SERVER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field__label">ワールド</span>
+          <input
+            className="field__input field__input--world"
+            inputMode="numeric"
+            type="text"
+            value={draftSource.worldInput}
+            onBlur={onWorldCommit}
+            onChange={(event) => onWorldInputChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === "Tab") {
+                onWorldCommit();
+              }
+            }}
+          />
+        </label>
+        <label className="field">
+          <span className="field__label">クラス</span>
+          <select
+            className="field__input field__input--wide"
+            value={draftSource.classId}
+            onChange={(event) => onClassChange(Number(event.target.value) as GrandBattleClassId)}
+          >
+            {GRAND_BATTLE_CLASS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field__label">ブロック</span>
+          <select
+            className="field__input field__input--wide"
+            value={draftSource.blockId}
+            onChange={(event) => onBlockChange(Number(event.target.value) as GrandBattleBlockId)}
+          >
+            {GRAND_BATTLE_BLOCK_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="grand-battle-participants" aria-live="polite">
+        <h3 className="grand-battle-participants__title">参加ギルド</h3>
+        <GrandBattleParticipantList loadState={participantLoadState} />
+      </div>
+
+      <button
+        className="load-form__button grand-battle-setup__apply"
+        type="button"
+        disabled={!canApplySource}
+        onClick={onApplySource}
+      >
+        更新
+      </button>
+    </section>
+  );
+}
+
+function GrandBattleParticipantList({
+  loadState
+}: {
+  readonly loadState: AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>;
+}) {
+  if (loadState.status === "idle") {
+    return <p className="status-message grand-battle-participants__message">参加ギルド候補がありません。</p>;
+  }
+
+  if (loadState.status === "loading") {
+    return <p className="status-message grand-battle-participants__message">参加ギルドを取得中です。</p>;
+  }
+
+  if (loadState.status === "error") {
+    return (
+      <p className="status-message status-message--error grand-battle-participants__message" role="alert">
+        {loadState.error.message}
+      </p>
+    );
+  }
+
+  if (loadState.data.length === 0) {
+    return <p className="status-message grand-battle-participants__message">参加ギルド候補がありません。</p>;
+  }
+
+  return (
+    <div className="grand-battle-participants__grid">
+      {loadState.data.map((guild) => (
+        <div className="grand-battle-participants__guild" key={guild.guildId}>
+          {guild.guildName}
+        </div>
+      ))}
+    </div>
   );
 }
 

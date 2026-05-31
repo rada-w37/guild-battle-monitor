@@ -2,6 +2,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { loadGrandBattleParticipantGuilds } from "../grandBattle/grandBattleParticipantService";
+import type { GrandBattleParticipantGuildCandidate } from "../grandBattle/types";
 import type { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import { MockGvgRealtimeClient } from "../gvg/mockRealtimeClient";
 import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
@@ -17,6 +19,12 @@ import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "./viewSettingsStorage";
 const ownGuildId = "438130839037" as GvgGuildId;
 const attackGuildId = "123456789037" as GvgGuildId;
 const otherGuildId = "999999999037" as GvgGuildId;
+const grandBattleParticipants = [
+  { guildId: "111111111050" as GvgGuildId, guildName: "ギルドA" },
+  { guildId: "222222222050" as GvgGuildId, guildName: "ギルドB" },
+  { guildId: "333333333050" as GvgGuildId, guildName: "ギルドC" },
+  { guildId: "444444444050" as GvgGuildId, guildName: "ギルドD" }
+] satisfies readonly GrandBattleParticipantGuildCandidate[];
 
 const snapshot = {
   worldId: "1037" as GvgWorldId,
@@ -101,21 +109,44 @@ describe("GuildBattlePlaceholder", () => {
     expect(getSettingsButton().disabled).toBe(false);
   });
 
-  it("shows only the GrandBattle placeholder and disables settings in GrandBattle mode", async () => {
+  it("shows the GrandBattle setup UI and disables settings in GrandBattle mode", async () => {
     renderComponent();
 
     await clickButton("GrandBattle");
 
     expect(getModeButton("GuildBattle").getAttribute("aria-pressed")).toBe("false");
     expect(getModeButton("GrandBattle").getAttribute("aria-pressed")).toBe("true");
-    expect(document.body.textContent).toContain("GrandBattleMonitor（準備中）");
     expect(document.body.textContent).toContain("Grand Battle Monitor");
-    expect(document.body.textContent).toContain("GrandBattleMonitor UIは Step7 以降で追加予定です。");
+    expect(document.body.textContent).not.toContain("GrandBattleMonitor（準備中）");
+    expect(document.body.textContent).toContain("監視条件");
+    expect(document.body.textContent).toContain("参加ギルド");
+    expect(getGrandBattleSelect("サーバー").value).toBe("japan");
+    expect(getGrandBattleWorldInput().value).toBe("");
+    expect(getGrandBattleSelect("クラス").value).toBe("3");
+    expect(getGrandBattleSelect("ブロック").value).toBe("0");
+    expect(getGrandBattleUpdateButton().disabled).toBe(true);
     expect(document.querySelector(".startup-panel")).toBeNull();
     expect(getSettingsButton().disabled).toBe(true);
 
     await clickSettingsButton();
     expect(document.querySelector("[role='dialog']")).toBeNull();
+  });
+
+  it("shows all GrandBattle class options", async () => {
+    renderComponent();
+
+    await clickButton("GrandBattle");
+
+    expect(getSelectOptions(getGrandBattleSelect("クラス"))).toEqual([
+      "グランドマスター",
+      "エキスパート",
+      "エリート"
+    ]);
+    expect(Array.from(getGrandBattleSelect("クラス").options).map((option) => option.value)).toEqual([
+      "3",
+      "2",
+      "1"
+    ]);
   });
 
   it("returns to GuildBattle mode with the existing UI and settings enabled", async () => {
@@ -130,6 +161,89 @@ describe("GuildBattlePlaceholder", () => {
 
     await clickSettingsButton();
     expect(getSettingsDialog()).not.toBeNull();
+  });
+
+  it("loads GrandBattle participant guilds when world is committed and applies the candidate source", async () => {
+    const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
+    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await flushPromises();
+    expect(loadGrandBattleParticipants).not.toHaveBeenCalled();
+
+    await commitGrandBattleWorldWithKey("Enter");
+
+    expect(loadGrandBattleParticipants).toHaveBeenCalledWith({
+      serverId: "japan",
+      worldInput: "50",
+      worldNumber: 50,
+      classId: 3,
+      blockId: 0
+    });
+    expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
+    expect(getStoredViewSettings().world).toBe("50");
+    expect(getGrandBattleUpdateButton().disabled).toBe(false);
+
+    await clickGrandBattleUpdateButton();
+
+    expect(getGrandBattleUpdateButton().disabled).toBe(true);
+  });
+
+  it("loads GrandBattle participant guilds on select changes after world is committed", async () => {
+    const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
+    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+
+    await act(async () => {
+      updateSelect(getGrandBattleSelect("クラス"), "2");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      updateSelect(getGrandBattleSelect("ブロック"), "1");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadGrandBattleParticipants).toHaveBeenLastCalledWith({
+      serverId: "japan",
+      worldInput: "50",
+      worldNumber: 50,
+      classId: 2,
+      blockId: 1
+    });
+  });
+
+  it("shows GrandBattle loading, error, and fewer than four participant guilds without starting monitoring", async () => {
+    const loadGrandBattleParticipants = vi
+      .fn<typeof loadGrandBattleParticipantGuilds>()
+      .mockRejectedValueOnce(new Error("参加ギルド候補の取得に失敗しました。"))
+      .mockResolvedValueOnce(grandBattleParticipants.slice(0, 2));
+    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+
+    await clickButton("GrandBattle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+
+    expect(document.body.textContent).toContain("参加ギルド候補の取得に失敗しました。");
+    expect(getGrandBattleUpdateButton().disabled).toBe(true);
+    expect(document.querySelector(".castle-list")).toBeNull();
+
+    await commitGrandBattleWorldWithKey("Enter");
+
+    expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB"]);
+    expect(getGrandBattleUpdateButton().disabled).toBe(false);
+    expect(document.querySelector(".castle-list")).toBeNull();
   });
 
   it("restores world, sort, auto update, and selected guild from localStorage", async () => {
@@ -390,7 +504,10 @@ describe("GuildBattlePlaceholder", () => {
 
 function renderComponent(
   loadSnapshot: typeof loadLocalGvgSnapshot = vi.fn(() => Promise.resolve(snapshot)),
-  createRealtimeClient: () => GvgRealtimeClient = () => new MockGvgRealtimeClient()
+  createRealtimeClient: () => GvgRealtimeClient = () => new MockGvgRealtimeClient(),
+  loadGrandBattleParticipants: typeof loadGrandBattleParticipantGuilds = vi.fn(() =>
+    Promise.resolve(grandBattleParticipants)
+  )
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -398,7 +515,11 @@ function renderComponent(
 
   act(() => {
     root?.render(
-      <GuildBattlePlaceholder loadSnapshot={loadSnapshot} createRealtimeClient={createRealtimeClient} />
+      <GuildBattlePlaceholder
+        loadSnapshot={loadSnapshot}
+        loadGrandBattleParticipants={loadGrandBattleParticipants}
+        createRealtimeClient={createRealtimeClient}
+      />
     );
   });
 }
@@ -442,6 +563,67 @@ function getModeButton(label: "GuildBattle" | "GrandBattle") {
   }
 
   return button;
+}
+
+function getGrandBattleSelect(label: "サーバー" | "クラス" | "ブロック") {
+  const field = Array.from(document.querySelectorAll<HTMLLabelElement>(".grand-battle-setup .field")).find(
+    (candidate) => candidate.querySelector(".field__label")?.textContent === label
+  );
+  const select = field?.querySelector<HTMLSelectElement>("select");
+
+  if (!select) {
+    throw new Error(`GrandBattle select was not found: ${label}`);
+  }
+
+  return select;
+}
+
+function getGrandBattleWorldInput() {
+  const field = Array.from(document.querySelectorAll<HTMLLabelElement>(".grand-battle-setup .field")).find(
+    (candidate) => candidate.querySelector(".field__label")?.textContent === "ワールド"
+  );
+  const input = field?.querySelector<HTMLInputElement>("input");
+
+  if (!input) {
+    throw new Error("GrandBattle world input was not found");
+  }
+
+  return input;
+}
+
+function getGrandBattleUpdateButton() {
+  const button = document.querySelector<HTMLButtonElement>(".grand-battle-setup__apply");
+
+  if (!button) {
+    throw new Error("GrandBattle update button was not found");
+  }
+
+  return button;
+}
+
+function getGrandBattleParticipantNames() {
+  return Array.from(document.querySelectorAll<HTMLElement>(".grand-battle-participants__guild")).map(
+    (candidate) => candidate.textContent ?? ""
+  );
+}
+
+function getSelectOptions(select: HTMLSelectElement) {
+  return Array.from(select.options).map((option) => option.textContent ?? "");
+}
+
+async function commitGrandBattleWorldWithKey(key: "Enter" | "Tab") {
+  await act(async () => {
+    getGrandBattleWorldInput().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function clickGrandBattleUpdateButton() {
+  await act(async () => {
+    getGrandBattleUpdateButton().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+  });
 }
 
 async function clickButton(label: string) {

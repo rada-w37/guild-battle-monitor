@@ -155,6 +155,58 @@ select {
   line-height: 1.6;
 }
 
+.grand-battle-setup {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.grand-battle-setup__title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.grand-battle-setup__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 240px));
+  gap: 14px 20px;
+  align-items: end;
+}
+
+.grand-battle-participants {
+  display: grid;
+  gap: 10px;
+}
+
+.grand-battle-participants__title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.grand-battle-participants__message {
+  margin: 0;
+}
+
+.grand-battle-participants__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 240px));
+  gap: 8px;
+}
+
+.grand-battle-participants__guild {
+  min-height: 34px;
+  padding: 7px 9px;
+  overflow-wrap: anywhere;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.grand-battle-setup__apply {
+  width: min(100%, 500px);
+}
+
 .startup-panel,
 .load-form {
   display: flex;
@@ -900,6 +952,11 @@ select {
 
   .settings-dialog {
     max-height: calc(100vh - 56px);
+  }
+
+  .grand-battle-setup__form,
+  .grand-battle-participants__grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .field__input,
