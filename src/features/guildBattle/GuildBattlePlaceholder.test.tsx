@@ -390,7 +390,7 @@ describe("GuildBattlePlaceholder", () => {
       "ギルドD (0)"
     ]);
     expect(document.querySelector(".castle-list--with-owner")).not.toBeNull();
-    expect(getRenderedCastleLabels()).toEqual(["拠点 1", "拠点 2"]);
+    expect(getRenderedCastleLabels()).toEqual(["アイン", "イエソド"]);
     expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("120");
     expect(getCastleRows()[0].querySelector("[data-label='攻']")?.textContent).toBe("5");
     expect(getCastleRows()[0].querySelector(".castle-list__ko")?.textContent).toBe("30");
@@ -402,7 +402,7 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(document.querySelector(".castle-list--with-owner")).toBeNull();
-    expect(getRenderedCastleLabels()).toEqual(["拠点 1"]);
+    expect(getRenderedCastleLabels()).toEqual(["アイン"]);
   });
 
   it("updates the GrandBattle snapshot list from realtime payloads", async () => {
@@ -572,7 +572,7 @@ describe("GuildBattlePlaceholder", () => {
     });
     await commitGrandBattleWorldWithKey("Enter");
     await clickGrandBattleUpdateButton();
-    expect(getRenderedCastleLabels()).toEqual(["拠点 1", "拠点 2"]);
+    expect(getRenderedCastleLabels()).toEqual(["アイン", "イエソド"]);
 
     await act(async () => {
       updateSelect(getGrandBattleSelect("ブロック"), "1");
@@ -581,7 +581,7 @@ describe("GuildBattlePlaceholder", () => {
     });
     await clickGrandBattleUpdateButton();
 
-    expect(getRenderedCastleLabels()).toEqual(["拠点 1", "拠点 2"]);
+    expect(getRenderedCastleLabels()).toEqual(["アイン", "イエソド"]);
     expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("120");
 
     await act(async () => {
@@ -590,7 +590,7 @@ describe("GuildBattlePlaceholder", () => {
       await Promise.resolve();
     });
 
-    expect(getRenderedCastleLabels()).toEqual(["拠点 1"]);
+    expect(getRenderedCastleLabels()).toEqual(["アイン"]);
     expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("55");
   });
 

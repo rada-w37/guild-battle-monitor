@@ -75,7 +75,7 @@ describe("grandBattle selectors", () => {
     expect(createGrandBattleCastleListViewModels(snapshot, "", alertThresholds)).toEqual([
       {
         castleId: "1",
-        castleName: "拠点 1",
+        castleName: "アイン",
         ownerGuildName: "ギルドA",
         attackerGuildName: "ギルドB",
         defenseCount: 120,
@@ -85,7 +85,7 @@ describe("grandBattle selectors", () => {
       },
       {
         castleId: "2",
-        castleName: "拠点 2",
+        castleName: "イエソド",
         ownerGuildName: "ギルドB",
         attackerGuildName: null,
         defenseCount: 80,
@@ -101,6 +101,17 @@ describe("grandBattle selectors", () => {
     expect(
       createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId, alertThresholds).map((castle) => castle.castleId)
     ).toEqual([]);
+  });
+
+  it("falls back to generic castle names for unknown ids", () => {
+    const unknownCastleSnapshot = {
+      ...snapshot,
+      castles: [{ ...snapshot.castles[0], castleId: "999" as GvgCastleId }]
+    } satisfies GrandBattleSnapshot;
+
+    expect(createGrandBattleCastleListViewModels(unknownCastleSnapshot, "", alertThresholds)[0].castleName).toBe(
+      "拠点 999"
+    );
   });
 
   it("calculates alert levels from shared defense thresholds", () => {

@@ -9,6 +9,7 @@ import type {
   GrandBattleParticipantGuildCandidate,
   GrandBattleSnapshot
 } from "./types";
+import { getGrandBattleCastleName } from "./castleMetadata";
 
 export function createGrandBattleGuildCandidates(
   participants: readonly GrandBattleParticipantGuildCandidate[],
@@ -30,7 +31,7 @@ export function createGrandBattleCastleListViewModels(
     .filter((castle) => selectedGuildId.length === 0 || castle.ownerGuildId === selectedGuildId)
     .map((castle) => ({
       castleId: castle.castleId,
-      castleName: `拠点 ${castle.castleId}`,
+      castleName: getGrandBattleCastleName(castle.castleId),
       ownerGuildName: castle.ownerGuildId === null ? "Unknown guild" : snapshot.guildNames[castle.ownerGuildId] ?? "Unknown guild",
       attackerGuildName:
         castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
