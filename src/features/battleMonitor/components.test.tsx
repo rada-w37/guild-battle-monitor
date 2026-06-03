@@ -59,7 +59,16 @@ describe("BattleMonitorCastleList", () => {
     expect(document.querySelector(".castle-list__legend")?.textContent).toContain("防衛拠点");
     expect(document.querySelector(".castle-list__legend")?.textContent).toContain("防衛確定");
     expect(document.querySelector(".castle-list__legend")?.textContent).toContain("侵攻拠点");
+    const defenseIcons = Array.from(document.querySelectorAll(".castle-list__relation-icon--defense"));
+    expect(defenseIcons).toHaveLength(2);
+    for (const defenseIcon of defenseIcons) {
+      expect(defenseIcon.querySelectorAll("path")).toHaveLength(2);
+      expect(defenseIcon.querySelector("path")?.getAttribute("fill")).toBe("#dbeafe");
+      expect(defenseIcon.querySelector("path")?.getAttribute("d")).toContain("M12 4.4");
+    }
     expect(getCastleRows()[1].querySelector(".castle-list__relation-icon--secured")).not.toBeNull();
+    expect(document.querySelector(".castle-list__relation-icon--secured")?.querySelectorAll("path")).toHaveLength(1);
+    expect(document.querySelector(".castle-list__relation-icon--attack")?.querySelectorAll("path")).toHaveLength(2);
     expect(document.querySelector(".defense-secured-badge__tooltip")).toBeNull();
   });
 
