@@ -766,6 +766,67 @@ select {
     minmax(170px, 1.2fr);
 }
 
+.castle-list--with-relation .castle-list__header,
+.castle-list--with-relation .castle-list__row {
+  grid-template-columns:
+    38px
+    minmax(132px, 1.3fr)
+    78px
+    78px
+    70px
+    minmax(110px, 1fr);
+}
+
+.castle-list--with-relation.castle-list--with-owner .castle-list__header,
+.castle-list--with-relation.castle-list--with-owner .castle-list__row {
+  grid-template-columns:
+    38px
+    minmax(132px, 1.3fr)
+    78px
+    78px
+    70px
+    minmax(110px, 1fr)
+    minmax(110px, 1fr);
+}
+
+.castle-list--with-relation.castle-list--with-dev .castle-list__header,
+.castle-list--with-relation.castle-list--with-dev .castle-list__row {
+  grid-template-columns:
+    38px
+    minmax(132px, 1.3fr)
+    78px
+    78px
+    70px
+    minmax(110px, 1fr)
+    minmax(116px, 0.8fr);
+}
+
+.castle-list--with-relation.castle-list--with-owner.castle-list--with-dev .castle-list__header,
+.castle-list--with-relation.castle-list--with-owner.castle-list--with-dev .castle-list__row {
+  grid-template-columns:
+    38px
+    minmax(132px, 1.3fr)
+    78px
+    78px
+    70px
+    minmax(110px, 1fr)
+    minmax(110px, 1fr)
+    minmax(116px, 0.8fr);
+}
+
+.castle-list--with-relation.castle-list--with-test .castle-list__header,
+.castle-list--with-relation.castle-list--with-test .castle-list__row {
+  grid-template-columns:
+    38px
+    minmax(132px, 1.3fr)
+    78px
+    78px
+    70px
+    minmax(110px, 1fr)
+    minmax(116px, 0.8fr)
+    minmax(170px, 1.2fr);
+}
+
 .castle-list__header {
   color: #566675;
   background: #f0f4f8;
@@ -813,6 +874,82 @@ select {
 
 .castle-list__castle strong {
   font-size: 0.95rem;
+}
+
+.castle-list__relation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.castle-list__relation-icon {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 auto;
+}
+
+.castle-list__relation-icon--defense {
+  fill: #1f6feb;
+}
+
+.castle-list__relation-icon--attack {
+  fill: #d94f3d;
+}
+
+.defense-secured-badge-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.defense-secured-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: #2f9e57;
+  background: #dff5e7;
+  box-shadow: inset 0 0 0 1px #b9e5c7;
+  cursor: pointer;
+}
+
+.defense-secured-badge__icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.defense-secured-badge__tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 2;
+  width: max-content;
+  max-width: 120px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: #ffffff;
+  background: #1d2733;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.defense-secured-badge-wrap:hover .defense-secured-badge__tooltip,
+.defense-secured-badge:focus-visible + .defense-secured-badge__tooltip,
+.defense-secured-badge[aria-expanded="true"] + .defense-secured-badge__tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .castle-list__castle small,
@@ -1033,6 +1170,15 @@ select {
     grid-template-columns: minmax(82px, 1fr) 62px 62px 58px;
   }
 
+  .castle-list--with-relation .castle-list__row,
+  .castle-list--with-relation.castle-list--with-owner .castle-list__row,
+  .castle-list--with-relation.castle-list--with-dev .castle-list__row,
+  .castle-list--with-relation.castle-list--with-test .castle-list__row,
+  .castle-list--with-relation.castle-list--with-owner.castle-list--with-dev .castle-list__row,
+  .castle-list--with-relation.castle-list--with-owner.castle-list--with-test .castle-list__row {
+    grid-template-columns: 28px minmax(72px, 1fr) 58px 58px 54px;
+  }
+
   .castle-list__row span {
     padding: 0;
   }
@@ -1044,6 +1190,20 @@ select {
   .castle-list__count {
     min-width: 58px;
     font-size: 0.9375rem;
+  }
+
+  .castle-list__relation-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .defense-secured-badge-wrap {
+    margin-left: 6px;
+  }
+
+  .defense-secured-badge {
+    width: 24px;
+    height: 24px;
   }
 
   .castle-list__count::before {

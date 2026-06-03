@@ -1,3 +1,5 @@
+import { isDefenseSecured } from "../battleMonitor/defenseSecured";
+import type { BattleMonitorCastleGuildRelation } from "../battleMonitor/types";
 import { normalizeGvgGuildIdForComparison } from "../gvg/guildId";
 import type { GvgCastle, GvgGuildId, GvgSnapshot } from "../gvg/types";
 import { getGuildBattleCastleMetadata } from "./castleMetadata";
@@ -94,18 +96,20 @@ export function getGuildBattleCastleStatusDisplay(
 
 export function createOwnedCastleViewModels(
   snapshot: GvgSnapshot,
-  settings: GuildBattleMonitorSettings
+  settings: GuildBattleMonitorSettings,
+  currentTime = new Date()
 ): GuildBattleOwnedCastleViewModel[] {
   return snapshot.castles
     .filter((castle) => isOwnedCastle(castle, settings.ownGuildId))
-    .map((castle) => createCastleViewModel(snapshot, castle, settings.alertThresholds));
+    .map((castle) => createCastleViewModel(snapshot, castle, settings.alertThresholds, currentTime, "defense"));
 }
 
 export function createAllCastleViewModels(
   snapshot: GvgSnapshot,
-  thresholds: GuildBattleAlertThresholds = DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+  thresholds: GuildBattleAlertThresholds = DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+  currentTime = new Date()
 ): GuildBattleCastleViewModel[] {
-  return snapshot.castles.map((castle) => createCastleViewModel(snapshot, castle, thresholds));
+  return snapshot.castles.map((castle) => createCastleViewModel(snapshot, castle, thresholds, currentTime));
 }
 
 export function createGuildBattleCastleDisplayViewModel(
@@ -113,33 +117,36 @@ export function createGuildBattleCastleDisplayViewModel(
   settings: {
     readonly ownGuildId: GvgGuildId | "";
     readonly alertThresholds: GuildBattleAlertThresholds;
+    readonly currentTime?: Date;
   }
 ): GuildBattleCastleDisplayViewModel {
   if (settings.ownGuildId.length === 0) {
     return {
       mode: "allCastles",
       reason: "ownGuildUnspecified",
-      castles: createAllCastleViewModels(snapshot, settings.alertThresholds)
+      castles: createAllCastleViewModels(snapshot, settings.alertThresholds, settings.currentTime)
     };
   }
 
-  const ownedCastles = createOwnedCastleViewModels(snapshot, {
-    ownGuildId: settings.ownGuildId as GvgGuildId,
-    alertThresholds: settings.alertThresholds
-  });
+  const selectedGuildCastles = createSelectedGuildCastleViewModels(
+    snapshot,
+    settings.ownGuildId as GvgGuildId,
+    settings.alertThresholds,
+    settings.currentTime
+  );
 
-  if (ownedCastles.length > 0) {
+  if (selectedGuildCastles.length > 0) {
     return {
       mode: "ownedCastles",
       reason: "ownedCastlesFound",
-      castles: ownedCastles
+      castles: selectedGuildCastles
     };
   }
 
   return {
     mode: "allCastles",
     reason: "ownedCastlesNotFound",
-    castles: createAllCastleViewModels(snapshot, settings.alertThresholds)
+    castles: createAllCastleViewModels(snapshot, settings.alertThresholds, settings.currentTime)
   };
 }
 
@@ -215,7 +222,9 @@ export function createGuildBattleGuildCandidates(
 function createCastleViewModel(
   snapshot: GvgSnapshot,
   castle: GvgCastle,
-  thresholds: GuildBattleAlertThresholds
+  thresholds: GuildBattleAlertThresholds,
+  currentTime = new Date(),
+  guildRelation: BattleMonitorCastleGuildRelation = "none"
 ): GuildBattleCastleViewModel {
   const statusDisplay = getGuildBattleCastleStatusDisplay(castle);
   const castleMetadata = getGuildBattleCastleMetadata(castle.castleId);
@@ -223,6 +232,7 @@ function createCastleViewModel(
   return {
     castleId: castle.castleId,
     castleName: castleMetadata.castleName,
+    guildRelation,
     castleType: castleMetadata.castleType,
     castleTypeLabel: castleMetadata.castleTypeLabel,
     ownerGuildId: castle.ownerGuildId,
@@ -235,10 +245,42 @@ function createCastleViewModel(
     statusTone: statusDisplay.statusTone,
     defenseCount: castle.defenseCount,
     attackCount: castle.attackCount,
+    isDefenseSecured: isDefenseSecured(castle.defenseCount, currentTime),
     lastWinPartyKnockOutCount: castle.lastWinPartyKnockOutCount,
     koDisplay: createKoDisplay(castle),
     alertLevel: getDefenseAlertLevel(castle, thresholds)
   };
+}
+
+function createSelectedGuildCastleViewModels(
+  snapshot: GvgSnapshot,
+  selectedGuildId: GvgGuildId,
+  thresholds: GuildBattleAlertThresholds,
+  currentTime = new Date()
+): GuildBattleCastleViewModel[] {
+  return snapshot.castles
+    .map((castle) => ({
+      castle,
+      guildRelation: getSelectedGuildRelation(castle, selectedGuildId)
+    }))
+    .filter(({ guildRelation }) => guildRelation !== "none")
+    .map(({ castle, guildRelation }) => createCastleViewModel(snapshot, castle, thresholds, currentTime, guildRelation));
+}
+
+function getSelectedGuildRelation(castle: GvgCastle, selectedGuildId: GvgGuildId): BattleMonitorCastleGuildRelation {
+  const attackerGuildId = normalizeGvgGuildIdForComparison(castle.attackerGuildId);
+  const ownerGuildId = normalizeGvgGuildIdForComparison(castle.ownerGuildId);
+  const normalizedSelectedGuildId = normalizeGvgGuildIdForComparison(selectedGuildId);
+
+  if (attackerGuildId !== null && attackerGuildId === normalizedSelectedGuildId) {
+    return "attack";
+  }
+
+  if (ownerGuildId !== null && ownerGuildId === normalizedSelectedGuildId) {
+    return "defense";
+  }
+
+  return "none";
 }
 
 function createKoDisplay(castle: Pick<GvgCastle, "lastWinPartyKnockOutCount">): GuildBattleCastleViewModel["koDisplay"] {

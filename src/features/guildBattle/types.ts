@@ -1,4 +1,5 @@
 import type { GvgCastleId, GvgCastleState, GvgGuildId } from "../gvg/types";
+import type { BattleMonitorCastleGuildRelation } from "../battleMonitor/types";
 import type { GuildBattleCastleType } from "./castleMetadata";
 
 export type GuildBattleAlertLevel = "safe" | "warning" | "danger" | "critical";
@@ -31,6 +32,7 @@ export type GuildBattleCastleListSortMode = "castleId" | "alertLevel";
 export interface GuildBattleCastleViewModel {
   readonly castleId: GvgCastleId;
   readonly castleName: string;
+  readonly guildRelation: BattleMonitorCastleGuildRelation;
   readonly castleType: GuildBattleCastleType | "unknown";
   readonly castleTypeLabel: string;
   readonly ownerGuildId: GvgGuildId | null;
@@ -42,6 +44,7 @@ export interface GuildBattleCastleViewModel {
   readonly statusTone: GuildBattleCastleStatusTone;
   readonly defenseCount: number;
   readonly attackCount: number;
+  readonly isDefenseSecured: boolean;
   readonly lastWinPartyKnockOutCount: number;
   readonly koDisplay: GuildBattleCastleKoViewModel;
   readonly alertLevel: GuildBattleAlertLevel;

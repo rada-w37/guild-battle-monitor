@@ -80,6 +80,7 @@ const GRAND_BATTLE_BLOCK_OPTIONS: readonly {
   { value: 2, label: "C" },
   { value: 3, label: "D" }
 ];
+const CURRENT_TIME_REFRESH_INTERVAL_MS = 1000;
 
 type BattleMonitorMode = "guildBattle" | "grandBattle";
 
@@ -780,6 +781,20 @@ function isSameGrandBattleSource(
   );
 }
 
+function useCurrentTime(): Date {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timerId = setInterval(() => setCurrentTime(new Date()), CURRENT_TIME_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(timerId);
+    };
+  }, []);
+
+  return currentTime;
+}
+
 function GrandBattleSetupPanel({
   alertThresholds,
   canApplySource,
@@ -1031,6 +1046,7 @@ function GrandBattleSnapshotSummary({
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
   readonly onOpenSettings: () => void;
 }) {
+  const currentTime = useCurrentTime();
   const guildCandidates = useMemo(
     () => createGrandBattleGuildCandidates(participantCandidates, snapshot),
     [participantCandidates, snapshot]
@@ -1038,8 +1054,8 @@ function GrandBattleSnapshotSummary({
   const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === selectedGuildId);
   const guildSelectValue = selectedGuildCandidate?.guildId ?? "";
   const viewModels = useMemo(
-    () => createGrandBattleCastleListViewModels(snapshot, guildSelectValue, alertThresholds),
-    [alertThresholds, guildSelectValue, snapshot]
+    () => createGrandBattleCastleListViewModels(snapshot, guildSelectValue, alertThresholds, currentTime),
+    [alertThresholds, currentTime, guildSelectValue, snapshot]
   );
 
   return (
@@ -1427,12 +1443,14 @@ function SnapshotSummary({
   readonly onTestModeAttackIncrease: (castleId: GvgCastleId, amount: number) => void;
   readonly onTestModeRevive: (castleId: GvgCastleId) => void;
 }) {
+  const currentTime = useCurrentTime();
   const castleDisplay = useMemo(() => {
     return createGuildBattleCastleDisplayViewModel(snapshot, {
       ownGuildId: selectedGuildId.length === 0 ? "" : (selectedGuildId as GvgGuildId),
-      alertThresholds
+      alertThresholds,
+      currentTime
     });
-  }, [alertThresholds, selectedGuildId, snapshot]);
+  }, [alertThresholds, currentTime, selectedGuildId, snapshot]);
   const sortedCastles = useMemo(
     () => sortGuildBattleCastleViewModels(castleDisplay.castles, castleSortMode),
     [castleDisplay.castles, castleSortMode]

@@ -93,6 +93,7 @@ describe("guild battle selectors", () => {
     expect(viewModels).toEqual([
       {
         castleId: "castle-owned",
+        guildRelation: "defense",
         castleName: "拠点 castle-owned",
         castleType: "unknown",
         castleTypeLabel: "不明",
@@ -105,6 +106,7 @@ describe("guild battle selectors", () => {
         statusTone: "battle",
         defenseCount: 9,
         attackCount: 1,
+        isDefenseSecured: false,
         lastWinPartyKnockOutCount: 0,
         koDisplay: {
           count: 0,
@@ -138,6 +140,66 @@ describe("guild battle selectors", () => {
     expect(display.mode).toBe("allCastles");
     expect(display.reason).toBe("ownGuildUnspecified");
     expect(display.castles).toHaveLength(2);
+  });
+
+  it("includes selected guild attack castles and prioritizes attack relation", () => {
+    const display = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({
+            castleId: "castle-attack" as GvgCastleId,
+            ownerGuildId: "456" as GvgGuildId,
+            attackerGuildId: ownGuildId
+          }),
+          createCastle({
+            castleId: "castle-conflict" as GvgCastleId,
+            ownerGuildId: ownGuildId,
+            attackerGuildId: ownGuildId
+          }),
+          createCastle({ castleId: "castle-other" as GvgCastleId, ownerGuildId: "456" as GvgGuildId })
+        ],
+        guildNames: {
+          [ownGuildId]: "Own Guild",
+          ["456" as GvgGuildId]: "Other Guild"
+        }
+      },
+      {
+        ownGuildId,
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+      }
+    );
+
+    expect(display.mode).toBe("ownedCastles");
+    expect(display.castles.map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["castle-attack", "attack"],
+      ["castle-conflict", "attack"]
+    ]);
+  });
+
+  it("marks defense as secured when defense count exceeds battle remaining seconds", () => {
+    const display = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ castleId: "secured" as GvgCastleId, defenseCount: 11 }),
+          createCastle({ castleId: "not-secured" as GvgCastleId, defenseCount: 10 })
+        ],
+        guildNames: {}
+      },
+      {
+        ownGuildId: "",
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+        currentTime: new Date("2026-05-27T21:29:50.000+09:00")
+      }
+    );
+
+    expect(display.castles.map((castle) => [castle.castleId, castle.isDefenseSecured])).toEqual([
+      ["secured", true],
+      ["not-secured", false]
+    ]);
   });
 
   it("adds castle metadata to view models", () => {

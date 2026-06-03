@@ -75,21 +75,25 @@ describe("grandBattle selectors", () => {
     expect(createGrandBattleCastleListViewModels(snapshot, "", alertThresholds)).toEqual([
       {
         castleId: "1",
+        guildRelation: "none",
         castleName: "アイン",
         ownerGuildName: "ギルドA",
         attackerGuildName: "ギルドB",
         defenseCount: 120,
         attackCount: 5,
+        isDefenseSecured: false,
         koDisplay: { count: 30, tone: "defense" },
         alertLevel: "safe"
       },
       {
         castleId: "2",
+        guildRelation: "none",
         castleName: "イエソド",
         ownerGuildName: "ギルドB",
         attackerGuildName: null,
         defenseCount: 80,
         attackCount: 0,
+        isDefenseSecured: false,
         koDisplay: { count: 0, tone: "none" },
         alertLevel: "safe"
       }
@@ -98,9 +102,45 @@ describe("grandBattle selectors", () => {
 
   it("filters by selected owner guild without fallback", () => {
     expect(createGrandBattleCastleListViewModels(snapshot, guildA, alertThresholds).map((castle) => castle.castleId)).toEqual(["1"]);
+    expect(createGrandBattleCastleListViewModels(snapshot, guildB, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["1", "attack"],
+      ["2", "defense"]
+    ]);
     expect(
       createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId, alertThresholds).map((castle) => castle.castleId)
     ).toEqual([]);
+  });
+
+  it("prioritizes attack relation and marks defense secured", () => {
+    const conflictSnapshot = {
+      ...snapshot,
+      castles: [
+        {
+          ...snapshot.castles[0],
+          ownerGuildId: guildA,
+          attackerGuildId: guildA,
+          defenseCount: 11
+        },
+        {
+          ...snapshot.castles[1],
+          ownerGuildId: guildA,
+          attackerGuildId: null,
+          defenseCount: 10
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(
+      createGrandBattleCastleListViewModels(
+        conflictSnapshot,
+        guildA,
+        alertThresholds,
+        new Date("2026-05-27T21:29:50.000+09:00")
+      ).map((castle) => [castle.castleId, castle.guildRelation, castle.isDefenseSecured])
+    ).toEqual([
+      ["1", "attack", true],
+      ["2", "defense", false]
+    ]);
   });
 
   it("falls back to generic castle names for unknown ids", () => {
