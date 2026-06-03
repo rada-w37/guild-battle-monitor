@@ -2,6 +2,7 @@ import type { BattleMonitorCastleViewModel, BattleMonitorGuildCandidateViewModel
 
 const DEFENSE_ICON_BLUE = "#1f6feb";
 const DEFENSE_ICON_HALF_FILL = DEFENSE_ICON_BLUE;
+const DEFENSE_ICON_LIGHT_FILL = "#bfdbfe";
 const ATTACK_ICON_VIEW_BOX = "140 140 980 980";
 const ATTACK_ICON_FILL = "#f2483a";
 const ATTACK_ICON_PATHS = [
@@ -178,6 +179,7 @@ function GuildRelationIcon({ relation }: { readonly relation: BattleMonitorCastl
     return (
       <svg className="castle-list__relation-icon castle-list__relation-icon--defense" viewBox="0 0 24 24" aria-label="防衛拠点">
         <path fill={DEFENSE_ICON_HALF_FILL} d="M12 4.4 6.5 6.4v4.9c0 3.5 2.1 6.7 5.5 8.4V4.4Z" />
+        <path fill={DEFENSE_ICON_LIGHT_FILL} d="M12 4.4 17.5 6.4v4.9c0 3.5-2.1 6.7-5.5 8.4V4.4Z" />
         <path fill={DEFENSE_ICON_BLUE} d="M12 2.2 4.5 5v6.3c0 4.7 3 8.9 7.5 10.5 4.5-1.6 7.5-5.8 7.5-10.5V5L12 2.2Zm0 2.2 5.5 2v4.9c0 3.5-2.1 6.7-5.5 8.4-3.4-1.7-5.5-4.9-5.5-8.4V6.4l5.5-2Z" />
       </svg>
     );

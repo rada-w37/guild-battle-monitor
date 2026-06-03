@@ -62,9 +62,12 @@ describe("BattleMonitorCastleList", () => {
     const defenseIcons = Array.from(document.querySelectorAll(".castle-list__relation-icon--defense"));
     expect(defenseIcons).toHaveLength(2);
     for (const defenseIcon of defenseIcons) {
-      expect(defenseIcon.querySelectorAll("path")).toHaveLength(2);
-      expect(defenseIcon.querySelector("path")?.getAttribute("fill")).toBe("#1f6feb");
-      expect(defenseIcon.querySelector("path")?.getAttribute("d")).toContain("M12 4.4");
+      const defensePaths = Array.from(defenseIcon.querySelectorAll("path"));
+      expect(defensePaths).toHaveLength(3);
+      expect(defensePaths[0]?.getAttribute("fill")).toBe("#1f6feb");
+      expect(defensePaths[0]?.getAttribute("d")).toContain("M12 4.4");
+      expect(defensePaths[1]?.getAttribute("fill")).toBe("#bfdbfe");
+      expect(defensePaths[1]?.getAttribute("d")).toContain("17.5 6.4");
     }
     expect(getCastleRows()[1].querySelector(".castle-list__relation-icon--secured")).not.toBeNull();
     expect(document.querySelector(".castle-list__relation-icon--secured")?.querySelectorAll("path")).toHaveLength(1);
