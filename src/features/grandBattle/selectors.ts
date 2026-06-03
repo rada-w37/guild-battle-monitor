@@ -33,7 +33,7 @@ export function createGrandBattleCastleListViewModels(
   return snapshot.castles
     .map((castle) => ({
       castle,
-      guildRelation: getSelectedGuildRelation(castle, selectedGuildId)
+      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, currentTime)
     }))
     .filter(({ guildRelation }) => selectedGuildId.length === 0 || guildRelation !== "none")
     .map(({ castle, guildRelation }) => ({
@@ -60,8 +60,9 @@ export function createGrandBattleCastleListViewModels(
 }
 
 function getSelectedGuildRelation(
-  castle: Pick<GrandBattleCastle, "attackerGuildId" | "ownerGuildId">,
-  selectedGuildId: GvgGuildId | ""
+  castle: Pick<GrandBattleCastle, "attackerGuildId" | "defenseCount" | "ownerGuildId">,
+  selectedGuildId: GvgGuildId | "",
+  currentTime: Date
 ): BattleMonitorCastleGuildRelation {
   if (selectedGuildId.length === 0) {
     return "none";
@@ -72,10 +73,24 @@ function getSelectedGuildRelation(
   }
 
   if (castle.ownerGuildId === selectedGuildId) {
-    return "defense";
+    return getDefenseGuildRelation(castle, currentTime);
   }
 
   return "none";
+}
+
+function getDefenseGuildRelation(
+  castle: Pick<GrandBattleCastle, "attackerGuildId" | "defenseCount" | "ownerGuildId">,
+  currentTime: Date
+): BattleMonitorCastleGuildRelation {
+  return isDefenseSecured({
+    attackerGuildId: castle.attackerGuildId,
+    defenseCount: castle.defenseCount,
+    now: currentTime,
+    ownerGuildId: castle.ownerGuildId
+  })
+    ? "securedDefense"
+    : "defense";
 }
 
 function getGrandBattleDefenseAlertLevel(

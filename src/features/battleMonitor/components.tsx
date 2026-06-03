@@ -1,4 +1,3 @@
-import { useEffect, useState, type PointerEvent } from "react";
 import type { BattleMonitorCastleViewModel, BattleMonitorGuildCandidateViewModel } from "./types";
 
 export function BattleMonitorGuildSelect<TGuildId extends string>({
@@ -51,24 +50,7 @@ export function BattleMonitorCastleList<TCastleId extends string>({
   readonly onTestModeAttackIncrease: (castleId: TCastleId, amount: number) => void;
   readonly onTestModeRevive: (castleId: TCastleId) => void;
 }) {
-  const [openDefenseSecuredCastleId, setOpenDefenseSecuredCastleId] = useState<TCastleId | null>(null);
   const showGuildRelation = viewModels.some((viewModel) => viewModel.guildRelation !== "none");
-
-  useEffect(() => {
-    if (openDefenseSecuredCastleId === null) {
-      return;
-    }
-
-    function closeDefenseSecuredBadge() {
-      setOpenDefenseSecuredCastleId(null);
-    }
-
-    document.addEventListener("pointerdown", closeDefenseSecuredBadge);
-
-    return () => {
-      document.removeEventListener("pointerdown", closeDefenseSecuredBadge);
-    };
-  }, [openDefenseSecuredCastleId]);
 
   if (viewModels.length === 0) {
     return <p className="status-message">表示できる拠点がありません。</p>;
@@ -82,6 +64,7 @@ export function BattleMonitorCastleList<TCastleId extends string>({
       }${isTestModeEnabled ? " castle-list--with-test" : ""}`}
       aria-label="castle list"
     >
+      {showGuildRelation ? <GuildRelationLegend /> : null}
       <div className="castle-list__header">
         {showGuildRelation ? <span aria-hidden="true"></span> : null}
         <span>拠点</span>
@@ -102,17 +85,6 @@ export function BattleMonitorCastleList<TCastleId extends string>({
           ) : null}
           <span className="castle-list__castle" data-label="拠点">
             <strong>{viewModel.castleName}</strong>
-            {viewModel.isDefenseSecured ? (
-              <DefenseSecuredBadge
-                isOpen={openDefenseSecuredCastleId === viewModel.castleId}
-                onToggle={(event) => {
-                  event.stopPropagation();
-                  setOpenDefenseSecuredCastleId((currentCastleId) =>
-                    currentCastleId === viewModel.castleId ? null : viewModel.castleId
-                  );
-                }}
-              />
-            ) : null}
           </span>
           <span className="castle-list__count" data-label="防">
             {viewModel.defenseCount}
@@ -163,50 +135,49 @@ export function BattleMonitorCastleList<TCastleId extends string>({
   );
 }
 
+function GuildRelationLegend() {
+  return (
+    <div className="castle-list__legend" aria-label="状態アイコンの凡例">
+      <span className="castle-list__legend-item">
+        <GuildRelationIcon relation="defense" />
+        <span>防衛拠点</span>
+      </span>
+      <span className="castle-list__legend-item">
+        <GuildRelationIcon relation="securedDefense" />
+        <span>防衛確定</span>
+      </span>
+      <span className="castle-list__legend-item">
+        <GuildRelationIcon relation="attack" />
+        <span>侵攻拠点</span>
+      </span>
+    </div>
+  );
+}
+
 function GuildRelationIcon({ relation }: { readonly relation: BattleMonitorCastleViewModel["guildRelation"] }) {
   if (relation === "defense") {
     return (
-      <svg className="castle-list__relation-icon castle-list__relation-icon--defense" viewBox="0 0 24 24" aria-label="防衛中">
+      <svg className="castle-list__relation-icon castle-list__relation-icon--defense" viewBox="0 0 24 24" aria-label="防衛拠点">
         <path d="M12 2.2 4.5 5v6.3c0 4.7 3 8.9 7.5 10.5 4.5-1.6 7.5-5.8 7.5-10.5V5L12 2.2Zm0 2.2 5.5 2v4.9c0 3.5-2.1 6.7-5.5 8.4-3.4-1.7-5.5-4.9-5.5-8.4V6.4l5.5-2Z" />
+      </svg>
+    );
+  }
+
+  if (relation === "securedDefense") {
+    return (
+      <svg className="castle-list__relation-icon castle-list__relation-icon--secured" viewBox="0 0 24 24" aria-label="防衛確定">
+        <path d="M12 2.8 5.2 5.3v5.8c0 4.2 2.7 8.1 6.8 9.6 4.1-1.5 6.8-5.4 6.8-9.6V5.3L12 2.8Zm3.8 8.1-4.7 4.7-2.6-2.6 1.4-1.4 1.2 1.2 3.3-3.3 1.4 1.4Z" />
       </svg>
     );
   }
 
   if (relation === "attack") {
     return (
-      <svg className="castle-list__relation-icon castle-list__relation-icon--attack" viewBox="0 0 24 24" aria-label="攻撃中">
+      <svg className="castle-list__relation-icon castle-list__relation-icon--attack" viewBox="0 0 24 24" aria-label="侵攻拠点">
         <path d="M18.9 2.6 21.4 5l-8.7 8.7 1.8 1.8-1.7 1.7-2.4-2.4-5.6 5.6-2.2-2.2 5.6-5.6-2.4-2.4 1.7-1.7 1.8 1.8 8.6-8.7Z" />
       </svg>
     );
   }
 
   return null;
-}
-
-function DefenseSecuredBadge({
-  isOpen,
-  onToggle
-}: {
-  readonly isOpen: boolean;
-  readonly onToggle: (event: PointerEvent<HTMLButtonElement>) => void;
-}) {
-  return (
-    <span className="defense-secured-badge-wrap">
-      <button
-        className="defense-secured-badge"
-        type="button"
-        aria-label="防衛確定"
-        aria-expanded={isOpen}
-        title="防衛確定"
-        onPointerDown={onToggle}
-      >
-        <svg className="defense-secured-badge__icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 2.8 5.2 5.3v5.8c0 4.2 2.7 8.1 6.8 9.6 4.1-1.5 6.8-5.4 6.8-9.6V5.3L12 2.8Zm3.8 8.1-4.7 4.7-2.6-2.6 1.4-1.4 1.2 1.2 3.3-3.3 1.4 1.4Z" />
-        </svg>
-      </button>
-      <span className="defense-secured-badge__tooltip" role="tooltip">
-        防衛確定
-      </span>
-    </span>
-  );
 }

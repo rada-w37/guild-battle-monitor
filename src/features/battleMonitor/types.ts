@@ -9,7 +9,7 @@ export interface BattleMonitorCastleKoViewModel {
   readonly tone: "attack" | "defense" | "none";
 }
 
-export type BattleMonitorCastleGuildRelation = "defense" | "attack" | "none";
+export type BattleMonitorCastleGuildRelation = "defense" | "securedDefense" | "attack" | "none";
 
 export interface BattleMonitorCastleViewModel<TCastleId extends string = string> {
   readonly castleId: TCastleId;

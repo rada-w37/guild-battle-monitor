@@ -232,7 +232,31 @@ describe("guild battle selectors", () => {
     );
 
     expect(undeclaredDisplay.castles[0].isDefenseSecured).toBe(true);
+    expect(undeclaredDisplay.castles[0].guildRelation).toBe("none");
     expect(declaredDisplay.castles[0].isDefenseSecured).toBe(false);
+    expect(declaredDisplay.castles[0].guildRelation).toBe("none");
+
+    const selectedGuildDisplay = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ castleId: "secured" as GvgCastleId, attackerGuildId: null, defenseCount: 0 }),
+          createCastle({ castleId: "defense" as GvgCastleId, attackerGuildId: "789" as GvgGuildId, defenseCount: 10 })
+        ],
+        guildNames: {}
+      },
+      {
+        ownGuildId,
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+        currentTime
+      }
+    );
+
+    expect(selectedGuildDisplay.castles.map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["secured", "securedDefense"],
+      ["defense", "defense"]
+    ]);
   });
 
   it("adds castle metadata to view models", () => {

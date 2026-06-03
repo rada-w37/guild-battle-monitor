@@ -104,7 +104,7 @@ describe("grandBattle selectors", () => {
     expect(createGrandBattleCastleListViewModels(snapshot, guildA, alertThresholds).map((castle) => castle.castleId)).toEqual(["1"]);
     expect(createGrandBattleCastleListViewModels(snapshot, guildB, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["1", "attack"],
-      ["2", "defense"]
+      ["2", "securedDefense"]
     ]);
     expect(
       createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId, alertThresholds).map((castle) => castle.castleId)

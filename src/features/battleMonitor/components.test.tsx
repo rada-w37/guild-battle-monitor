@@ -21,30 +21,82 @@ afterEach(() => {
 });
 
 describe("BattleMonitorCastleList", () => {
+  it("does not render relation column or legend for all castle view", () => {
+    renderCastleList([
+      createCastleViewModel({
+        castleId: "1",
+        guildRelation: "none",
+        isDefenseSecured: true
+      })
+    ]);
+
+    expect(document.querySelector(".castle-list--with-relation")).toBeNull();
+    expect(document.querySelector(".castle-list__legend")).toBeNull();
+    expect(document.querySelector(".castle-list__relation-icon")).toBeNull();
+    expect(document.querySelector(".defense-secured-badge__tooltip")).toBeNull();
+  });
+
+  it("renders relation legend and secured defense as the row relation icon", () => {
+    renderCastleList([
+      createCastleViewModel({
+        castleId: "1",
+        guildRelation: "defense",
+        isDefenseSecured: false
+      }),
+      createCastleViewModel({
+        castleId: "2",
+        guildRelation: "securedDefense",
+        isDefenseSecured: true
+      }),
+      createCastleViewModel({
+        castleId: "3",
+        guildRelation: "attack",
+        isDefenseSecured: false
+      })
+    ]);
+
+    expect(document.querySelector(".castle-list__legend")?.textContent).toContain("防衛拠点");
+    expect(document.querySelector(".castle-list__legend")?.textContent).toContain("防衛確定");
+    expect(document.querySelector(".castle-list__legend")?.textContent).toContain("侵攻拠点");
+    expect(getCastleRows()[1].querySelector(".castle-list__relation-icon--secured")).not.toBeNull();
+    expect(document.querySelector(".defense-secured-badge__tooltip")).toBeNull();
+  });
+
   it("renders attack relation as a single sword icon with attack label", () => {
     renderCastleList([
-      {
+      createCastleViewModel({
         castleId: "1",
-        castleName: "Attack Castle",
         guildRelation: "attack",
-        ownerGuildName: "Owner",
-        attackerGuildName: "Attacker",
-        defenseCount: 10,
-        attackCount: 1,
-        isDefenseSecured: false,
-        koDisplay: { count: 0, tone: "none" },
-        alertLevel: "safe"
-      }
+        isDefenseSecured: false
+      })
     ]);
 
     const attackIcon = document.querySelector(".castle-list__relation-icon--attack");
-    expect(attackIcon?.getAttribute("aria-label")).toBe("攻撃中");
+    expect(attackIcon?.getAttribute("aria-label")).toBe("侵攻拠点");
     expect(attackIcon?.querySelectorAll("path")).toHaveLength(1);
     expect(attackIcon?.querySelector("path")?.getAttribute("d")).toBe(
       "M18.9 2.6 21.4 5l-8.7 8.7 1.8 1.8-1.7 1.7-2.4-2.4-5.6 5.6-2.2-2.2 5.6-5.6-2.4-2.4 1.7-1.7 1.8 1.8 8.6-8.7Z"
     );
   });
 });
+
+function createCastleViewModel(
+  overrides: Partial<BattleMonitorCastleViewModel> = {}
+): BattleMonitorCastleViewModel {
+  return {
+    castleId: "1",
+    castleName: "Castle",
+    guildRelation: "none",
+    ownerGuildName: "Owner",
+    attackerGuildName: null,
+    defenseCount: 10,
+    attackCount: 0,
+    isDefenseSecured: false,
+    koDisplay: { count: 0, tone: "none" },
+    alertLevel: "safe",
+    ...overrides
+  };
+}
 
 function renderCastleList(viewModels: readonly BattleMonitorCastleViewModel[]) {
   container = document.createElement("div");
@@ -65,4 +117,8 @@ function renderCastleList(viewModels: readonly BattleMonitorCastleViewModel[]) {
       />
     );
   });
+}
+
+function getCastleRows() {
+  return Array.from(document.querySelectorAll(".castle-list__row"));
 }
