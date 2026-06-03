@@ -147,8 +147,9 @@ describe("GuildBattlePlaceholder", () => {
   it("shows mode tabs and starts in GuildBattle mode", () => {
     renderComponent();
 
-    expect(getModeButton("GuildBattle").getAttribute("aria-pressed")).toBe("true");
-    expect(getModeButton("GrandBattle").getAttribute("aria-pressed")).toBe("false");
+    expect(getAppShell().dataset.mode).toBe("guild-battle");
+    expect(getModeButton("Guild Battle").getAttribute("aria-pressed")).toBe("true");
+    expect(getModeButton("Grand Battle").getAttribute("aria-pressed")).toBe("false");
     expect(getWorldInput()).not.toBeNull();
     expect(document.body.textContent).not.toContain("GrandBattleMonitor（準備中）");
     expect(getSettingsButton().disabled).toBe(false);
@@ -157,10 +158,11 @@ describe("GuildBattlePlaceholder", () => {
   it("shows the GrandBattle setup UI and disables settings in GrandBattle mode", async () => {
     renderComponent();
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
 
-    expect(getModeButton("GuildBattle").getAttribute("aria-pressed")).toBe("false");
-    expect(getModeButton("GrandBattle").getAttribute("aria-pressed")).toBe("true");
+    expect(getAppShell().dataset.mode).toBe("grand-battle");
+    expect(getModeButton("Guild Battle").getAttribute("aria-pressed")).toBe("false");
+    expect(getModeButton("Grand Battle").getAttribute("aria-pressed")).toBe("true");
     expect(document.body.textContent).toContain("Grand Battle Monitor");
     expect(document.body.textContent).not.toContain("GrandBattleMonitor（準備中）");
     expect(document.body.textContent).toContain("監視条件");
@@ -193,7 +195,7 @@ describe("GuildBattlePlaceholder", () => {
     );
     renderComponent(undefined, undefined, loadGrandBattleParticipants);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
 
     expect(getGrandBattleWorldInput().value).toBe("50");
     expect(loadGrandBattleParticipants).toHaveBeenCalledWith({
@@ -212,7 +214,7 @@ describe("GuildBattlePlaceholder", () => {
   it("shows all GrandBattle class options", async () => {
     renderComponent();
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
 
     expect(getSelectOptions(getGrandBattleSelect("クラス"))).toEqual([
       "グランドマスター",
@@ -229,10 +231,11 @@ describe("GuildBattlePlaceholder", () => {
   it("returns to GuildBattle mode with the existing UI and settings enabled", async () => {
     renderComponent();
 
-    await clickButton("GrandBattle");
-    await clickButton("GuildBattle");
+    await clickButton("Grand Battle");
+    await clickButton("Guild Battle");
 
-    expect(getModeButton("GuildBattle").getAttribute("aria-pressed")).toBe("true");
+    expect(getAppShell().dataset.mode).toBe("guild-battle");
+    expect(getModeButton("Guild Battle").getAttribute("aria-pressed")).toBe("true");
     expect(getWorldInput()).not.toBeNull();
     expect(getSettingsButton().disabled).toBe(false);
 
@@ -244,7 +247,7 @@ describe("GuildBattlePlaceholder", () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
     renderComponent(undefined, undefined, loadGrandBattleParticipants);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -273,7 +276,7 @@ describe("GuildBattlePlaceholder", () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
     renderComponent(undefined, undefined, loadGrandBattleParticipants);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -311,7 +314,7 @@ describe("GuildBattlePlaceholder", () => {
       .mockReturnValueOnce(deferredParticipants.promise);
     renderComponent(undefined, undefined, loadGrandBattleParticipants);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -344,7 +347,7 @@ describe("GuildBattlePlaceholder", () => {
       .mockResolvedValueOnce(grandBattleParticipants.slice(0, 2));
     renderComponent(undefined, undefined, loadGrandBattleParticipants);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -366,7 +369,7 @@ describe("GuildBattlePlaceholder", () => {
     const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
     renderComponent(undefined, undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -416,7 +419,7 @@ describe("GuildBattlePlaceholder", () => {
       loadGrandBattleLatestSnapshot
     );
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -474,7 +477,7 @@ describe("GuildBattlePlaceholder", () => {
     );
     renderComponent(undefined, () => realtimeClient);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     await clickGrandBattleUpdateButton();
 
     expect(realtimeClient.subscriptions).toHaveLength(0);
@@ -494,7 +497,7 @@ describe("GuildBattlePlaceholder", () => {
     );
     renderComponent(undefined, () => realtimeClient);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     await clickGrandBattleUpdateButton();
     expect(realtimeClient.subscriptions).toHaveLength(0);
 
@@ -509,7 +512,7 @@ describe("GuildBattlePlaceholder", () => {
     const realtimeClient = new MockGvgRealtimeClient();
     renderComponent(undefined, () => realtimeClient);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -532,7 +535,7 @@ describe("GuildBattlePlaceholder", () => {
       .mockRejectedValue(new Error("GrandBattle snapshotの取得に失敗しました。"));
     renderComponent(undefined, undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -566,7 +569,7 @@ describe("GuildBattlePlaceholder", () => {
       .mockReturnValueOnce(deferredSnapshot.promise);
     renderComponent(undefined, undefined, undefined, loadGrandBattleLatestSnapshot);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -601,7 +604,7 @@ describe("GuildBattlePlaceholder", () => {
     await loadWorld37();
     expect(realtimeClient.subscriptions).toHaveLength(1);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
 
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
     expect(realtimeClient.state).toEqual({ status: "disconnected", reason: "mode changed to grand battle" });
@@ -611,7 +614,7 @@ describe("GuildBattlePlaceholder", () => {
     const realtimeClient = new MockGvgRealtimeClient();
     renderComponent(undefined, () => realtimeClient);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -619,7 +622,7 @@ describe("GuildBattlePlaceholder", () => {
     await clickGrandBattleUpdateButton();
     expect(realtimeClient.subscriptions).toHaveLength(1);
 
-    await clickButton("GuildBattle");
+    await clickButton("Guild Battle");
 
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
     expect(realtimeClient.state).toEqual({ status: "disconnected", reason: "mode changed to guild battle" });
@@ -629,7 +632,7 @@ describe("GuildBattlePlaceholder", () => {
     const realtimeClient = new MockGvgRealtimeClient();
     renderComponent(undefined, () => realtimeClient);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -637,10 +640,10 @@ describe("GuildBattlePlaceholder", () => {
     await clickGrandBattleUpdateButton();
     expect(realtimeClient.subscriptions).toHaveLength(1);
 
-    await clickButton("GuildBattle");
+    await clickButton("Guild Battle");
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
 
-    await clickButton("GrandBattle");
+    await clickButton("Grand Battle");
 
     expect(realtimeClient.subscriptions).toHaveLength(2);
     expect(realtimeClient.state).toEqual({ status: "connected" });
@@ -965,7 +968,7 @@ function getSettingsButton() {
   return button;
 }
 
-function getModeButton(label: "GuildBattle" | "GrandBattle") {
+function getModeButton(label: "Guild Battle" | "Grand Battle") {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-tabs__button")).find(
     (candidate) => candidate.textContent === label
   );
@@ -975,6 +978,16 @@ function getModeButton(label: "GuildBattle" | "GrandBattle") {
   }
 
   return button;
+}
+
+function getAppShell() {
+  const appShell = document.querySelector<HTMLElement>(".app-shell");
+
+  if (!appShell) {
+    throw new Error("app shell was not found");
+  }
+
+  return appShell;
 }
 
 function getGrandBattleSelect(label: "サーバー" | "クラス" | "ブロック") {

@@ -630,7 +630,7 @@ export function GuildBattlePlaceholder({
     !isSameGrandBattleSource(grandBattleCandidateSource, grandBattleAppliedSource);
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-mode={activeMode === "guildBattle" ? "guild-battle" : "grand-battle"}>
       <section className="placeholder monitor-panel" aria-labelledby="app-title">
         <div className="monitor-header">
           <h1 className="placeholder__title" id="app-title">
@@ -655,7 +655,7 @@ export function GuildBattlePlaceholder({
             aria-pressed={activeMode === "guildBattle"}
             onClick={() => handleModeChange("guildBattle")}
           >
-            GuildBattle
+            Guild Battle
           </button>
           <button
             className={`mode-tabs__button${activeMode === "grandBattle" ? " mode-tabs__button--active" : ""}`}
@@ -663,7 +663,7 @@ export function GuildBattlePlaceholder({
             aria-pressed={activeMode === "grandBattle"}
             onClick={() => handleModeChange("grandBattle")}
           >
-            GrandBattle
+            Grand Battle
           </button>
         </div>
 
