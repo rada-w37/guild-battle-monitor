@@ -170,6 +170,60 @@ describe("grandBattle selectors", () => {
     });
   });
 
+  it("syncs selected owner relations with GvgCastleState", () => {
+    const stateSnapshot = {
+      ...snapshot,
+      castles: [
+        { ...snapshot.castles[0], castleId: "state-0" as GvgCastleId, state: "idle", ownerGuildId: guildA, attackerGuildId: null },
+        { ...snapshot.castles[0], castleId: "state-1" as GvgCastleId, state: "inBattle", ownerGuildId: guildA, attackerGuildId: null },
+        { ...snapshot.castles[0], castleId: "state-2" as GvgCastleId, state: "fallen", ownerGuildId: guildA, attackerGuildId: null },
+        { ...snapshot.castles[0], castleId: "state-3" as GvgCastleId, state: "counterattack", ownerGuildId: guildA, attackerGuildId: null },
+        {
+          ...snapshot.castles[0],
+          castleId: "state-4" as GvgCastleId,
+          state: "counterattackSuccessful",
+          ownerGuildId: guildA,
+          attackerGuildId: null
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(createGrandBattleCastleListViewModels(stateSnapshot, guildA, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["state-0", "securedDefense"],
+      ["state-1", "defense"],
+      ["state-2", "attackDisabled"],
+      ["state-3", "attack"],
+      ["state-4", "securedDefense"]
+    ]);
+  });
+
+  it("syncs selected attacker relations with GvgCastleState", () => {
+    const stateSnapshot = {
+      ...snapshot,
+      castles: [
+        { ...snapshot.castles[0], castleId: "state-0" as GvgCastleId, state: "idle", ownerGuildId: guildA, attackerGuildId: guildB },
+        { ...snapshot.castles[0], castleId: "state-1" as GvgCastleId, state: "inBattle", ownerGuildId: guildA, attackerGuildId: guildB },
+        { ...snapshot.castles[0], castleId: "state-2" as GvgCastleId, state: "fallen", ownerGuildId: guildA, attackerGuildId: guildB },
+        { ...snapshot.castles[0], castleId: "state-3" as GvgCastleId, state: "counterattack", ownerGuildId: guildA, attackerGuildId: guildB },
+        {
+          ...snapshot.castles[0],
+          castleId: "state-4" as GvgCastleId,
+          state: "counterattackSuccessful",
+          ownerGuildId: guildA,
+          attackerGuildId: guildB
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(createGrandBattleCastleListViewModels(stateSnapshot, guildB, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["state-0", "attack"],
+      ["state-1", "attack"],
+      ["state-2", "defense"],
+      ["state-3", "defense"],
+      ["state-4", "defenseDisabled"]
+    ]);
+  });
+
   it("prioritizes attack relation and marks defense secured", () => {
     const conflictSnapshot = {
       ...snapshot,
@@ -198,7 +252,7 @@ describe("grandBattle selectors", () => {
       ).map((castle) => [castle.castleId, castle.guildRelation, castle.isDefenseSecured])
     ).toEqual([
       ["1", "attack", true],
-      ["2", "defense", false]
+      ["2", "securedDefense", false]
     ]);
   });
 

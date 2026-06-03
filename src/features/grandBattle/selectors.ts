@@ -5,6 +5,7 @@ import type {
 } from "../battleMonitor/types";
 import { createBattleMonitorCastleDevDetails } from "../battleMonitor/devDetails";
 import { isDefenseSecured } from "../battleMonitor/defenseSecured";
+import { getGvgCastleStateGuildRelation } from "../battleMonitor/guildRelation";
 import type { GvgCastleId, GvgGuildId } from "../gvg/types";
 import type { GuildBattleAlertLevel, GuildBattleAlertThresholds } from "../guildBattle/types";
 import type {
@@ -34,7 +35,7 @@ export function createGrandBattleCastleListViewModels(
   return snapshot.castles
     .map((castle) => ({
       castle,
-      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, currentTime)
+      guildRelation: getSelectedGuildRelation(castle, selectedGuildId)
     }))
     .filter(({ guildRelation }) => selectedGuildId.length === 0 || guildRelation !== "none")
     .map(({ castle, guildRelation }) => ({
@@ -70,37 +71,10 @@ export function createGrandBattleCastleListViewModels(
 }
 
 function getSelectedGuildRelation(
-  castle: Pick<GrandBattleCastle, "attackerGuildId" | "defenseCount" | "ownerGuildId">,
-  selectedGuildId: GvgGuildId | "",
-  currentTime: Date
+  castle: Pick<GrandBattleCastle, "attackerGuildId" | "ownerGuildId" | "state">,
+  selectedGuildId: GvgGuildId | ""
 ): BattleMonitorCastleGuildRelation {
-  if (selectedGuildId.length === 0) {
-    return "none";
-  }
-
-  if (castle.attackerGuildId === selectedGuildId) {
-    return "attack";
-  }
-
-  if (castle.ownerGuildId === selectedGuildId) {
-    return getDefenseGuildRelation(castle, currentTime);
-  }
-
-  return "none";
-}
-
-function getDefenseGuildRelation(
-  castle: Pick<GrandBattleCastle, "attackerGuildId" | "defenseCount" | "ownerGuildId">,
-  currentTime: Date
-): BattleMonitorCastleGuildRelation {
-  return isDefenseSecured({
-    attackerGuildId: castle.attackerGuildId,
-    defenseCount: castle.defenseCount,
-    now: currentTime,
-    ownerGuildId: castle.ownerGuildId
-  })
-    ? "securedDefense"
-    : "defense";
+  return getGvgCastleStateGuildRelation(castle, selectedGuildId);
 }
 
 function getGrandBattleDefenseAlertLevel(

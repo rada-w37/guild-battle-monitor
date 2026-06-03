@@ -94,7 +94,7 @@ describe("guild battle selectors", () => {
     expect(viewModels).toEqual([
       {
         castleId: "castle-owned",
-        guildRelation: "defense",
+        guildRelation: "securedDefense",
         castleName: "拠点 castle-owned",
         castleType: "unknown",
         castleTypeLabel: "不明",
@@ -217,6 +217,74 @@ describe("guild battle selectors", () => {
     });
   });
 
+  it("syncs selected owner relations with GvgCastleState", () => {
+    const display = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ castleId: "state-0" as GvgCastleId, state: "idle" }),
+          createCastle({ castleId: "state-1" as GvgCastleId, state: "inBattle" }),
+          createCastle({ castleId: "state-2" as GvgCastleId, state: "fallen" }),
+          createCastle({ castleId: "state-3" as GvgCastleId, state: "counterattack" }),
+          createCastle({ castleId: "state-4" as GvgCastleId, state: "counterattackSuccessful" })
+        ],
+        guildNames: {
+          [ownGuildId]: "Own Guild"
+        }
+      },
+      {
+        ownGuildId,
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+      }
+    );
+
+    expect(display.castles.map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["state-0", "securedDefense"],
+      ["state-1", "defense"],
+      ["state-2", "attackDisabled"],
+      ["state-3", "attack"],
+      ["state-4", "securedDefense"]
+    ]);
+  });
+
+  it("syncs selected attacker relations with GvgCastleState", () => {
+    const display = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({ castleId: "state-0" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "idle" }),
+          createCastle({ castleId: "state-1" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "inBattle" }),
+          createCastle({ castleId: "state-2" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "fallen" }),
+          createCastle({ castleId: "state-3" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "counterattack" }),
+          createCastle({
+            castleId: "state-4" as GvgCastleId,
+            ownerGuildId: "456" as GvgGuildId,
+            attackerGuildId: ownGuildId,
+            state: "counterattackSuccessful"
+          })
+        ],
+        guildNames: {
+          [ownGuildId]: "Own Guild",
+          ["456" as GvgGuildId]: "Other Guild"
+        }
+      },
+      {
+        ownGuildId,
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+      }
+    );
+
+    expect(display.castles.map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["state-0", "attack"],
+      ["state-1", "attack"],
+      ["state-2", "defense"],
+      ["state-3", "defense"],
+      ["state-4", "defenseDisabled"]
+    ]);
+  });
+
   it("includes selected guild attack castles and prioritizes attack relation", () => {
     const display = createGuildBattleCastleDisplayViewModel(
       {
@@ -334,7 +402,7 @@ describe("guild battle selectors", () => {
       ["secured", "securedDefense"],
       ["zero", "securedDefense"],
       ["empty", "securedDefense"],
-      ["defense", "defense"]
+      ["defense", "securedDefense"]
     ]);
   });
 

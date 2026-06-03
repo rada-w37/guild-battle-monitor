@@ -53,6 +53,16 @@ describe("BattleMonitorCastleList", () => {
         castleId: "3",
         guildRelation: "attack",
         isDefenseSecured: false
+      }),
+      createCastleViewModel({
+        castleId: "4",
+        guildRelation: "attackDisabled",
+        isDefenseSecured: false
+      }),
+      createCastleViewModel({
+        castleId: "5",
+        guildRelation: "defenseDisabled",
+        isDefenseSecured: false
       })
     ]);
 
@@ -72,6 +82,8 @@ describe("BattleMonitorCastleList", () => {
     expect(getCastleRows()[1].querySelector(".castle-list__relation-icon--secured")).not.toBeNull();
     expect(document.querySelector(".castle-list__relation-icon--secured")?.querySelectorAll("path")).toHaveLength(1);
     expect(document.querySelector(".castle-list__relation-icon--attack")?.querySelectorAll("path")).toHaveLength(2);
+    expect(document.querySelector(".castle-list__relation-icon--attack-disabled")?.querySelector("path")?.getAttribute("fill")).toBe("#8b949e");
+    expect(document.querySelector(".castle-list__relation-icon--defense-disabled")?.querySelector("path")?.getAttribute("fill")).toBe("#8b949e");
     expect(document.querySelector(".defense-secured-badge__tooltip")).toBeNull();
   });
 

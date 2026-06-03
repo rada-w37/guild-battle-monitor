@@ -1,5 +1,6 @@
 import { createBattleMonitorCastleDevDetails } from "../battleMonitor/devDetails";
 import { isDefenseSecured } from "../battleMonitor/defenseSecured";
+import { getGvgCastleStateGuildRelation } from "../battleMonitor/guildRelation";
 import type { BattleMonitorCastleGuildRelation } from "../battleMonitor/types";
 import { normalizeGvgGuildIdForComparison } from "../gvg/guildId";
 import type { GvgCastle, GvgGuildId, GvgSnapshot } from "../gvg/types";
@@ -108,7 +109,7 @@ export function createOwnedCastleViewModels(
         castle,
         settings.alertThresholds,
         currentTime,
-        getDefenseGuildRelation(castle, currentTime)
+        getGvgCastleStateGuildRelation(castle, settings.ownGuildId)
       )
     );
 }
@@ -284,7 +285,7 @@ function createSelectedGuildCastleViewModels(
   return snapshot.castles
     .map((castle) => ({
       castle,
-      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, currentTime)
+      guildRelation: getSelectedGuildRelation(castle, selectedGuildId)
     }))
     .filter(({ guildRelation }) => guildRelation !== "none")
     .map(({ castle, guildRelation }) =>
@@ -294,33 +295,9 @@ function createSelectedGuildCastleViewModels(
 
 function getSelectedGuildRelation(
   castle: GvgCastle,
-  selectedGuildId: GvgGuildId,
-  currentTime: Date
+  selectedGuildId: GvgGuildId
 ): BattleMonitorCastleGuildRelation {
-  const attackerGuildId = normalizeGvgGuildIdForComparison(castle.attackerGuildId);
-  const ownerGuildId = normalizeGvgGuildIdForComparison(castle.ownerGuildId);
-  const normalizedSelectedGuildId = normalizeGvgGuildIdForComparison(selectedGuildId);
-
-  if (attackerGuildId !== null && attackerGuildId === normalizedSelectedGuildId) {
-    return "attack";
-  }
-
-  if (ownerGuildId !== null && ownerGuildId === normalizedSelectedGuildId) {
-    return getDefenseGuildRelation(castle, currentTime);
-  }
-
-  return "none";
-}
-
-function getDefenseGuildRelation(castle: GvgCastle, currentTime: Date): BattleMonitorCastleGuildRelation {
-  return isDefenseSecured({
-    attackerGuildId: castle.attackerGuildId,
-    defenseCount: castle.defenseCount,
-    now: currentTime,
-    ownerGuildId: castle.ownerGuildId
-  })
-    ? "securedDefense"
-    : "defense";
+  return getGvgCastleStateGuildRelation(castle, selectedGuildId);
 }
 
 function createKoDisplay(castle: Pick<GvgCastle, "lastWinPartyKnockOutCount">): GuildBattleCastleViewModel["koDisplay"] {

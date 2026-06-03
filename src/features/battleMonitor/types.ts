@@ -9,7 +9,13 @@ export interface BattleMonitorCastleKoViewModel {
   readonly tone: "attack" | "defense" | "none";
 }
 
-export type BattleMonitorCastleGuildRelation = "defense" | "securedDefense" | "attack" | "none";
+export type BattleMonitorCastleGuildRelation =
+  | "defense"
+  | "securedDefense"
+  | "attack"
+  | "attackDisabled"
+  | "defenseDisabled"
+  | "none";
 
 export interface BattleMonitorCastleDevDetails {
   readonly castleId: string;

@@ -965,6 +965,11 @@ select {
   fill: #d94f3d;
 }
 
+.castle-list__relation-icon--attack-disabled,
+.castle-list__relation-icon--defense-disabled {
+  fill: #8b949e;
+}
+
 .castle-list__legend {
   display: flex;
   flex-wrap: wrap;
