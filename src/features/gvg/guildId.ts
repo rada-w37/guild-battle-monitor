@@ -9,7 +9,7 @@ export function normalizeGvgGuildIdForComparison(
 
   const displayGuildId = String(guildId).trim();
 
-  if (displayGuildId.length === 0) {
+  if (displayGuildId.length === 0 || displayGuildId === "0") {
     return null;
   }
 

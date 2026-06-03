@@ -5,14 +5,16 @@ const currentTime = new Date("2026-05-27T21:29:50.000+09:00");
 
 describe("defense secured", () => {
   it("secures owned castles without declaration regardless of remaining seconds", () => {
-    expect(
-      isDefenseSecured({
-        attackerGuildId: null,
-        defenseCount: 0,
-        now: currentTime,
-        ownerGuildId: "owner"
-      })
-    ).toBe(true);
+    for (const attackerGuildId of [null, undefined, "", "0", 0]) {
+      expect(
+        isDefenseSecured({
+          attackerGuildId,
+          defenseCount: 0,
+          now: currentTime,
+          ownerGuildId: "owner"
+        })
+      ).toBe(true);
+    }
   });
 
   it("uses defense count against remaining seconds when declared", () => {

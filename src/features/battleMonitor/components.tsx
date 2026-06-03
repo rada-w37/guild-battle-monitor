@@ -56,7 +56,7 @@ export function BattleMonitorCastleList<TCastleId extends string>({
     return <p className="status-message">表示できる拠点がありません。</p>;
   }
 
-  return (
+  const list = (
     <div
       className={`castle-list${showGuildRelation ? " castle-list--with-relation" : ""}${
         showOwnerGuild ? " castle-list--with-owner" : ""}${
@@ -64,7 +64,6 @@ export function BattleMonitorCastleList<TCastleId extends string>({
       }${isTestModeEnabled ? " castle-list--with-test" : ""}`}
       aria-label="castle list"
     >
-      {showGuildRelation ? <GuildRelationLegend /> : null}
       <div className="castle-list__header">
         {showGuildRelation ? <span aria-hidden="true"></span> : null}
         <span>拠点</span>
@@ -132,6 +131,17 @@ export function BattleMonitorCastleList<TCastleId extends string>({
         </div>
       ))}
     </div>
+  );
+
+  if (!showGuildRelation) {
+    return list;
+  }
+
+  return (
+    <>
+      <GuildRelationLegend />
+      {list}
+    </>
   );
 }
 

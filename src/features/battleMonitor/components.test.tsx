@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from "react";
+import { readFileSync } from "node:fs";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { BattleMonitorCastleList } from "./components";
@@ -60,6 +61,15 @@ describe("BattleMonitorCastleList", () => {
     expect(document.querySelector(".castle-list__legend")?.textContent).toContain("侵攻拠点");
     expect(getCastleRows()[1].querySelector(".castle-list__relation-icon--secured")).not.toBeNull();
     expect(document.querySelector(".defense-secured-badge__tooltip")).toBeNull();
+  });
+
+  it("keeps relation legend outside the list border styling", () => {
+    const styles = readFileSync("src/app/styles.css", "utf8");
+    const legendRule = styles.match(/\\.castle-list__legend \\{(?<body>[\\s\\S]*?)\\}/)?.groups?.body ?? "";
+
+    expect(legendRule).not.toContain("border");
+    expect(legendRule).not.toContain("background");
+    expect(legendRule).not.toContain("grid-column");
   });
 
   it("renders attack relation as a single sword icon with attack label", () => {

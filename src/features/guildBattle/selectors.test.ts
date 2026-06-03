@@ -242,6 +242,8 @@ describe("guild battle selectors", () => {
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [
           createCastle({ castleId: "secured" as GvgCastleId, attackerGuildId: null, defenseCount: 0 }),
+          createCastle({ castleId: "zero" as GvgCastleId, attackerGuildId: "0" as GvgGuildId, defenseCount: 0 }),
+          createCastle({ castleId: "empty" as GvgCastleId, attackerGuildId: "" as GvgGuildId, defenseCount: 0 }),
           createCastle({ castleId: "defense" as GvgCastleId, attackerGuildId: "789" as GvgGuildId, defenseCount: 10 })
         ],
         guildNames: {}
@@ -255,6 +257,8 @@ describe("guild battle selectors", () => {
 
     expect(selectedGuildDisplay.castles.map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["secured", "securedDefense"],
+      ["zero", "securedDefense"],
+      ["empty", "securedDefense"],
       ["defense", "defense"]
     ]);
   });

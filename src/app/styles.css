@@ -905,10 +905,9 @@ select {
   flex-wrap: wrap;
   gap: 8px 18px;
   align-items: center;
-  grid-column: 1 / -1;
-  padding: 8px 10px 4px;
+  margin-top: 10px;
+  padding: 0 2px;
   color: #334155;
-  background: #ffffff;
   font-size: 0.8125rem;
   font-weight: 700;
 }

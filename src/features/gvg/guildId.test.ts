@@ -11,6 +11,8 @@ describe("normalizeGvgGuildIdForComparison", () => {
 
   it("keeps empty IDs out of comparisons", () => {
     expect(normalizeGvgGuildIdForComparison(null)).toBeNull();
+    expect(normalizeGvgGuildIdForComparison(0)).toBeNull();
+    expect(normalizeGvgGuildIdForComparison("0")).toBeNull();
     expect(normalizeGvgGuildIdForComparison("")).toBeNull();
     expect(normalizeGvgGuildIdForComparison("   ")).toBeNull();
   });

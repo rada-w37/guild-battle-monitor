@@ -17,14 +17,24 @@ export function isDefenseSecured({
   now,
   ownerGuildId
 }: {
-  readonly attackerGuildId: string | null;
+  readonly attackerGuildId: string | number | null | undefined;
   readonly defenseCount: number;
   readonly now: Date;
-  readonly ownerGuildId: string | null;
+  readonly ownerGuildId: string | number | null | undefined;
 }): boolean {
-  if (ownerGuildId !== null && attackerGuildId === null) {
+  if (hasGuildId(ownerGuildId) && !hasGuildId(attackerGuildId)) {
     return true;
   }
 
   return defenseCount > getBattleEndRemainingSeconds(now);
+}
+
+function hasGuildId(guildId: string | number | null | undefined): boolean {
+  if (guildId === null || guildId === undefined) {
+    return false;
+  }
+
+  const normalizedGuildId = String(guildId).trim();
+
+  return normalizedGuildId.length > 0 && normalizedGuildId !== "0";
 }
