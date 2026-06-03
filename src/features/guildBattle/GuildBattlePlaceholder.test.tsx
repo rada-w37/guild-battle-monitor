@@ -1164,7 +1164,7 @@ function getDangerSortCheckbox() {
 }
 
 function getRenderedCastleLabels() {
-  return getCastleRows().map((row) => row.querySelector(".castle-list__castle")?.textContent?.trim() ?? "");
+  return getCastleRows().map((row) => row.querySelector(".castle-list__castle strong")?.textContent?.trim() ?? "");
 }
 
 function getCastleRows() {

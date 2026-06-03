@@ -175,7 +175,7 @@ function GuildRelationIcon({ relation }: { readonly relation: BattleMonitorCastl
   if (relation === "attack") {
     return (
       <svg className="castle-list__relation-icon castle-list__relation-icon--attack" viewBox="0 0 24 24" aria-label="攻撃中">
-        <path d="m4.5 3.5 6.3 6.3 1.4-1.4 1.4 1.4-2 2 1.6 1.6 2-2 1.4 1.4-1.4 1.4 6.3 6.3-2 2-6.3-6.3-1.4 1.4-1.4-1.4 2-2-1.6-1.6-2 2-1.4-1.4 1.4-1.4-6.3-6.3 2-2Zm15 0 2 2-6.2 6.2-2-2L19.5 3.5Zm-17 17 6.2-6.2 2 2L4.5 22.5l-2-2Z" />
+        <path d="M18.9 2.6 21.4 5l-8.7 8.7 1.8 1.8-1.7 1.7-2.4-2.4-5.6 5.6-2.2-2.2 5.6-5.6-2.4-2.4 1.7-1.7 1.8 1.8 8.6-8.7Z" />
       </svg>
     );
   }

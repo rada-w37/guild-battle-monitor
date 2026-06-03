@@ -93,7 +93,7 @@ describe("grandBattle selectors", () => {
         attackerGuildName: null,
         defenseCount: 80,
         attackCount: 0,
-        isDefenseSecured: false,
+        isDefenseSecured: true,
         koDisplay: { count: 0, tone: "none" },
         alertLevel: "safe"
       }
@@ -124,7 +124,7 @@ describe("grandBattle selectors", () => {
         {
           ...snapshot.castles[1],
           ownerGuildId: guildA,
-          attackerGuildId: null,
+          attackerGuildId: guildB,
           defenseCount: 10
         }
       ]

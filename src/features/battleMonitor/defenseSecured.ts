@@ -11,6 +11,20 @@ export function getBattleEndRemainingSeconds(now: Date): number {
   return Math.max(0, Math.ceil((battleEnd.getTime() - now.getTime()) / 1000));
 }
 
-export function isDefenseSecured(defenseCount: number, now: Date): boolean {
+export function isDefenseSecured({
+  attackerGuildId,
+  defenseCount,
+  now,
+  ownerGuildId
+}: {
+  readonly attackerGuildId: string | null;
+  readonly defenseCount: number;
+  readonly now: Date;
+  readonly ownerGuildId: string | null;
+}): boolean {
+  if (ownerGuildId !== null && attackerGuildId === null) {
+    return true;
+  }
+
   return defenseCount > getBattleEndRemainingSeconds(now);
 }

@@ -184,8 +184,8 @@ describe("guild battle selectors", () => {
         worldId,
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [
-          createCastle({ castleId: "secured" as GvgCastleId, defenseCount: 11 }),
-          createCastle({ castleId: "not-secured" as GvgCastleId, defenseCount: 10 })
+          createCastle({ castleId: "secured" as GvgCastleId, attackerGuildId: "789" as GvgGuildId, defenseCount: 11 }),
+          createCastle({ castleId: "not-secured" as GvgCastleId, attackerGuildId: "789" as GvgGuildId, defenseCount: 10 })
         ],
         guildNames: {}
       },
@@ -200,6 +200,39 @@ describe("guild battle selectors", () => {
       ["secured", true],
       ["not-secured", false]
     ]);
+  });
+
+  it("keeps undeclared defense secured and clears it when declared", () => {
+    const currentTime = new Date("2026-05-27T21:29:50.000+09:00");
+    const undeclaredDisplay = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [createCastle({ castleId: "castle-1" as GvgCastleId, attackerGuildId: null, defenseCount: 0 })],
+        guildNames: {}
+      },
+      {
+        ownGuildId: "",
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+        currentTime
+      }
+    );
+    const declaredDisplay = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [createCastle({ castleId: "castle-1" as GvgCastleId, attackerGuildId: "789" as GvgGuildId, defenseCount: 10 })],
+        guildNames: {}
+      },
+      {
+        ownGuildId: "",
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+        currentTime
+      }
+    );
+
+    expect(undeclaredDisplay.castles[0].isDefenseSecured).toBe(true);
+    expect(declaredDisplay.castles[0].isDefenseSecured).toBe(false);
   });
 
   it("adds castle metadata to view models", () => {

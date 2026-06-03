@@ -45,7 +45,12 @@ export function createGrandBattleCastleListViewModels(
         castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
       defenseCount: castle.defenseCount,
       attackCount: castle.attackCount,
-      isDefenseSecured: isDefenseSecured(castle.defenseCount, currentTime),
+      isDefenseSecured: isDefenseSecured({
+        attackerGuildId: castle.attackerGuildId,
+        defenseCount: castle.defenseCount,
+        now: currentTime,
+        ownerGuildId: castle.ownerGuildId
+      }),
       koDisplay: {
         count: castle.lastWinPartyKnockOutCount,
         tone: castle.lastWinPartyKnockOutCount > 0 ? "defense" : "none"

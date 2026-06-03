@@ -245,7 +245,12 @@ function createCastleViewModel(
     statusTone: statusDisplay.statusTone,
     defenseCount: castle.defenseCount,
     attackCount: castle.attackCount,
-    isDefenseSecured: isDefenseSecured(castle.defenseCount, currentTime),
+    isDefenseSecured: isDefenseSecured({
+      attackerGuildId: castle.attackerGuildId,
+      defenseCount: castle.defenseCount,
+      now: currentTime,
+      ownerGuildId: castle.ownerGuildId
+    }),
     lastWinPartyKnockOutCount: castle.lastWinPartyKnockOutCount,
     koDisplay: createKoDisplay(castle),
     alertLevel: getDefenseAlertLevel(castle, thresholds)
