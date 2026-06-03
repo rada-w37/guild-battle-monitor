@@ -18,6 +18,7 @@ import type { GuildBattleMonitorSettings } from "./types";
 
 const worldId = "1" as GvgWorldId;
 const ownGuildId = "123" as GvgGuildId;
+const relationCurrentTime = new Date("2026-05-27T12:29:50.000Z");
 
 function createCastle(overrides: Partial<GvgCastle> = {}): GvgCastle {
   return {
@@ -225,7 +226,8 @@ describe("guild battle selectors", () => {
         castles: [
           createCastle({ castleId: "state-0" as GvgCastleId, state: "idle" }),
           createCastle({ castleId: "state-1" as GvgCastleId, state: "inBattle" }),
-          createCastle({ castleId: "state-2" as GvgCastleId, state: "fallen" }),
+          createCastle({ castleId: "state-2" as GvgCastleId, defenseCount: 10, state: "fallen" }),
+          createCastle({ castleId: "state-2-secured" as GvgCastleId, defenseCount: 11, state: "fallen" }),
           createCastle({ castleId: "state-3" as GvgCastleId, state: "counterattack" }),
           createCastle({ castleId: "state-4" as GvgCastleId, state: "counterattackSuccessful" })
         ],
@@ -235,14 +237,16 @@ describe("guild battle selectors", () => {
       },
       {
         ownGuildId,
-        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+        currentTime: relationCurrentTime
       }
     );
 
     expect(display.castles.map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["state-0", "securedDefense"],
       ["state-1", "defense"],
-      ["state-2", "attackDisabled"],
+      ["state-2", "attack"],
+      ["state-2-secured", "attackDisabled"],
       ["state-3", "attack"],
       ["state-4", "securedDefense"]
     ]);
@@ -256,8 +260,10 @@ describe("guild battle selectors", () => {
         castles: [
           createCastle({ castleId: "state-0" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "idle" }),
           createCastle({ castleId: "state-1" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "inBattle" }),
-          createCastle({ castleId: "state-2" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "fallen" }),
-          createCastle({ castleId: "state-3" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, state: "counterattack" }),
+          createCastle({ castleId: "state-2" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, defenseCount: 10, state: "fallen" }),
+          createCastle({ castleId: "state-2-secured" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, defenseCount: 11, state: "fallen" }),
+          createCastle({ castleId: "state-3" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, defenseCount: 10, state: "counterattack" }),
+          createCastle({ castleId: "state-3-secured" as GvgCastleId, ownerGuildId: "456" as GvgGuildId, attackerGuildId: ownGuildId, defenseCount: 11, state: "counterattack" }),
           createCastle({
             castleId: "state-4" as GvgCastleId,
             ownerGuildId: "456" as GvgGuildId,
@@ -272,7 +278,8 @@ describe("guild battle selectors", () => {
       },
       {
         ownGuildId,
-        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+        currentTime: relationCurrentTime
       }
     );
 
@@ -280,7 +287,9 @@ describe("guild battle selectors", () => {
       ["state-0", "attack"],
       ["state-1", "attack"],
       ["state-2", "defense"],
+      ["state-2-secured", "securedDefense"],
       ["state-3", "defense"],
+      ["state-3-secured", "securedDefense"],
       ["state-4", "defenseDisabled"]
     ]);
   });

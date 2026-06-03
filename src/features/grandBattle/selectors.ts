@@ -35,7 +35,7 @@ export function createGrandBattleCastleListViewModels(
   return snapshot.castles
     .map((castle) => ({
       castle,
-      guildRelation: getSelectedGuildRelation(castle, selectedGuildId)
+      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, currentTime)
     }))
     .filter(({ guildRelation }) => selectedGuildId.length === 0 || guildRelation !== "none")
     .map(({ castle, guildRelation }) => ({
@@ -71,10 +71,11 @@ export function createGrandBattleCastleListViewModels(
 }
 
 function getSelectedGuildRelation(
-  castle: Pick<GrandBattleCastle, "attackerGuildId" | "ownerGuildId" | "state">,
-  selectedGuildId: GvgGuildId | ""
+  castle: Pick<GrandBattleCastle, "attackerGuildId" | "defenseCount" | "ownerGuildId" | "state">,
+  selectedGuildId: GvgGuildId | "",
+  currentTime: Date
 ): BattleMonitorCastleGuildRelation {
-  return getGvgCastleStateGuildRelation(castle, selectedGuildId);
+  return getGvgCastleStateGuildRelation(castle, selectedGuildId, currentTime);
 }
 
 function getGrandBattleDefenseAlertLevel(

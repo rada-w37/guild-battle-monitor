@@ -8,6 +8,7 @@ import type { GrandBattleSnapshot } from "./types";
 
 const guildA = "111111111050" as GvgGuildId;
 const guildB = "222222222050" as GvgGuildId;
+const relationCurrentTime = new Date("2026-05-27T12:29:50.000Z");
 const alertThresholds = {
   warningDefenseCount: 30,
   dangerDefenseCount: 15,
@@ -176,7 +177,8 @@ describe("grandBattle selectors", () => {
       castles: [
         { ...snapshot.castles[0], castleId: "state-0" as GvgCastleId, state: "idle", ownerGuildId: guildA, attackerGuildId: null },
         { ...snapshot.castles[0], castleId: "state-1" as GvgCastleId, state: "inBattle", ownerGuildId: guildA, attackerGuildId: null },
-        { ...snapshot.castles[0], castleId: "state-2" as GvgCastleId, state: "fallen", ownerGuildId: guildA, attackerGuildId: null },
+        { ...snapshot.castles[0], castleId: "state-2" as GvgCastleId, defenseCount: 10, state: "fallen", ownerGuildId: guildA, attackerGuildId: null },
+        { ...snapshot.castles[0], castleId: "state-2-secured" as GvgCastleId, defenseCount: 11, state: "fallen", ownerGuildId: guildA, attackerGuildId: null },
         { ...snapshot.castles[0], castleId: "state-3" as GvgCastleId, state: "counterattack", ownerGuildId: guildA, attackerGuildId: null },
         {
           ...snapshot.castles[0],
@@ -188,10 +190,11 @@ describe("grandBattle selectors", () => {
       ]
     } satisfies GrandBattleSnapshot;
 
-    expect(createGrandBattleCastleListViewModels(stateSnapshot, guildA, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+    expect(createGrandBattleCastleListViewModels(stateSnapshot, guildA, alertThresholds, relationCurrentTime).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["state-0", "securedDefense"],
       ["state-1", "defense"],
-      ["state-2", "attackDisabled"],
+      ["state-2", "attack"],
+      ["state-2-secured", "attackDisabled"],
       ["state-3", "attack"],
       ["state-4", "securedDefense"]
     ]);
@@ -203,8 +206,10 @@ describe("grandBattle selectors", () => {
       castles: [
         { ...snapshot.castles[0], castleId: "state-0" as GvgCastleId, state: "idle", ownerGuildId: guildA, attackerGuildId: guildB },
         { ...snapshot.castles[0], castleId: "state-1" as GvgCastleId, state: "inBattle", ownerGuildId: guildA, attackerGuildId: guildB },
-        { ...snapshot.castles[0], castleId: "state-2" as GvgCastleId, state: "fallen", ownerGuildId: guildA, attackerGuildId: guildB },
-        { ...snapshot.castles[0], castleId: "state-3" as GvgCastleId, state: "counterattack", ownerGuildId: guildA, attackerGuildId: guildB },
+        { ...snapshot.castles[0], castleId: "state-2" as GvgCastleId, defenseCount: 10, state: "fallen", ownerGuildId: guildA, attackerGuildId: guildB },
+        { ...snapshot.castles[0], castleId: "state-2-secured" as GvgCastleId, defenseCount: 11, state: "fallen", ownerGuildId: guildA, attackerGuildId: guildB },
+        { ...snapshot.castles[0], castleId: "state-3" as GvgCastleId, defenseCount: 10, state: "counterattack", ownerGuildId: guildA, attackerGuildId: guildB },
+        { ...snapshot.castles[0], castleId: "state-3-secured" as GvgCastleId, defenseCount: 11, state: "counterattack", ownerGuildId: guildA, attackerGuildId: guildB },
         {
           ...snapshot.castles[0],
           castleId: "state-4" as GvgCastleId,
@@ -215,11 +220,13 @@ describe("grandBattle selectors", () => {
       ]
     } satisfies GrandBattleSnapshot;
 
-    expect(createGrandBattleCastleListViewModels(stateSnapshot, guildB, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+    expect(createGrandBattleCastleListViewModels(stateSnapshot, guildB, alertThresholds, relationCurrentTime).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["state-0", "attack"],
       ["state-1", "attack"],
       ["state-2", "defense"],
+      ["state-2-secured", "securedDefense"],
       ["state-3", "defense"],
+      ["state-3-secured", "securedDefense"],
       ["state-4", "defenseDisabled"]
     ]);
   });

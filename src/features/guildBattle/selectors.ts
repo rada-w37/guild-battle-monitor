@@ -109,7 +109,7 @@ export function createOwnedCastleViewModels(
         castle,
         settings.alertThresholds,
         currentTime,
-        getGvgCastleStateGuildRelation(castle, settings.ownGuildId)
+        getGvgCastleStateGuildRelation(castle, settings.ownGuildId, currentTime)
       )
     );
 }
@@ -285,7 +285,7 @@ function createSelectedGuildCastleViewModels(
   return snapshot.castles
     .map((castle) => ({
       castle,
-      guildRelation: getSelectedGuildRelation(castle, selectedGuildId)
+      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, currentTime)
     }))
     .filter(({ guildRelation }) => guildRelation !== "none")
     .map(({ castle, guildRelation }) =>
@@ -295,9 +295,10 @@ function createSelectedGuildCastleViewModels(
 
 function getSelectedGuildRelation(
   castle: GvgCastle,
-  selectedGuildId: GvgGuildId
+  selectedGuildId: GvgGuildId,
+  currentTime: Date
 ): BattleMonitorCastleGuildRelation {
-  return getGvgCastleStateGuildRelation(castle, selectedGuildId);
+  return getGvgCastleStateGuildRelation(castle, selectedGuildId, currentTime);
 }
 
 function createKoDisplay(castle: Pick<GvgCastle, "lastWinPartyKnockOutCount">): GuildBattleCastleViewModel["koDisplay"] {
