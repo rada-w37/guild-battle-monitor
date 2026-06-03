@@ -4,9 +4,22 @@ export const BATTLE_END_TIME = {
   second: 0
 } as const;
 
+const JST_OFFSET_HOURS = 9;
+const JST_OFFSET_MS = JST_OFFSET_HOURS * 60 * 60 * 1000;
+
 export function getBattleEndRemainingSeconds(now: Date): number {
-  const battleEnd = new Date(now);
-  battleEnd.setHours(BATTLE_END_TIME.hour, BATTLE_END_TIME.minute, BATTLE_END_TIME.second, 0);
+  const jstNow = new Date(now.getTime() + JST_OFFSET_MS);
+  const battleEnd = new Date(
+    Date.UTC(
+      jstNow.getUTCFullYear(),
+      jstNow.getUTCMonth(),
+      jstNow.getUTCDate(),
+      BATTLE_END_TIME.hour - JST_OFFSET_HOURS,
+      BATTLE_END_TIME.minute,
+      BATTLE_END_TIME.second,
+      0
+    )
+  );
 
   return Math.max(0, Math.ceil((battleEnd.getTime() - now.getTime()) / 1000));
 }
