@@ -110,28 +110,54 @@ describe("BattleMonitorCastleList", () => {
       [
         createCastleViewModel({
           devDetails: {
-            ownerGuild: "Owner Guild (123)",
-            attackerGuild: "なし",
-            selectedGuildName: "Owner Guild",
-            relationType: "defense",
-            castleState: "normal",
-            gvgCastleState: "idle",
-            defenseCount: 31,
-            attackCount: 0
+            castleId: "1",
+            guildId: "Owner Guild（123）",
+            attackerGuildId: "なし",
+            defenseGuildId: "Owner Guild（123）",
+            gvgCastleState: "2 (fallen)",
+            utcFallenTimeStamp: "2026-05-27T00:05:00.000Z (2026-05-27 00:05:00 UTC)"
           }
         })
       ],
       { showDevDetails: true }
     );
 
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("owner=Owner Guild (123)");
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("attacker=なし");
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("selected=Owner Guild");
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("relationType=defense");
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("castleState=normal");
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("gvgCastleState=idle");
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("defenseCount=31");
-    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("attackCount=0");
+    const devText = document.querySelector(".castle-list__dev-details")?.textContent ?? "";
+
+    expect(devText).toContain("CastleId=1");
+    expect(devText).toContain("GuildId=Owner Guild（123）");
+    expect(devText).toContain("AttackerGuildId=なし");
+    expect(devText).toContain("DefenseGuildId=Owner Guild（123）");
+    expect(devText).toContain("GvgCastleState=2 (fallen)");
+    expect(devText).toContain("UtcFallenTimeStamp=2026-05-27T00:05:00.000Z (2026-05-27 00:05:00 UTC)");
+    expect(devText).not.toContain("selected");
+    expect(devText).not.toContain("relationType");
+    expect(devText).not.toContain("defenseCount");
+    expect(devText).not.toContain("attackCount");
+  });
+
+  it("does not render DEV details when the DEV column is disabled", () => {
+    renderCastleList([
+      createCastleViewModel({
+        devDetails: {
+          castleId: "1",
+          guildId: "Owner Guild（123）",
+          attackerGuildId: "なし",
+          defenseGuildId: "Owner Guild（123）",
+          gvgCastleState: "0 (none)",
+          utcFallenTimeStamp: "なし"
+        }
+      })
+    ]);
+
+    expect(document.querySelector(".castle-list--with-dev")).toBeNull();
+    expect(document.querySelector(".castle-list__dev-details")).toBeNull();
+  });
+
+  it("keeps DEV details hidden in mobile layout CSS", () => {
+    const styles = readFileSync("src/app/styles.css", "utf8");
+
+    expect(styles).toMatch(/@media \(max-width: 720px\)[\s\S]*\.castle-list__guild,\s*\.castle-list__updated\s*\{[\s\S]*display: none/);
   });
 });
 

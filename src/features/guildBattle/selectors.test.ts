@@ -108,14 +108,12 @@ describe("guild battle selectors", () => {
         defenseCount: 9,
         attackCount: 1,
         devDetails: {
-          ownerGuild: "Own Guild (000123)",
-          attackerGuild: "Attack Guild (789)",
-          selectedGuildName: "Own Guild",
-          relationType: "defense",
-          castleState: "normal",
-          gvgCastleState: "idle",
-          defenseCount: 9,
-          attackCount: 1
+          castleId: "castle-owned",
+          guildId: "Own Guild（000123）",
+          attackerGuildId: "Attack Guild（789）",
+          defenseGuildId: "Own Guild（000123）",
+          gvgCastleState: "0 (none)",
+          utcFallenTimeStamp: "なし"
         },
         isDefenseSecured: false,
         lastWinPartyKnockOutCount: 0,
@@ -153,18 +151,20 @@ describe("guild battle selectors", () => {
     expect(display.castles).toHaveLength(2);
   });
 
-  it("creates DEV details with guild names first", () => {
+  it("creates API based DEV details with guild names first", () => {
     const display = createGuildBattleCastleDisplayViewModel(
       {
         worldId,
         capturedAt: "2026-05-27T00:00:00.000Z",
         castles: [
           createCastle({
+            castleId: "fallen-castle" as GvgCastleId,
             ownerGuildId: ownGuildId,
             attackerGuildId: "789" as GvgGuildId,
             attackCount: 1,
             state: "fallen",
-            status: "fallen"
+            status: "fallen",
+            fallenAt: "2026-05-27T00:05:00.000Z"
           })
         ],
         guildNames: {
@@ -180,14 +180,40 @@ describe("guild battle selectors", () => {
     );
 
     expect(display.castles[0].devDetails).toEqual({
-      ownerGuild: "Own Guild (123)",
-      attackerGuild: "Attack Guild (789)",
-      selectedGuildName: "Own Guild",
-      relationType: "defense",
-      castleState: "fallen",
-      gvgCastleState: "fallen",
-      defenseCount: 31,
-      attackCount: 1
+      castleId: "fallen-castle",
+      guildId: "Own Guild（123）",
+      attackerGuildId: "Attack Guild（789）",
+      defenseGuildId: "Own Guild（123）",
+      gvgCastleState: "2 (fallen)",
+      utcFallenTimeStamp: "2026-05-27T00:05:00.000Z (2026-05-27 00:05:00 UTC)"
+    });
+  });
+
+  it("uses none and unknown labels in API based DEV details", () => {
+    const viewModels = createAllCastleViewModels(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({
+            castleId: "unknown-guild" as GvgCastleId,
+            ownerGuildId: "999" as GvgGuildId,
+            attackerGuildId: null,
+            state: "counterattack"
+          })
+        ],
+        guildNames: {}
+      },
+      DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS
+    );
+
+    expect(viewModels[0].devDetails).toEqual({
+      castleId: "unknown-guild",
+      guildId: "不明（999）",
+      attackerGuildId: "なし",
+      defenseGuildId: "不明（999）",
+      gvgCastleState: "3 (counterattack)",
+      utcFallenTimeStamp: "なし"
     });
   });
 

@@ -72,7 +72,14 @@ describe("grandBattle selectors", () => {
   });
 
   it("creates safe battle monitor castle view models", () => {
-    expect(createGrandBattleCastleListViewModels(snapshot, "", alertThresholds, new Date("2026-05-27T21:00:00.000+09:00"))).toEqual([
+    expect(
+      createGrandBattleCastleListViewModels(
+        snapshot,
+        "",
+        alertThresholds,
+        new Date("2026-05-27T21:00:00.000+09:00")
+      )
+    ).toEqual([
       {
         castleId: "1",
         guildRelation: "none",
@@ -82,14 +89,12 @@ describe("grandBattle selectors", () => {
         defenseCount: 120,
         attackCount: 5,
         devDetails: {
-          ownerGuild: "ギルドA (111111111050)",
-          attackerGuild: "ギルドB (222222222050)",
-          selectedGuildName: "なし",
-          relationType: "none",
-          castleState: "idle",
-          gvgCastleState: "idle",
-          defenseCount: 120,
-          attackCount: 5
+          castleId: "1",
+          guildId: "ギルドA（111111111050）",
+          attackerGuildId: "ギルドB（222222222050）",
+          defenseGuildId: "ギルドA（111111111050）",
+          gvgCastleState: "0 (none)",
+          utcFallenTimeStamp: "なし"
         },
         isDefenseSecured: false,
         koDisplay: { count: 30, tone: "defense" },
@@ -104,14 +109,12 @@ describe("grandBattle selectors", () => {
         defenseCount: 80,
         attackCount: 0,
         devDetails: {
-          ownerGuild: "ギルドB (222222222050)",
-          attackerGuild: "なし",
-          selectedGuildName: "なし",
-          relationType: "none",
-          castleState: "idle",
-          gvgCastleState: "idle",
-          defenseCount: 80,
-          attackCount: 0
+          castleId: "2",
+          guildId: "ギルドB（222222222050）",
+          attackerGuildId: "なし",
+          defenseGuildId: "ギルドB（222222222050）",
+          gvgCastleState: "0 (none)",
+          utcFallenTimeStamp: "なし"
         },
         isDefenseSecured: true,
         koDisplay: { count: 0, tone: "none" },
@@ -131,16 +134,39 @@ describe("grandBattle selectors", () => {
     ).toEqual([]);
   });
 
-  it("creates DEV details using resolved selected guild names", () => {
+  it("creates API based DEV details using resolved guild names", () => {
     expect(createGrandBattleCastleListViewModels(snapshot, guildB, alertThresholds)[0].devDetails).toEqual({
-      ownerGuild: "ギルドA (111111111050)",
-      attackerGuild: "ギルドB (222222222050)",
-      selectedGuildName: "ギルドB",
-      relationType: "attack",
-      castleState: "idle",
-      gvgCastleState: "idle",
-      defenseCount: 120,
-      attackCount: 5
+      castleId: "1",
+      guildId: "ギルドA（111111111050）",
+      attackerGuildId: "ギルドB（222222222050）",
+      defenseGuildId: "ギルドA（111111111050）",
+      gvgCastleState: "0 (none)",
+      utcFallenTimeStamp: "なし"
+    });
+  });
+
+  it("creates API based DEV details with fallen timestamp and unknown guild names", () => {
+    const fallenSnapshot = {
+      ...snapshot,
+      guildNames: {},
+      castles: [
+        {
+          ...snapshot.castles[0],
+          state: "fallen",
+          ownerGuildId: guildA,
+          attackerGuildId: null,
+          fallenAt: "2026-05-27T00:05:00.000Z"
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(createGrandBattleCastleListViewModels(fallenSnapshot, "", alertThresholds)[0].devDetails).toEqual({
+      castleId: "1",
+      guildId: "不明（111111111050）",
+      attackerGuildId: "なし",
+      defenseGuildId: "不明（111111111050）",
+      gvgCastleState: "2 (fallen)",
+      utcFallenTimeStamp: "2026-05-27T00:05:00.000Z (2026-05-27 00:05:00 UTC)"
     });
   });
 

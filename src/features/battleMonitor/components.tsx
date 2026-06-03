@@ -158,14 +158,12 @@ export function BattleMonitorCastleList<TCastleId extends string>({
 function CastleDevDetails({ details }: { readonly details: NonNullable<BattleMonitorCastleViewModel["devDetails"]> }) {
   return (
     <span className="castle-list__dev-details">
-      <span>{`owner=${details.ownerGuild}`}</span>
-      <span>{`attacker=${details.attackerGuild}`}</span>
-      <span>{`selected=${details.selectedGuildName}`}</span>
-      <span>{`relationType=${details.relationType}`}</span>
-      <span>{`castleState=${details.castleState}`}</span>
-      <span>{`gvgCastleState=${details.gvgCastleState}`}</span>
-      <span>{`defenseCount=${details.defenseCount}`}</span>
-      <span>{`attackCount=${details.attackCount}`}</span>
+      <span>{`CastleId=${details.castleId}`}</span>
+      <span>{`GuildId=${details.guildId}`}</span>
+      <span>{`AttackerGuildId=${details.attackerGuildId}`}</span>
+      <span>{`DefenseGuildId=${details.defenseGuildId}`}</span>
+      <span>{`GvgCastleState=${details.gvgCastleState}`}</span>
+      <span>{`UtcFallenTimeStamp=${details.utcFallenTimeStamp}`}</span>
     </span>
   );
 }

@@ -3,8 +3,9 @@ import type {
   BattleMonitorCastleViewModel,
   BattleMonitorGuildCandidateViewModel
 } from "../battleMonitor/types";
+import { createBattleMonitorCastleDevDetails } from "../battleMonitor/devDetails";
 import { isDefenseSecured } from "../battleMonitor/defenseSecured";
-import type { GvgCastleId, GvgGuildId, GvgGuildNameMap } from "../gvg/types";
+import type { GvgCastleId, GvgGuildId } from "../gvg/types";
 import type { GuildBattleAlertLevel, GuildBattleAlertThresholds } from "../guildBattle/types";
 import type {
   GrandBattleCastle,
@@ -45,16 +46,15 @@ export function createGrandBattleCastleListViewModels(
         castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
       defenseCount: castle.defenseCount,
       attackCount: castle.attackCount,
-      devDetails: {
-        ownerGuild: formatDevGuild(castle.ownerGuildId, snapshot.guildNames),
-        attackerGuild: formatDevGuild(castle.attackerGuildId, snapshot.guildNames),
-        selectedGuildName: getDevSelectedGuildName(selectedGuildId, snapshot.guildNames),
-        relationType: guildRelation,
-        castleState: castle.state,
+      devDetails: createBattleMonitorCastleDevDetails({
+        castleId: castle.castleId,
+        guildId: castle.ownerGuildId,
+        attackerGuildId: castle.attackerGuildId,
+        defenseGuildId: castle.ownerGuildId,
         gvgCastleState: castle.state,
-        defenseCount: castle.defenseCount,
-        attackCount: castle.attackCount
-      },
+        utcFallenTimeStamp: castle.fallenAt,
+        guildNames: snapshot.guildNames
+      }),
       isDefenseSecured: isDefenseSecured({
         attackerGuildId: castle.attackerGuildId,
         defenseCount: castle.defenseCount,
@@ -67,29 +67,6 @@ export function createGrandBattleCastleListViewModels(
       },
       alertLevel: getGrandBattleDefenseAlertLevel(castle, alertThresholds)
     }));
-}
-
-function formatDevGuild(guildId: GvgGuildId | null, guildNames: GvgGuildNameMap): string {
-  if (guildId === null) {
-    return "なし";
-  }
-
-  const guildName = guildNames[guildId];
-
-  return guildName === undefined ? guildId : `${guildName} (${guildId})`;
-}
-
-function getDevSelectedGuildName(
-  selectedGuildId: GvgGuildId | "",
-  guildNames: GvgGuildNameMap
-): string {
-  if (selectedGuildId.length === 0) {
-    return "なし";
-  }
-
-  const guildId = selectedGuildId as GvgGuildId;
-
-  return guildNames[guildId] ?? guildId;
 }
 
 function getSelectedGuildRelation(
