@@ -187,11 +187,11 @@ function GuildRelationLegend() {
       </span>
       <span className="castle-list__legend-item">
         <GuildRelationIcon relation="attackDisabled" />
-        <span>萓ｵ謾ｻ荳榊庄</span>
+        <span>侵攻不可</span>
       </span>
       <span className="castle-list__legend-item">
         <GuildRelationIcon relation="defenseDisabled" />
-        <span>髦ｲ陦帙荳榊庄</span>
+        <span>防衛不可</span>
       </span>
     </div>
   );
