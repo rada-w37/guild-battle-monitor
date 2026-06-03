@@ -1,5 +1,12 @@
 import type { BattleMonitorCastleViewModel, BattleMonitorGuildCandidateViewModel } from "./types";
 
+const ATTACK_ICON_VIEW_BOX = "140 140 980 980";
+const ATTACK_ICON_FILL = "#f2483a";
+const ATTACK_ICON_PATHS = [
+  "M 233 168 L 226 181 L 231 316 L 236 336 L 243 350 L 273 382 L 499 604 L 498 610 L 458 653 L 452 653 L 419 620 L 409 616 L 392 618 L 334 676 L 329 688 L 329 697 L 334 709 L 374 751 L 375 756 L 226 911 L 218 930 L 217 956 L 221 971 L 234 992 L 250 1006 L 273 1016 L 300 1017 L 319 1011 L 331 1003 L 472 860 L 477 860 L 527 909 L 543 912 L 554 908 L 614 851 L 619 838 L 618 828 L 612 817 L 579 783 L 579 779 L 610 750 L 647 720 L 712 771 L 712 776 L 671 819 L 667 828 L 666 838 L 671 852 L 725 906 L 738 911 L 745 911 L 756 907 L 808 856 L 814 855 L 941 985 L 966 1008 L 986 1016 L 1006 1017 L 1025 1012 L 1043 1001 L 1060 982 L 1069 961 L 1070 934 L 1067 923 L 1058 907 L 913 759 L 912 751 L 951 708 L 955 698 L 955 687 L 951 677 L 906 630 L 892 618 L 875 616 L 865 620 L 837 648 L 832 648 L 791 598 L 423 213 L 397 200 L 255 163 L 243 163 Z",
+  "M 1053 166 L 1047 163 L 1034 163 L 888 201 L 867 211 L 809 271 L 674 419 L 820 573 L 1035 363 L 1047 347 L 1053 334 L 1057 317 L 1062 180 L 1060 174 Z"
+];
+
 export function BattleMonitorGuildSelect<TGuildId extends string>({
   candidates,
   disabled,
@@ -183,8 +190,10 @@ function GuildRelationIcon({ relation }: { readonly relation: BattleMonitorCastl
 
   if (relation === "attack") {
     return (
-      <svg className="castle-list__relation-icon castle-list__relation-icon--attack" viewBox="0 0 24 24" aria-label="侵攻拠点">
-        <path d="M18.9 2.6 21.4 5l-8.7 8.7 1.8 1.8-1.7 1.7-2.4-2.4-5.6 5.6-2.2-2.2 5.6-5.6-2.4-2.4 1.7-1.7 1.8 1.8 8.6-8.7Z" />
+      <svg className="castle-list__relation-icon castle-list__relation-icon--attack" viewBox={ATTACK_ICON_VIEW_BOX} aria-label="侵攻拠点">
+        {ATTACK_ICON_PATHS.map((path) => (
+          <path key={path} fill={ATTACK_ICON_FILL} d={path} />
+        ))}
       </svg>
     );
   }

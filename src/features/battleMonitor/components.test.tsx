@@ -72,7 +72,7 @@ describe("BattleMonitorCastleList", () => {
     expect(legendRule).not.toContain("grid-column");
   });
 
-  it("renders attack relation as a single sword icon with attack label", () => {
+  it("renders attack relation as the attached crossed swords icon with attack label", () => {
     renderCastleList([
       createCastleViewModel({
         castleId: "1",
@@ -81,12 +81,16 @@ describe("BattleMonitorCastleList", () => {
       })
     ]);
 
-    const attackIcon = document.querySelector(".castle-list__relation-icon--attack");
-    expect(attackIcon?.getAttribute("aria-label")).toBe("侵攻拠点");
-    expect(attackIcon?.querySelectorAll("path")).toHaveLength(1);
-    expect(attackIcon?.querySelector("path")?.getAttribute("d")).toBe(
-      "M18.9 2.6 21.4 5l-8.7 8.7 1.8 1.8-1.7 1.7-2.4-2.4-5.6 5.6-2.2-2.2 5.6-5.6-2.4-2.4 1.7-1.7 1.8 1.8 8.6-8.7Z"
-    );
+    const attackIcons = Array.from(document.querySelectorAll(".castle-list__relation-icon--attack"));
+    expect(attackIcons).toHaveLength(2);
+
+    for (const attackIcon of attackIcons) {
+      expect(attackIcon.getAttribute("aria-label")).toBe("侵攻拠点");
+      expect(attackIcon.getAttribute("viewBox")).toBe("140 140 980 980");
+      expect(attackIcon.querySelectorAll("path")).toHaveLength(2);
+      expect(attackIcon.querySelector("path")?.getAttribute("fill")).toBe("#f2483a");
+      expect(attackIcon.querySelector("path")?.getAttribute("d")).toContain("M 233 168");
+    }
   });
 });
 
