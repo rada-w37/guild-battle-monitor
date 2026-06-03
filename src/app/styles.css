@@ -774,7 +774,7 @@ select {
     78px
     70px
     minmax(110px, 1fr)
-    minmax(116px, 0.8fr);
+    minmax(260px, 1.6fr);
 }
 
 .castle-list--with-owner.castle-list--with-dev .castle-list__header,
@@ -786,7 +786,7 @@ select {
     70px
     minmax(110px, 1fr)
     minmax(110px, 1fr)
-    minmax(116px, 0.8fr);
+    minmax(260px, 1.6fr);
 }
 
 .castle-list--with-test .castle-list__header,
@@ -797,7 +797,7 @@ select {
     78px
     70px
     minmax(110px, 1fr)
-    minmax(116px, 0.8fr)
+    minmax(260px, 1.6fr)
     minmax(170px, 1.2fr);
 }
 
@@ -810,7 +810,7 @@ select {
     70px
     minmax(110px, 1fr)
     minmax(110px, 1fr)
-    minmax(116px, 0.8fr)
+    minmax(260px, 1.6fr)
     minmax(170px, 1.2fr);
 }
 
@@ -846,7 +846,7 @@ select {
     78px
     70px
     minmax(110px, 1fr)
-    minmax(116px, 0.8fr);
+    minmax(260px, 1.6fr);
 }
 
 .castle-list--with-relation.castle-list--with-owner.castle-list--with-dev .castle-list__header,
@@ -859,7 +859,7 @@ select {
     70px
     minmax(110px, 1fr)
     minmax(110px, 1fr)
-    minmax(116px, 0.8fr);
+    minmax(260px, 1.6fr);
 }
 
 .castle-list--with-relation.castle-list--with-test .castle-list__header,
@@ -871,7 +871,7 @@ select {
     78px
     70px
     minmax(110px, 1fr)
-    minmax(116px, 0.8fr)
+    minmax(260px, 1.6fr)
     minmax(170px, 1.2fr);
 }
 
@@ -892,6 +892,20 @@ select {
   border-left: 5px solid transparent;
   background: var(--app-row-bg);
   font-size: 0.875rem;
+}
+
+.castle-list__dev-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  color: var(--app-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.castle-list__dev-details span {
+  padding: 0;
 }
 
 .castle-list__row--safe {

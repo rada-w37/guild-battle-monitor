@@ -1,7 +1,7 @@
 import { isDefenseSecured } from "../battleMonitor/defenseSecured";
 import type { BattleMonitorCastleGuildRelation } from "../battleMonitor/types";
 import { normalizeGvgGuildIdForComparison } from "../gvg/guildId";
-import type { GvgCastle, GvgGuildId, GvgSnapshot } from "../gvg/types";
+import type { GvgCastle, GvgGuildId, GvgGuildNameMap, GvgSnapshot } from "../gvg/types";
 import { getGuildBattleCastleMetadata } from "./castleMetadata";
 import { DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS } from "./settings";
 import type {
@@ -107,7 +107,8 @@ export function createOwnedCastleViewModels(
         castle,
         settings.alertThresholds,
         currentTime,
-        getDefenseGuildRelation(castle, currentTime)
+        getDefenseGuildRelation(castle, currentTime),
+        settings.ownGuildId
       )
     );
 }
@@ -115,9 +116,12 @@ export function createOwnedCastleViewModels(
 export function createAllCastleViewModels(
   snapshot: GvgSnapshot,
   thresholds: GuildBattleAlertThresholds = DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
-  currentTime = new Date()
+  currentTime = new Date(),
+  selectedGuildId: GvgGuildId | "" = ""
 ): GuildBattleCastleViewModel[] {
-  return snapshot.castles.map((castle) => createCastleViewModel(snapshot, castle, thresholds, currentTime));
+  return snapshot.castles.map((castle) =>
+    createCastleViewModel(snapshot, castle, thresholds, currentTime, "none", selectedGuildId)
+  );
 }
 
 export function createGuildBattleCastleDisplayViewModel(
@@ -132,7 +136,7 @@ export function createGuildBattleCastleDisplayViewModel(
     return {
       mode: "allCastles",
       reason: "ownGuildUnspecified",
-      castles: createAllCastleViewModels(snapshot, settings.alertThresholds, settings.currentTime)
+      castles: createAllCastleViewModels(snapshot, settings.alertThresholds, settings.currentTime, "")
     };
   }
 
@@ -154,7 +158,7 @@ export function createGuildBattleCastleDisplayViewModel(
   return {
     mode: "allCastles",
     reason: "ownedCastlesNotFound",
-    castles: createAllCastleViewModels(snapshot, settings.alertThresholds, settings.currentTime)
+    castles: createAllCastleViewModels(snapshot, settings.alertThresholds, settings.currentTime, settings.ownGuildId)
   };
 }
 
@@ -232,7 +236,8 @@ function createCastleViewModel(
   castle: GvgCastle,
   thresholds: GuildBattleAlertThresholds,
   currentTime = new Date(),
-  guildRelation: BattleMonitorCastleGuildRelation = "none"
+  guildRelation: BattleMonitorCastleGuildRelation = "none",
+  selectedGuildId: GvgGuildId | "" = ""
 ): GuildBattleCastleViewModel {
   const statusDisplay = getGuildBattleCastleStatusDisplay(castle);
   const castleMetadata = getGuildBattleCastleMetadata(castle.castleId);
@@ -253,6 +258,16 @@ function createCastleViewModel(
     statusTone: statusDisplay.statusTone,
     defenseCount: castle.defenseCount,
     attackCount: castle.attackCount,
+    devDetails: {
+      ownerGuild: formatDevGuild(castle.ownerGuildId, snapshot.guildNames),
+      attackerGuild: formatDevGuild(castle.attackerGuildId, snapshot.guildNames),
+      selectedGuildName: getDevSelectedGuildName(selectedGuildId, snapshot.guildNames),
+      relationType: guildRelation,
+      castleState: castle.status,
+      gvgCastleState: castle.state,
+      defenseCount: castle.defenseCount,
+      attackCount: castle.attackCount
+    },
     isDefenseSecured: isDefenseSecured({
       attackerGuildId: castle.attackerGuildId,
       defenseCount: castle.defenseCount,
@@ -263,6 +278,44 @@ function createCastleViewModel(
     koDisplay: createKoDisplay(castle),
     alertLevel: getDefenseAlertLevel(castle, thresholds)
   };
+}
+
+function formatDevGuild(guildId: GvgGuildId | null, guildNames: GvgGuildNameMap): string {
+  if (guildId === null) {
+    return "なし";
+  }
+
+  const guildName = guildNames[guildId];
+
+  return guildName === undefined ? guildId : `${guildName} (${guildId})`;
+}
+
+function getDevSelectedGuildName(
+  selectedGuildId: GvgGuildId | "",
+  guildNames: GvgGuildNameMap
+): string {
+  if (selectedGuildId.length === 0) {
+    return "なし";
+  }
+
+  const guildId = selectedGuildId as GvgGuildId;
+
+  return resolveGuildName(guildId, guildNames) ?? guildId;
+}
+
+function resolveGuildName(guildId: GvgGuildId, guildNames: GvgGuildNameMap): string | null {
+  const guildName = guildNames[guildId];
+
+  if (guildName !== undefined) {
+    return guildName;
+  }
+
+  const normalizedGuildId = normalizeGvgGuildIdForComparison(guildId);
+  const matchingGuildId = Object.keys(guildNames).find(
+    (candidateGuildId) => normalizeGvgGuildIdForComparison(candidateGuildId as GvgGuildId) === normalizedGuildId
+  ) as GvgGuildId | undefined;
+
+  return matchingGuildId === undefined ? null : guildNames[matchingGuildId];
 }
 
 function createSelectedGuildCastleViewModels(
@@ -277,7 +330,9 @@ function createSelectedGuildCastleViewModels(
       guildRelation: getSelectedGuildRelation(castle, selectedGuildId, currentTime)
     }))
     .filter(({ guildRelation }) => guildRelation !== "none")
-    .map(({ castle, guildRelation }) => createCastleViewModel(snapshot, castle, thresholds, currentTime, guildRelation));
+    .map(({ castle, guildRelation }) =>
+      createCastleViewModel(snapshot, castle, thresholds, currentTime, guildRelation, selectedGuildId)
+    );
 }
 
 function getSelectedGuildRelation(

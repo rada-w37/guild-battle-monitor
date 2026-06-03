@@ -87,7 +87,8 @@ describe("guild battle selectors", () => {
           ["789" as GvgGuildId]: "Attack Guild"
         }
       },
-      settings
+      settings,
+      new Date("2026-05-27T21:00:00.000+09:00")
     );
 
     expect(viewModels).toEqual([
@@ -106,6 +107,16 @@ describe("guild battle selectors", () => {
         statusTone: "battle",
         defenseCount: 9,
         attackCount: 1,
+        devDetails: {
+          ownerGuild: "Own Guild (000123)",
+          attackerGuild: "Attack Guild (789)",
+          selectedGuildName: "Own Guild",
+          relationType: "defense",
+          castleState: "normal",
+          gvgCastleState: "idle",
+          defenseCount: 9,
+          attackCount: 1
+        },
         isDefenseSecured: false,
         lastWinPartyKnockOutCount: 0,
         koDisplay: {
@@ -140,6 +151,44 @@ describe("guild battle selectors", () => {
     expect(display.mode).toBe("allCastles");
     expect(display.reason).toBe("ownGuildUnspecified");
     expect(display.castles).toHaveLength(2);
+  });
+
+  it("creates DEV details with guild names first", () => {
+    const display = createGuildBattleCastleDisplayViewModel(
+      {
+        worldId,
+        capturedAt: "2026-05-27T00:00:00.000Z",
+        castles: [
+          createCastle({
+            ownerGuildId: ownGuildId,
+            attackerGuildId: "789" as GvgGuildId,
+            attackCount: 1,
+            state: "fallen",
+            status: "fallen"
+          })
+        ],
+        guildNames: {
+          [ownGuildId]: "Own Guild",
+          ["789" as GvgGuildId]: "Attack Guild"
+        }
+      },
+      {
+        ownGuildId,
+        alertThresholds: DEFAULT_GUILD_BATTLE_ALERT_THRESHOLDS,
+        currentTime: new Date("2026-05-27T21:00:00.000+09:00")
+      }
+    );
+
+    expect(display.castles[0].devDetails).toEqual({
+      ownerGuild: "Own Guild (123)",
+      attackerGuild: "Attack Guild (789)",
+      selectedGuildName: "Own Guild",
+      relationType: "defense",
+      castleState: "fallen",
+      gvgCastleState: "fallen",
+      defenseCount: 31,
+      attackCount: 1
+    });
   });
 
   it("includes selected guild attack castles and prioritizes attack relation", () => {

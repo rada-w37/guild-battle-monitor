@@ -104,6 +104,35 @@ describe("BattleMonitorCastleList", () => {
       expect(attackIcon.querySelector("path")?.getAttribute("d")).toContain("M 233 168");
     }
   });
+
+  it("renders DEV details inside the DEV column", () => {
+    renderCastleList(
+      [
+        createCastleViewModel({
+          devDetails: {
+            ownerGuild: "Owner Guild (123)",
+            attackerGuild: "なし",
+            selectedGuildName: "Owner Guild",
+            relationType: "defense",
+            castleState: "normal",
+            gvgCastleState: "idle",
+            defenseCount: 31,
+            attackCount: 0
+          }
+        })
+      ],
+      { showDevDetails: true }
+    );
+
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("owner=Owner Guild (123)");
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("attacker=なし");
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("selected=Owner Guild");
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("relationType=defense");
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("castleState=normal");
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("gvgCastleState=idle");
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("defenseCount=31");
+    expect(document.querySelector(".castle-list__dev-details")?.textContent).toContain("attackCount=0");
+  });
 });
 
 function createCastleViewModel(
@@ -124,7 +153,10 @@ function createCastleViewModel(
   };
 }
 
-function renderCastleList(viewModels: readonly BattleMonitorCastleViewModel[]) {
+function renderCastleList(
+  viewModels: readonly BattleMonitorCastleViewModel[],
+  options: { readonly showDevDetails?: boolean } = {}
+) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -134,7 +166,7 @@ function renderCastleList(viewModels: readonly BattleMonitorCastleViewModel[]) {
       <BattleMonitorCastleList
         capturedAt="2026-05-27T00:00:00.000Z"
         isTestModeEnabled={false}
-        showDevDetails={false}
+        showDevDetails={options.showDevDetails ?? false}
         showOwnerGuild={false}
         viewModels={viewModels}
         onTestModeAttackIncrease={() => {}}

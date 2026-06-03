@@ -11,6 +11,17 @@ export interface BattleMonitorCastleKoViewModel {
 
 export type BattleMonitorCastleGuildRelation = "defense" | "securedDefense" | "attack" | "none";
 
+export interface BattleMonitorCastleDevDetails {
+  readonly ownerGuild: string;
+  readonly attackerGuild: string;
+  readonly selectedGuildName: string;
+  readonly relationType: BattleMonitorCastleGuildRelation;
+  readonly castleState: string;
+  readonly gvgCastleState: string;
+  readonly defenseCount: number;
+  readonly attackCount: number;
+}
+
 export interface BattleMonitorCastleViewModel<TCastleId extends string = string> {
   readonly castleId: TCastleId;
   readonly castleName: string;
@@ -22,4 +33,5 @@ export interface BattleMonitorCastleViewModel<TCastleId extends string = string>
   readonly isDefenseSecured: boolean;
   readonly koDisplay: BattleMonitorCastleKoViewModel;
   readonly alertLevel: "safe" | "warning" | "danger" | "critical";
+  readonly devDetails?: BattleMonitorCastleDevDetails;
 }

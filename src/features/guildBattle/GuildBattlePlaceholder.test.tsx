@@ -792,6 +792,7 @@ describe("GuildBattlePlaceholder", () => {
 
     await loadWorld37();
 
+    document.querySelectorAll(".castle-list__dev-details").forEach((element) => element.remove());
     const listText = getCastleListText();
     expect(listText).toContain("Owner Guild");
     expect(listText).toContain("Attack Guild");

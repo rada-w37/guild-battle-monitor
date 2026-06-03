@@ -72,7 +72,7 @@ describe("grandBattle selectors", () => {
   });
 
   it("creates safe battle monitor castle view models", () => {
-    expect(createGrandBattleCastleListViewModels(snapshot, "", alertThresholds)).toEqual([
+    expect(createGrandBattleCastleListViewModels(snapshot, "", alertThresholds, new Date("2026-05-27T21:00:00.000+09:00"))).toEqual([
       {
         castleId: "1",
         guildRelation: "none",
@@ -81,6 +81,16 @@ describe("grandBattle selectors", () => {
         attackerGuildName: "ギルドB",
         defenseCount: 120,
         attackCount: 5,
+        devDetails: {
+          ownerGuild: "ギルドA (111111111050)",
+          attackerGuild: "ギルドB (222222222050)",
+          selectedGuildName: "なし",
+          relationType: "none",
+          castleState: "idle",
+          gvgCastleState: "idle",
+          defenseCount: 120,
+          attackCount: 5
+        },
         isDefenseSecured: false,
         koDisplay: { count: 30, tone: "defense" },
         alertLevel: "safe"
@@ -93,6 +103,16 @@ describe("grandBattle selectors", () => {
         attackerGuildName: null,
         defenseCount: 80,
         attackCount: 0,
+        devDetails: {
+          ownerGuild: "ギルドB (222222222050)",
+          attackerGuild: "なし",
+          selectedGuildName: "なし",
+          relationType: "none",
+          castleState: "idle",
+          gvgCastleState: "idle",
+          defenseCount: 80,
+          attackCount: 0
+        },
         isDefenseSecured: true,
         koDisplay: { count: 0, tone: "none" },
         alertLevel: "safe"
@@ -109,6 +129,19 @@ describe("grandBattle selectors", () => {
     expect(
       createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId, alertThresholds).map((castle) => castle.castleId)
     ).toEqual([]);
+  });
+
+  it("creates DEV details using resolved selected guild names", () => {
+    expect(createGrandBattleCastleListViewModels(snapshot, guildB, alertThresholds)[0].devDetails).toEqual({
+      ownerGuild: "ギルドA (111111111050)",
+      attackerGuild: "ギルドB (222222222050)",
+      selectedGuildName: "ギルドB",
+      relationType: "attack",
+      castleState: "idle",
+      gvgCastleState: "idle",
+      defenseCount: 120,
+      attackCount: 5
+    });
   });
 
   it("prioritizes attack relation and marks defense secured", () => {

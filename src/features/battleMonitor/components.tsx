@@ -116,7 +116,7 @@ export function BattleMonitorCastleList<TCastleId extends string>({
           </span>
           {showDevDetails ? (
             <span className="castle-list__updated" data-label="更新">
-              {capturedAt}
+              {viewModel.devDetails ? <CastleDevDetails details={viewModel.devDetails} /> : capturedAt}
             </span>
           ) : null}
           {isTestModeEnabled ? (
@@ -152,6 +152,21 @@ export function BattleMonitorCastleList<TCastleId extends string>({
       <GuildRelationLegend />
       {list}
     </>
+  );
+}
+
+function CastleDevDetails({ details }: { readonly details: NonNullable<BattleMonitorCastleViewModel["devDetails"]> }) {
+  return (
+    <span className="castle-list__dev-details">
+      <span>{`owner=${details.ownerGuild}`}</span>
+      <span>{`attacker=${details.attackerGuild}`}</span>
+      <span>{`selected=${details.selectedGuildName}`}</span>
+      <span>{`relationType=${details.relationType}`}</span>
+      <span>{`castleState=${details.castleState}`}</span>
+      <span>{`gvgCastleState=${details.gvgCastleState}`}</span>
+      <span>{`defenseCount=${details.defenseCount}`}</span>
+      <span>{`attackCount=${details.attackCount}`}</span>
+    </span>
   );
 }
 
