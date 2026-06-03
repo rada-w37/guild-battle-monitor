@@ -1,7 +1,7 @@
 import type { BattleMonitorCastleViewModel, BattleMonitorGuildCandidateViewModel } from "./types";
 
 const DEFENSE_ICON_BLUE = "#1f6feb";
-const DEFENSE_ICON_HALF_FILL = "#dbeafe";
+const DEFENSE_ICON_HALF_FILL = DEFENSE_ICON_BLUE;
 const ATTACK_ICON_VIEW_BOX = "140 140 980 980";
 const ATTACK_ICON_FILL = "#f2483a";
 const ATTACK_ICON_PATHS = [

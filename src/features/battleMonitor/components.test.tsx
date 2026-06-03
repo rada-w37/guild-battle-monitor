@@ -63,7 +63,7 @@ describe("BattleMonitorCastleList", () => {
     expect(defenseIcons).toHaveLength(2);
     for (const defenseIcon of defenseIcons) {
       expect(defenseIcon.querySelectorAll("path")).toHaveLength(2);
-      expect(defenseIcon.querySelector("path")?.getAttribute("fill")).toBe("#dbeafe");
+      expect(defenseIcon.querySelector("path")?.getAttribute("fill")).toBe("#1f6feb");
       expect(defenseIcon.querySelector("path")?.getAttribute("d")).toContain("M12 4.4");
     }
     expect(getCastleRows()[1].querySelector(".castle-list__relation-icon--secured")).not.toBeNull();
