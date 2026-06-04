@@ -149,12 +149,18 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string }) {
         />
         Discord通知を有効にする
       </label>
-      <label className="field">
+      <label className="field" htmlFor="notification-endpoint">
         <span className="field__label">Discord Webhook URL</span>
         <input
+          autoCapitalize="none"
+          autoComplete="off"
+          autoCorrect="off"
           className="field__input"
           disabled={status !== "idle"}
-          type="password"
+          id="notification-endpoint"
+          name="notification-endpoint"
+          spellCheck={false}
+          type="url"
           value={endpoint}
           onChange={(event) => setEndpoint(event.target.value)}
         />
