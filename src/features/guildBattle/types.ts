@@ -84,3 +84,9 @@ export interface OwnedGuildProfile {
   readonly guildId: string | null;
   readonly guildName: string | null;
 }
+
+export interface GuildShare {
+  readonly guildId: string;
+  readonly adminAccessKey: string;
+  readonly guestAccessKey: string;
+}

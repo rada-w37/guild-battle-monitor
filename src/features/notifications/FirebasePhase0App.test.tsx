@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppModeProvider } from "../../app/appMode";
 import type { AuthState } from "../auth/types";
-import type { OwnedGuildProfile } from "../guildBattle/types";
+import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
 import { FirebasePhase0App } from "./FirebasePhase0App";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -106,11 +106,118 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
   });
 });
 
+describe("FirebasePhase0App guild share settings", () => {
+  it("shows owner share settings collapsed and generates URLs after guild setup", async () => {
+    const loadShare = vi.fn(() => Promise.resolve(null));
+    const saveShare = createSaveShareMock();
+
+    await renderApp("/app", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn(), loadShare, saveShare);
+    await openSettings();
+
+    const settings = getShareSettings();
+    expect(settings.open).toBe(false);
+    await openDetails(settings);
+
+    expect(saveShare).toHaveBeenCalledTimes(1);
+    const savedShare = saveShare.mock.calls[0][1];
+    expect(savedShare.guildId).toBe("saved-guild");
+    expect(savedShare.adminAccessKey).toMatch(/^a_/);
+    expect(savedShare.guestAccessKey).toMatch(/^g_/);
+    expect(getShareUrlInputs().map((input) => input.value)).toEqual([
+      `${window.location.origin}/saved-guild/${savedShare.adminAccessKey}`,
+      `${window.location.origin}/saved-guild/${savedShare.guestAccessKey}`
+    ]);
+  });
+
+  it("regenerates access keys when the saved share belongs to another guild", async () => {
+    const previousShare = createShare("old-guild");
+    const saveShare = createSaveShareMock();
+
+    await renderApp(
+      "/app",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      vi.fn(() => Promise.resolve(previousShare)),
+      saveShare
+    );
+    await openSettings();
+    await openDetails(getShareSettings());
+
+    const nextShare = saveShare.mock.calls[0][1];
+    expect(nextShare.guildId).toBe("saved-guild");
+    expect(nextShare.adminAccessKey).not.toBe(previousShare.adminAccessKey);
+    expect(nextShare.guestAccessKey).not.toBe(previousShare.guestAccessKey);
+  });
+
+  it("copies a generated shared URL", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+    await renderApp(
+      "/app",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      vi.fn(() => Promise.resolve(createShare("saved-guild"))),
+      vi.fn()
+    );
+    await openSettings();
+    await openDetails(getShareSettings());
+
+    const copyButton = Array.from(getShareSettings().querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === "コピー"
+    );
+
+    if (!copyButton) {
+      throw new Error("copy button was not found");
+    }
+
+    await act(async () => {
+      copyButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/saved-guild/a_admin`);
+    expect(getShareSettings().textContent).toContain("コピーしました");
+  });
+
+  it("does not generate a share when guild is not configured", async () => {
+    const loadShare = vi.fn(() => Promise.resolve(null));
+    const saveShare = createSaveShareMock();
+
+    await renderApp(
+      "/app",
+      signedInState,
+      vi.fn(() => Promise.resolve({ worldId: 37, guildId: null, guildName: null })),
+      vi.fn(),
+      loadShare,
+      saveShare
+    );
+    await openSettings();
+    await openDetails(getShareSettings());
+
+    expect(getShareSettings().textContent).toContain("所属ギルドを設定してください");
+    expect(loadShare).not.toHaveBeenCalled();
+    expect(saveShare).not.toHaveBeenCalled();
+    expect(getShareUrlInputs()).toHaveLength(0);
+  });
+
+  it.each(["/123/a_abc", "/123/g_abc"])("hides share settings outside owner mode: %s", async (pathname) => {
+    await renderApp(pathname, signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openSettings();
+
+    expect(document.querySelector(".share-settings")).toBeNull();
+  });
+});
+
 async function renderApp(
   pathname: string,
   authState: AuthState,
   loadProfile: (uid: string) => Promise<OwnedGuildProfile | null>,
-  saveProfile: (uid: string, profile: OwnedGuildProfile) => Promise<void>
+  saveProfile: (uid: string, profile: OwnedGuildProfile) => Promise<void>,
+  loadShare: (uid: string) => Promise<GuildShare | null> = vi.fn(() => Promise.resolve(null)),
+  saveShare: (uid: string, share: GuildShare) => Promise<void> = vi.fn(() => Promise.resolve())
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -120,7 +227,9 @@ async function renderApp(
     root?.render(
       <AppModeProvider pathname={pathname}>
         <FirebasePhase0App
+          loadGuildShare={loadShare}
           loadOwnedGuildProfile={loadProfile}
+          saveGuildShare={saveShare}
           saveOwnedGuildProfile={saveProfile}
           subscribeToAuthState={(onStateChanged) => {
             onStateChanged(authState);
@@ -141,9 +250,7 @@ async function openOwnedGuildSettings() {
     throw new Error("owned guild settings were not found");
   }
 
-  await act(async () => {
-    settings.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
+  await openDetails(settings);
 }
 
 async function openSettings() {
@@ -198,12 +305,45 @@ function getOwnedGuildSelect() {
   return select;
 }
 
+function getShareSettings() {
+  const settings = document.querySelector<HTMLDetailsElement>(".share-settings");
+
+  if (!settings) {
+    throw new Error("share settings were not found");
+  }
+
+  return settings;
+}
+
+function getShareUrlInputs() {
+  return Array.from(getShareSettings().querySelectorAll<HTMLInputElement>("input[type='url']"));
+}
+
+async function openDetails(details: HTMLDetailsElement) {
+  await act(async () => {
+    details.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+  });
+}
+
 function createProfile(): OwnedGuildProfile {
   return {
     worldId: 37,
     guildId: "saved-guild",
     guildName: "Saved Guild"
   };
+}
+
+function createShare(guildId: string): GuildShare {
+  return {
+    guildId,
+    adminAccessKey: "a_admin",
+    guestAccessKey: "g_guest"
+  };
+}
+
+function createSaveShareMock() {
+  return vi.fn<(uid: string, share: GuildShare) => Promise<void>>(() => Promise.resolve());
 }
 
 async function flushPromises() {

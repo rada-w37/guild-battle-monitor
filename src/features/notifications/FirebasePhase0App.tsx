@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useAppMode } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
+import { createGuildShare, createGuildShareUrl } from "../guildBattle/guildShare";
+import { loadGuildShare, saveGuildShare } from "../guildBattle/guildShareRepository";
 import {
   GuildBattlePlaceholder,
   type OwnedGuildProfilePersistence
@@ -10,7 +12,7 @@ import {
   loadOwnedGuildProfile,
   saveOwnedGuildProfile
 } from "../guildBattle/ownedGuildProfileRepository";
-import type { OwnedGuildProfile } from "../guildBattle/types";
+import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
 import { loadNotificationDestination, saveNotificationDestination } from "./notificationDestinationRepository";
 
 const DEFAULT_DESTINATION_ID = "default";
@@ -19,13 +21,17 @@ const DEFAULT_SELECTABLE_MENTIONS = ["@here", "@everyone"] as const;
 
 interface FirebasePhase0AppProps {
   readonly loadOwnedGuildProfile?: typeof loadOwnedGuildProfile;
+  readonly loadGuildShare?: typeof loadGuildShare;
   readonly saveOwnedGuildProfile?: typeof saveOwnedGuildProfile;
+  readonly saveGuildShare?: typeof saveGuildShare;
   readonly subscribeToAuthState?: typeof subscribeToAuthState;
 }
 
 export function FirebasePhase0App({
   loadOwnedGuildProfile: loadProfile = loadOwnedGuildProfile,
+  loadGuildShare: loadShare = loadGuildShare,
   saveOwnedGuildProfile: saveProfile = saveOwnedGuildProfile,
+  saveGuildShare: saveShare = saveGuildShare,
   subscribeToAuthState: subscribeAuthState = subscribeToAuthState
 }: FirebasePhase0AppProps = {}) {
   const appMode = useAppMode();
@@ -36,6 +42,12 @@ export function FirebasePhase0App({
     appMode === "owner" ? notificationSettingsUid : null,
     loadProfile,
     saveProfile
+  );
+  const guildShare = useGuildShare(
+    appMode === "owner" ? notificationSettingsUid : null,
+    ownedGuildProfilePersistence.profile?.guildId ?? null,
+    loadShare,
+    saveShare
   );
 
   useEffect(() => subscribeAuthState(setAuthState), [subscribeAuthState]);
@@ -63,6 +75,13 @@ export function FirebasePhase0App({
       headerActions={<AuthControl authState={authState} onSignIn={handleSignIn} onSignOut={handleSignOut} />}
       notificationSettings={<NotificationDestinationPanel uid={notificationSettingsUid} />}
       ownedGuildProfilePersistence={ownedGuildProfilePersistence}
+      shareSettings={
+        <GuildSharePanel
+          guildId={ownedGuildProfilePersistence.profile?.guildId ?? null}
+          isSignedIn={notificationSettingsUid !== null}
+          share={guildShare}
+        />
+      }
       afterHeader={
         <>
           {authError !== null ? <p className="firebase-message firebase-message--error">{authError}</p> : null}
@@ -72,6 +91,131 @@ export function FirebasePhase0App({
         </>
       }
     />
+  );
+}
+
+function useGuildShare(
+  uid: string | null,
+  guildId: string | null,
+  loadShare: typeof loadGuildShare,
+  saveShare: typeof saveGuildShare
+): GuildShare | null {
+  const [share, setShare] = useState<GuildShare | null>(null);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    if (uid === null || guildId === null) {
+      setShare(null);
+      return;
+    }
+
+    setShare(null);
+    void loadShare(uid)
+      .then(async (loadedShare) => {
+        if (isDisposed) {
+          return;
+        }
+
+        if (loadedShare?.guildId === guildId) {
+          setShare(loadedShare);
+          return;
+        }
+
+        const nextShare = createGuildShare(guildId);
+        await saveShare(uid, nextShare);
+
+        if (!isDisposed) {
+          setShare(nextShare);
+        }
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setShare(null);
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [guildId, loadShare, saveShare, uid]);
+
+  return share;
+}
+
+function GuildSharePanel({
+  guildId,
+  isSignedIn,
+  share
+}: {
+  readonly guildId: string | null;
+  readonly isSignedIn: boolean;
+  readonly share: GuildShare | null;
+}) {
+  const [copiedRole, setCopiedRole] = useState<"admin" | "guest" | null>(null);
+
+  if (guildId === null) {
+    return <p className="firebase-message">所属ギルドを設定してください</p>;
+  }
+
+  if (!isSignedIn) {
+    return <p className="firebase-message">ログインすると共有URLを生成できます</p>;
+  }
+
+  if (share === null || share.guildId !== guildId) {
+    return <p className="firebase-message">共有URLを生成中です</p>;
+  }
+
+  const adminUrl = createGuildShareUrl(window.location.origin, share.guildId, share.adminAccessKey);
+  const guestUrl = createGuildShareUrl(window.location.origin, share.guildId, share.guestAccessKey);
+
+  async function handleCopy(role: "admin" | "guest", url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedRole(role);
+    } catch {
+      setCopiedRole(null);
+    }
+  }
+
+  return (
+    <div className="share-settings__urls">
+      <ShareUrlField
+        label="管理者URL"
+        url={adminUrl}
+        wasCopied={copiedRole === "admin"}
+        onCopy={() => void handleCopy("admin", adminUrl)}
+      />
+      <ShareUrlField
+        label="閲覧者URL"
+        url={guestUrl}
+        wasCopied={copiedRole === "guest"}
+        onCopy={() => void handleCopy("guest", guestUrl)}
+      />
+    </div>
+  );
+}
+
+function ShareUrlField({
+  label,
+  url,
+  wasCopied,
+  onCopy
+}: {
+  readonly label: string;
+  readonly url: string;
+  readonly wasCopied: boolean;
+  readonly onCopy: () => void;
+}) {
+  return (
+    <div className="share-settings__url">
+      <span className="field__label">{label}</span>
+      <div className="share-settings__url-row">
+        <input className="field__input" readOnly type="url" value={url} />
+        <button className="load-form__button" type="button" onClick={onCopy}>コピー</button>
+      </div>
+      {wasCopied ? <p className="firebase-message firebase-message--success">コピーしました</p> : null}
+    </div>
   );
 }
 

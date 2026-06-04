@@ -97,6 +97,7 @@ interface GuildBattlePlaceholderProps {
   readonly headerActions?: ReactNode;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
+  readonly shareSettings?: ReactNode;
 }
 
 export interface OwnedGuildProfilePersistence {
@@ -120,7 +121,8 @@ export function GuildBattlePlaceholder({
   createRealtimeClient = () => new BrowserGvgRealtimeClient(),
   headerActions,
   notificationSettings,
-  ownedGuildProfilePersistence
+  ownedGuildProfilePersistence,
+  shareSettings
 }: GuildBattlePlaceholderProps) {
   const appMode = useAppMode();
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
@@ -750,6 +752,7 @@ export function GuildBattlePlaceholder({
                 />
               ) : undefined
             }
+            shareSettings={appMode === "owner" ? shareSettings : undefined}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
             onAlertThresholdReset={handleAlertThresholdReset}
@@ -1226,6 +1229,7 @@ function SettingsDialog({
   isTestModeEnabled,
   notificationSettings,
   ownedGuildSettings,
+  shareSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
   onAlertThresholdReset,
@@ -1242,6 +1246,7 @@ function SettingsDialog({
   readonly isTestModeEnabled: boolean;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildSettings?: ReactNode;
+  readonly shareSettings?: ReactNode;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
   readonly onAlertThresholdReset: () => void;
@@ -1307,6 +1312,12 @@ function SettingsDialog({
             <details className="settings-section notification-settings">
               <summary>通知設定</summary>
               {notificationSettings}
+            </details>
+          ) : null}
+          {shareSettings !== undefined ? (
+            <details className="settings-section share-settings">
+              <summary>共有URL設定</summary>
+              {shareSettings}
             </details>
           ) : null}
           {IS_DEV && showGuildBattleOnlySettings ? (
