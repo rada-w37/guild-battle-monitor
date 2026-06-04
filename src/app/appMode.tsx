@@ -2,10 +2,38 @@ import { createContext, useContext, type ReactNode } from "react";
 
 export type AppMode = "owner" | "admin" | "guest";
 
-const AppModeContext = createContext<AppMode | null>(null);
+export type AppRoute =
+  | { readonly mode: "owner" }
+  | { readonly mode: "admin" | "guest"; readonly guildId: string; readonly accessKey: string };
+
+const AppRouteContext = createContext<AppRoute | null>(null);
 
 export function resolveAppMode(pathname: string): AppMode | null {
-  return pathname === "/app" || pathname === "/app/" ? "owner" : null;
+  return resolveRoute(pathname)?.mode ?? null;
+}
+
+export function resolveRoute(pathname: string): AppRoute | null {
+  if (pathname === "/app" || pathname === "/app/") {
+    return { mode: "owner" };
+  }
+
+  const sharedRouteMatch = pathname.match(/^\/([^/]+)\/([^/]+)$/);
+
+  if (sharedRouteMatch === null) {
+    return null;
+  }
+
+  const [, guildId, accessKey] = sharedRouteMatch;
+
+  if (accessKey.startsWith("a_") && accessKey.length > 2) {
+    return { mode: "admin", guildId, accessKey };
+  }
+
+  if (accessKey.startsWith("g_") && accessKey.length > 2) {
+    return { mode: "guest", guildId, accessKey };
+  }
+
+  return null;
 }
 
 export function AppModeProvider({
@@ -15,9 +43,13 @@ export function AppModeProvider({
   readonly children: ReactNode;
   readonly pathname?: string;
 }) {
-  return <AppModeContext.Provider value={resolveAppMode(pathname)}>{children}</AppModeContext.Provider>;
+  return <AppRouteContext.Provider value={resolveRoute(pathname)}>{children}</AppRouteContext.Provider>;
 }
 
 export function useAppMode(): AppMode | null {
-  return useContext(AppModeContext);
+  return useAppRoute()?.mode ?? null;
+}
+
+export function useAppRoute(): AppRoute | null {
+  return useContext(AppRouteContext);
 }
