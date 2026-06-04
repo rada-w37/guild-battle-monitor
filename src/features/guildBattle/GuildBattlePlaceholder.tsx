@@ -93,6 +93,7 @@ interface GuildBattlePlaceholderProps {
   readonly loadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
   readonly headerActions?: ReactNode;
+  readonly notificationSettings?: ReactNode;
 }
 
 interface GuildBattleRuntimeService {
@@ -107,7 +108,8 @@ export function GuildBattlePlaceholder({
   loadGrandBattleParticipants = loadGrandBattleParticipantGuilds,
   loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient(),
-  headerActions
+  headerActions,
+  notificationSettings
 }: GuildBattlePlaceholderProps) {
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
@@ -683,6 +685,7 @@ export function GuildBattlePlaceholder({
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
+            notificationSettings={notificationSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
             onAlertThresholdReset={handleAlertThresholdReset}
@@ -1157,6 +1160,7 @@ function SettingsDialog({
   isAutoUpdateEnabled,
   isRealtimeActive,
   isTestModeEnabled,
+  notificationSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
   onAlertThresholdReset,
@@ -1171,6 +1175,7 @@ function SettingsDialog({
   readonly isAutoUpdateEnabled: boolean;
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
+  readonly notificationSettings?: ReactNode;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
   readonly onAlertThresholdReset: () => void;
@@ -1226,6 +1231,12 @@ function SettingsDialog({
               </button>
             </div>
           </section>
+          {notificationSettings !== undefined ? (
+            <details className="settings-section notification-settings">
+              <summary>通知設定</summary>
+              {notificationSettings}
+            </details>
+          ) : null}
           {IS_DEV && showGuildBattleOnlySettings ? (
             <section className="settings-section">
               <TestModeSettings
@@ -1254,7 +1265,7 @@ function AlertThresholdSettings({
 }) {
   return (
     <section className="settings-section alert-settings">
-      <h3>設定</h3>
+      <h3>アラート設定</h3>
       <p className="alert-settings__help">防衛数が設定値未満になると色が変わります。</p>
       <div className="alert-settings__fields">
         <ThresholdInput

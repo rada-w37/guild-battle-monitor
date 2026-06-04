@@ -152,9 +152,14 @@ select {
   background: var(--app-surface-muted);
 }
 
-.notification-destination h2 {
+.notification-destination h3 {
   margin: 0;
   font-size: 1rem;
+}
+
+.notification-settings summary {
+  cursor: pointer;
+  font-weight: 700;
 }
 
 .notification-destination__toggle {

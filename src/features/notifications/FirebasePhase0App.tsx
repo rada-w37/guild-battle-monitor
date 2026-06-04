@@ -11,6 +11,7 @@ const DEFAULT_SELECTABLE_MENTIONS = ["@here", "@everyone"] as const;
 export function FirebasePhase0App() {
   const [authState, setAuthState] = useState<AuthState>({ status: "loading" });
   const [authError, setAuthError] = useState<string | null>(null);
+  const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
 
   useEffect(() => subscribeToAuthState(setAuthState), []);
 
@@ -35,10 +36,10 @@ export function FirebasePhase0App() {
   return (
     <GuildBattlePlaceholder
       headerActions={<AuthControl authState={authState} onSignIn={handleSignIn} onSignOut={handleSignOut} />}
+      notificationSettings={<NotificationDestinationPanel uid={notificationSettingsUid} />}
       afterHeader={
         <>
           {authError !== null ? <p className="firebase-message firebase-message--error">{authError}</p> : null}
-          {authState.status === "signed-in" ? <NotificationDestinationPanel uid={authState.user.uid} /> : null}
           {authState.status === "unavailable" ? (
             <p className="firebase-message">Firebase設定が未完了のため、ログイン・通知設定は利用できません。</p>
           ) : null}
@@ -81,7 +82,7 @@ function AuthControl({
   return null;
 }
 
-function NotificationDestinationPanel({ uid }: { readonly uid: string }) {
+function NotificationDestinationPanel({ uid }: { readonly uid: string | null }) {
   const [endpoint, setEndpoint] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
@@ -92,6 +93,13 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string }) {
     let isDisposed = false;
     setStatus("loading");
     setMessage(null);
+
+    if (uid === null) {
+      setEndpoint("");
+      setEnabled(true);
+      setStatus("idle");
+      return;
+    }
 
     void loadNotificationDestination(uid, DEFAULT_DESTINATION_ID)
       .then((destination) => {
@@ -115,6 +123,10 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string }) {
   }, [uid]);
 
   async function handleSave() {
+    if (uid === null) {
+      return;
+    }
+
     setStatus("saving");
     setMessage(null);
     setIsError(false);
@@ -139,11 +151,11 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string }) {
 
   return (
     <section className="notification-destination" aria-labelledby="notification-destination-title">
-      <h2 id="notification-destination-title">通知先設定</h2>
+      <h3 id="notification-destination-title">Discord通知</h3>
       <label className="notification-destination__toggle">
         <input
           checked={enabled}
-          disabled={status !== "idle"}
+          disabled={uid === null || status !== "idle"}
           type="checkbox"
           onChange={(event) => setEnabled(event.target.checked)}
         />
@@ -156,7 +168,7 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string }) {
           autoComplete="off"
           autoCorrect="off"
           className="field__input"
-          disabled={status !== "idle"}
+          disabled={uid === null || status !== "idle"}
           id="notification-endpoint"
           name="notification-endpoint"
           spellCheck={false}
@@ -165,9 +177,10 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string }) {
           onChange={(event) => setEndpoint(event.target.value)}
         />
       </label>
-      <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={handleSave}>
+      <button className="load-form__button" disabled={uid === null || status !== "idle"} type="button" onClick={handleSave}>
         {status === "saving" ? "保存中" : "保存"}
       </button>
+      {uid === null ? <p className="firebase-message">ログイン後に通知先設定を利用できます。</p> : null}
       {status === "loading" ? <p className="firebase-message">通知先設定を読込中です。</p> : null}
       {message !== null ? (
         <p className={`firebase-message ${isError ? "firebase-message--error" : "firebase-message--success"}`}>
