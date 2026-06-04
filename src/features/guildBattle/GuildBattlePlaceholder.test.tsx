@@ -14,7 +14,7 @@ import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
 import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY } from "./alertThresholdStorage";
-import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
+import { GuildBattlePlaceholder, type OwnedGuildProfilePersistence } from "./GuildBattlePlaceholder";
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "./viewSettingsStorage";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -762,6 +762,41 @@ describe("GuildBattlePlaceholder", () => {
     expect(guildSelect.value).toBe("");
   });
 
+  it("reports the selected owned guild id and name for persistence", async () => {
+    const onChange = vi.fn();
+    const persistence = {
+      isLoading: false,
+      isSignedIn: true,
+      profile: null,
+      onChange
+    } satisfies OwnedGuildProfilePersistence;
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/app", persistence);
+    await loadWorld37();
+    await clickSettingsButton();
+
+    const ownedGuildSettings = getOwnedGuildSettings();
+    const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
+    const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
+
+    if (!worldInput || !guildSelect) {
+      throw new Error("owned guild settings fields were not found");
+    }
+
+    act(() => {
+      updateInput(worldInput, "37");
+    });
+    onChange.mockClear();
+    act(() => {
+      updateSelect(guildSelect, ownGuildId);
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      worldId: 37,
+      guildId: ownGuildId,
+      guildName: "Owner Guild"
+    });
+  });
+
   it("toggles auto update inside the settings dialog", async () => {
     renderComponent();
 
@@ -980,7 +1015,8 @@ function renderComponent(
     Promise.resolve(grandBattleSnapshot)
   ),
   notificationSettings?: ReactNode,
-  pathname: string = "/app"
+  pathname: string = "/app",
+  ownedGuildProfilePersistence?: OwnedGuildProfilePersistence
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -995,6 +1031,7 @@ function renderComponent(
           loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
           createRealtimeClient={createRealtimeClient}
           notificationSettings={notificationSettings}
+          ownedGuildProfilePersistence={ownedGuildProfilePersistence}
         />
       </AppModeProvider>
     );

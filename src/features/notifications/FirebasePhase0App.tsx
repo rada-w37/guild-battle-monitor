@@ -1,19 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAppMode } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
-import { GuildBattlePlaceholder } from "../guildBattle/GuildBattlePlaceholder";
+import {
+  GuildBattlePlaceholder,
+  type OwnedGuildProfilePersistence
+} from "../guildBattle/GuildBattlePlaceholder";
+import {
+  loadOwnedGuildProfile,
+  saveOwnedGuildProfile
+} from "../guildBattle/ownedGuildProfileRepository";
+import type { OwnedGuildProfile } from "../guildBattle/types";
 import { loadNotificationDestination, saveNotificationDestination } from "./notificationDestinationRepository";
 
 const DEFAULT_DESTINATION_ID = "default";
 const DEFAULT_DESTINATION_NAME = "ギルドDiscord";
 const DEFAULT_SELECTABLE_MENTIONS = ["@here", "@everyone"] as const;
 
-export function FirebasePhase0App() {
+interface FirebasePhase0AppProps {
+  readonly loadOwnedGuildProfile?: typeof loadOwnedGuildProfile;
+  readonly saveOwnedGuildProfile?: typeof saveOwnedGuildProfile;
+  readonly subscribeToAuthState?: typeof subscribeToAuthState;
+}
+
+export function FirebasePhase0App({
+  loadOwnedGuildProfile: loadProfile = loadOwnedGuildProfile,
+  saveOwnedGuildProfile: saveProfile = saveOwnedGuildProfile,
+  subscribeToAuthState: subscribeAuthState = subscribeToAuthState
+}: FirebasePhase0AppProps = {}) {
+  const appMode = useAppMode();
   const [authState, setAuthState] = useState<AuthState>({ status: "loading" });
   const [authError, setAuthError] = useState<string | null>(null);
   const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
+  const ownedGuildProfilePersistence = useOwnedGuildProfilePersistence(
+    appMode === "owner" ? notificationSettingsUid : null,
+    loadProfile,
+    saveProfile
+  );
 
-  useEffect(() => subscribeToAuthState(setAuthState), []);
+  useEffect(() => subscribeAuthState(setAuthState), [subscribeAuthState]);
 
   async function handleSignIn() {
     setAuthError(null);
@@ -37,6 +62,7 @@ export function FirebasePhase0App() {
     <GuildBattlePlaceholder
       headerActions={<AuthControl authState={authState} onSignIn={handleSignIn} onSignOut={handleSignOut} />}
       notificationSettings={<NotificationDestinationPanel uid={notificationSettingsUid} />}
+      ownedGuildProfilePersistence={ownedGuildProfilePersistence}
       afterHeader={
         <>
           {authError !== null ? <p className="firebase-message firebase-message--error">{authError}</p> : null}
@@ -46,6 +72,89 @@ export function FirebasePhase0App() {
         </>
       }
     />
+  );
+}
+
+function useOwnedGuildProfilePersistence(
+  uid: string | null,
+  loadProfile: typeof loadOwnedGuildProfile,
+  saveProfile: typeof saveOwnedGuildProfile
+): OwnedGuildProfilePersistence {
+  const [profile, setProfile] = useState<OwnedGuildProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const persistedProfileKeyRef = useRef<string | null>(null);
+  const saveQueueRef = useRef(Promise.resolve());
+
+  useEffect(() => {
+    let isDisposed = false;
+    persistedProfileKeyRef.current = null;
+
+    if (uid === null) {
+      setProfile(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    void loadProfile(uid)
+      .then((loadedProfile) => {
+        if (!isDisposed) {
+          setProfile(loadedProfile);
+          persistedProfileKeyRef.current = createOwnedGuildProfileKey(loadedProfile);
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setProfile(null);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [loadProfile, uid]);
+
+  function handleChange(nextProfile: OwnedGuildProfile) {
+    setProfile(nextProfile);
+
+    if (uid === null || isLoading) {
+      return;
+    }
+
+    const nextProfileKey = createOwnedGuildProfileKey(nextProfile);
+
+    if (persistedProfileKeyRef.current === nextProfileKey) {
+      return;
+    }
+
+    persistedProfileKeyRef.current = nextProfileKey;
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => {})
+      .then(() => saveProfile(uid, nextProfile))
+      .catch(() => {
+        if (persistedProfileKeyRef.current === nextProfileKey) {
+          persistedProfileKeyRef.current = null;
+        }
+      });
+  }
+
+  return {
+    isLoading,
+    isSignedIn: uid !== null,
+    profile,
+    onChange: handleChange
+  };
+}
+
+function createOwnedGuildProfileKey(profile: OwnedGuildProfile | null): string {
+  return JSON.stringify(
+    profile ?? {
+      worldId: null,
+      guildId: null,
+      guildName: null
+    }
   );
 }
 

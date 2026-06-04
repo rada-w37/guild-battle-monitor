@@ -47,7 +47,8 @@ import type { TestModeGvgRealtimeClient } from "./testModeRealtimeClient";
 import type {
   GuildBattleAlertThresholds,
   GuildBattleCastleListSortMode,
-  GuildBattleGuildCandidateViewModel
+  GuildBattleGuildCandidateViewModel,
+  OwnedGuildProfile
 } from "./types";
 import {
   loadBattleMonitorViewSettings,
@@ -95,6 +96,14 @@ interface GuildBattlePlaceholderProps {
   readonly createRealtimeClient?: () => GvgRealtimeClient;
   readonly headerActions?: ReactNode;
   readonly notificationSettings?: ReactNode;
+  readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
+}
+
+export interface OwnedGuildProfilePersistence {
+  readonly isLoading: boolean;
+  readonly isSignedIn: boolean;
+  readonly profile: OwnedGuildProfile | null;
+  readonly onChange: (profile: OwnedGuildProfile) => void;
 }
 
 interface GuildBattleRuntimeService {
@@ -110,7 +119,8 @@ export function GuildBattlePlaceholder({
   loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient(),
   headerActions,
-  notificationSettings
+  notificationSettings,
+  ownedGuildProfilePersistence
 }: GuildBattlePlaceholderProps) {
   const appMode = useAppMode();
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
@@ -139,6 +149,7 @@ export function GuildBattlePlaceholder({
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
   const [selectedOwnedGuildId, setSelectedOwnedGuildId] = useState<GvgGuildId | "">("");
+  const [selectedOwnedGuildName, setSelectedOwnedGuildName] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -188,6 +199,17 @@ export function GuildBattlePlaceholder({
       stopGrandBattleRealtime("component unmounted", { nextState: "idle" });
     };
   }, []);
+
+  useEffect(() => {
+    if (ownedGuildProfilePersistence === undefined || ownedGuildProfilePersistence.isLoading) {
+      return;
+    }
+
+    const profile = ownedGuildProfilePersistence.profile;
+    setSelectedOwnedGuildWorldId(profile?.worldId === null || profile === null ? "" : String(profile.worldId));
+    setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
+    setSelectedOwnedGuildName(profile?.guildName ?? null);
+  }, [ownedGuildProfilePersistence?.isLoading, ownedGuildProfilePersistence?.profile]);
 
   async function loadSnapshotForWorldId(nextWorldId: GvgWorldId) {
     stopRealtime("snapshot reload", { nextState: "idle" });
@@ -564,6 +586,23 @@ export function GuildBattlePlaceholder({
   function handleOwnedGuildWorldChange(nextWorldId: string) {
     setSelectedOwnedGuildWorldId(nextWorldId);
     setSelectedOwnedGuildId("");
+    setSelectedOwnedGuildName(null);
+    ownedGuildProfilePersistence?.onChange({
+      worldId: parseOwnedGuildWorldId(nextWorldId),
+      guildId: null,
+      guildName: null
+    });
+  }
+
+  function handleOwnedGuildChange(nextGuildId: GvgGuildId | "") {
+    const nextGuildName = guildCandidates.find((candidate) => candidate.guildId === nextGuildId)?.guildName ?? null;
+    setSelectedOwnedGuildId(nextGuildId);
+    setSelectedOwnedGuildName(nextGuildName);
+    ownedGuildProfilePersistence?.onChange({
+      worldId: parseOwnedGuildWorldId(selectedOwnedGuildWorldId),
+      guildId: nextGuildId || null,
+      guildName: nextGuildName
+    });
   }
 
   function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
@@ -699,9 +738,14 @@ export function GuildBattlePlaceholder({
               appMode === "owner" ? (
                 <OwnedGuildSettings
                   guildCandidates={guildCandidates}
+                  isLoading={ownedGuildProfilePersistence?.isLoading ?? false}
                   selectedGuildId={selectedOwnedGuildId}
+                  selectedGuildName={selectedOwnedGuildName}
                   selectedWorldId={selectedOwnedGuildWorldId}
-                  onGuildChange={setSelectedOwnedGuildId}
+                  showSignInMessage={
+                    ownedGuildProfilePersistence !== undefined && !ownedGuildProfilePersistence.isSignedIn
+                  }
+                  onGuildChange={handleOwnedGuildChange}
                   onWorldChange={handleOwnedGuildWorldChange}
                 />
               ) : undefined
@@ -1282,14 +1326,20 @@ function SettingsDialog({
 
 function OwnedGuildSettings({
   guildCandidates,
+  isLoading,
   selectedGuildId,
+  selectedGuildName,
   selectedWorldId,
+  showSignInMessage,
   onGuildChange,
   onWorldChange
 }: {
   readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
+  readonly isLoading: boolean;
   readonly selectedGuildId: GvgGuildId | "";
+  readonly selectedGuildName: string | null;
   readonly selectedWorldId: string;
+  readonly showSignInMessage: boolean;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
   readonly onWorldChange: (worldId: string) => void;
 }) {
@@ -1299,6 +1349,7 @@ function OwnedGuildSettings({
         <span className="field__label">ワールド</span>
         <input
           className="field__input"
+          disabled={isLoading}
           inputMode="numeric"
           value={selectedWorldId}
           onChange={(event) => onWorldChange(event.target.value)}
@@ -1308,10 +1359,14 @@ function OwnedGuildSettings({
         <span className="field__label">所属ギルド</span>
         <select
           className="field__input field__input--wide"
+          disabled={isLoading}
           value={selectedGuildId}
           onChange={(event) => onGuildChange(event.target.value as GvgGuildId | "")}
         >
           <option value="">所属ギルドを選択してください</option>
+          {selectedGuildId !== "" && !guildCandidates.some((candidate) => candidate.guildId === selectedGuildId) ? (
+            <option value={selectedGuildId}>{selectedGuildName ?? selectedGuildId}</option>
+          ) : null}
           {guildCandidates.map((candidate) => (
             <option key={candidate.guildId} value={candidate.guildId}>
               {candidate.guildName}
@@ -1319,8 +1374,18 @@ function OwnedGuildSettings({
           ))}
         </select>
       </label>
+      {showSignInMessage ? <p className="firebase-message">ログインすると保存されます</p> : null}
     </div>
   );
+}
+
+function parseOwnedGuildWorldId(worldId: string): number | null {
+  if (worldId.trim() === "") {
+    return null;
+  }
+
+  const parsedWorldId = Number(worldId);
+  return Number.isInteger(parsedWorldId) && parsedWorldId > 0 ? parsedWorldId : null;
 }
 
 function AlertThresholdSettings({

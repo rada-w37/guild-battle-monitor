@@ -78,3 +78,9 @@ export interface GuildBattleGuildCandidateViewModel {
   readonly guildName: string;
   readonly ownedCastleCount: number;
 }
+
+export interface OwnedGuildProfile {
+  readonly worldId: number | null;
+  readonly guildId: string | null;
+  readonly guildName: string | null;
+}
