@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
 import {
@@ -87,10 +87,13 @@ type BattleMonitorMode = "guildBattle" | "grandBattle";
 type BattleMonitorSharedState = BattleMonitorSharedViewSettings;
 
 interface GuildBattlePlaceholderProps {
+  readonly afterHeader?: ReactNode;
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly loadGrandBattleParticipants?: typeof loadGrandBattleParticipantGuilds;
   readonly loadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
+  readonly headerActions?: ReactNode;
+  readonly notificationSettings?: ReactNode;
 }
 
 interface GuildBattleRuntimeService {
@@ -100,10 +103,13 @@ interface GuildBattleRuntimeService {
 }
 
 export function GuildBattlePlaceholder({
+  afterHeader,
   loadSnapshot = loadLocalGvgSnapshot,
   loadGrandBattleParticipants = loadGrandBattleParticipantGuilds,
   loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
-  createRealtimeClient = () => new BrowserGvgRealtimeClient()
+  createRealtimeClient = () => new BrowserGvgRealtimeClient(),
+  headerActions,
+  notificationSettings
 }: GuildBattlePlaceholderProps) {
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
@@ -636,17 +642,21 @@ export function GuildBattlePlaceholder({
           <h1 className="placeholder__title" id="app-title">
             {activeMode === "guildBattle" ? "Guild Battle Monitor" : "Grand Battle Monitor"}
           </h1>
-          <button
-            className="settings-button"
-            type="button"
-            aria-label="設定を開く"
-            onClick={() => setIsSettingsDialogOpen(true)}
-          >
-            <svg aria-hidden="true" className="settings-button__icon" viewBox="0 0 24 24">
-              <path d="M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.6A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a9.3 9.3 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.4 2.6h4l.4-2.6a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" />
-            </svg>
-          </button>
+          <div className="monitor-header__actions">
+            {headerActions}
+            <button
+              className="settings-button"
+              type="button"
+              aria-label="設定を開く"
+              onClick={() => setIsSettingsDialogOpen(true)}
+            >
+              <svg aria-hidden="true" className="settings-button__icon" viewBox="0 0 24 24">
+                <path d="M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.6A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a9.3 9.3 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.4 2.6h4l.4-2.6a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" />
+              </svg>
+            </button>
+          </div>
         </div>
+        {afterHeader}
 
         <div className="mode-tabs" aria-label="Battle Monitor mode">
           <button
@@ -675,6 +685,7 @@ export function GuildBattlePlaceholder({
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
+            notificationSettings={notificationSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
             onAlertThresholdReset={handleAlertThresholdReset}
@@ -1149,6 +1160,7 @@ function SettingsDialog({
   isAutoUpdateEnabled,
   isRealtimeActive,
   isTestModeEnabled,
+  notificationSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
   onAlertThresholdReset,
@@ -1163,6 +1175,7 @@ function SettingsDialog({
   readonly isAutoUpdateEnabled: boolean;
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
+  readonly notificationSettings?: ReactNode;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
   readonly onAlertThresholdReset: () => void;
@@ -1218,6 +1231,12 @@ function SettingsDialog({
               </button>
             </div>
           </section>
+          {notificationSettings !== undefined ? (
+            <details className="settings-section notification-settings">
+              <summary>通知設定</summary>
+              {notificationSettings}
+            </details>
+          ) : null}
           {IS_DEV && showGuildBattleOnlySettings ? (
             <section className="settings-section">
               <TestModeSettings
@@ -1246,7 +1265,7 @@ function AlertThresholdSettings({
 }) {
   return (
     <section className="settings-section alert-settings">
-      <h3>設定</h3>
+      <h3>アラート設定</h3>
       <p className="alert-settings__help">防衛数が設定値未満になると色が変わります。</p>
       <div className="alert-settings__fields">
         <ThresholdInput

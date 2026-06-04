@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -706,6 +706,18 @@ describe("GuildBattlePlaceholder", () => {
     expect(dialog.textContent).not.toContain("自動更新中");
   });
 
+  it("renders optional notification settings collapsed between auto update and test mode", async () => {
+    renderComponent(undefined, undefined, undefined, undefined, <div data-testid="notification-slot">Discord通知</div>);
+
+    await clickSettingsButton();
+
+    const notificationSettings = getSettingsDialog().querySelector<HTMLDetailsElement>(".notification-settings");
+    expect(notificationSettings?.open).toBe(false);
+    expect(notificationSettings?.querySelector("[data-testid='notification-slot']")).not.toBeNull();
+    expect(notificationSettings?.previousElementSibling?.querySelector(".auto-update-toggle")).not.toBeNull();
+    expect(notificationSettings?.nextElementSibling?.querySelector(".test-mode-settings")).not.toBeNull();
+  });
+
   it("toggles auto update inside the settings dialog", async () => {
     renderComponent();
 
@@ -922,7 +934,8 @@ function renderComponent(
   ),
   loadGrandBattleLatestSnapshot: typeof loadGrandBattleSnapshot = vi.fn(() =>
     Promise.resolve(grandBattleSnapshot)
-  )
+  ),
+  notificationSettings?: ReactNode
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -935,6 +948,7 @@ function renderComponent(
         loadGrandBattleParticipants={loadGrandBattleParticipants}
         loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
         createRealtimeClient={createRealtimeClient}
+        notificationSettings={notificationSettings}
       />
     );
   });

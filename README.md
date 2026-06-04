@@ -85,3 +85,10 @@ or Bank of Innovation.
 
 All related trademarks, copyrights, and game assets belong to their respective
 owners.
+# Firebase Phase0
+
+GitHub Pages版では `VITE_ENABLE_FIREBASE=false` を使用し、Firebase初期化・Auth購読・Firestoreアクセスを無効化します。
+
+Firebase Hosting版では `.env.example` を参考に `VITE_ENABLE_FIREBASE=true` とFirebase configを設定してください。Firebase configが不足している場合もBattle Monitor本体は動作し、ログイン・通知設定のみ利用不可になります。
+
+Phase0ではGoogleログインと `notificationDestinations/default` の読込・保存のみを提供します。通知送信と `notificationRules` のUI・保存処理は対象外です。
