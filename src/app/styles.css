@@ -162,6 +162,17 @@ select {
   font-weight: 700;
 }
 
+.owned-guild-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.owned-guild-settings__fields {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
 .notification-destination__toggle {
   display: flex;
   gap: 8px;

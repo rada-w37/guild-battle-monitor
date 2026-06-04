@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAppMode } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
 import {
@@ -111,6 +112,7 @@ export function GuildBattlePlaceholder({
   headerActions,
   notificationSettings
 }: GuildBattlePlaceholderProps) {
+  const appMode = useAppMode();
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
   const [shared, setShared] = useState<BattleMonitorSharedState>(initialViewSettings.shared);
@@ -135,6 +137,8 @@ export function GuildBattlePlaceholder({
   });
   const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
+  const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
+  const [selectedOwnedGuildId, setSelectedOwnedGuildId] = useState<GvgGuildId | "">("");
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -557,6 +561,11 @@ export function GuildBattlePlaceholder({
     saveViewSettings({ selectedGuildId: nextGuildId });
   }
 
+  function handleOwnedGuildWorldChange(nextWorldId: string) {
+    setSelectedOwnedGuildWorldId(nextWorldId);
+    setSelectedOwnedGuildId("");
+  }
+
   function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
     const nextShared = {
       ...shared,
@@ -686,6 +695,17 @@ export function GuildBattlePlaceholder({
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
             notificationSettings={notificationSettings}
+            ownedGuildSettings={
+              appMode === "owner" ? (
+                <OwnedGuildSettings
+                  guildCandidates={guildCandidates}
+                  selectedGuildId={selectedOwnedGuildId}
+                  selectedWorldId={selectedOwnedGuildWorldId}
+                  onGuildChange={setSelectedOwnedGuildId}
+                  onWorldChange={handleOwnedGuildWorldChange}
+                />
+              ) : undefined
+            }
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
             onAlertThresholdReset={handleAlertThresholdReset}
@@ -1161,6 +1181,7 @@ function SettingsDialog({
   isRealtimeActive,
   isTestModeEnabled,
   notificationSettings,
+  ownedGuildSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
   onAlertThresholdReset,
@@ -1176,6 +1197,7 @@ function SettingsDialog({
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
   readonly notificationSettings?: ReactNode;
+  readonly ownedGuildSettings?: ReactNode;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
   readonly onAlertThresholdReset: () => void;
@@ -1231,6 +1253,12 @@ function SettingsDialog({
               </button>
             </div>
           </section>
+          {ownedGuildSettings !== undefined ? (
+            <details className="settings-section owned-guild-settings">
+              <summary>所属ギルド設定</summary>
+              {ownedGuildSettings}
+            </details>
+          ) : null}
           {notificationSettings !== undefined ? (
             <details className="settings-section notification-settings">
               <summary>通知設定</summary>
@@ -1248,6 +1276,49 @@ function SettingsDialog({
           ) : null}
         </div>
       </section>
+    </div>
+  );
+}
+
+function OwnedGuildSettings({
+  guildCandidates,
+  selectedGuildId,
+  selectedWorldId,
+  onGuildChange,
+  onWorldChange
+}: {
+  readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
+  readonly selectedGuildId: GvgGuildId | "";
+  readonly selectedWorldId: string;
+  readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+  readonly onWorldChange: (worldId: string) => void;
+}) {
+  return (
+    <div className="owned-guild-settings__fields">
+      <label className="field">
+        <span className="field__label">ワールド</span>
+        <input
+          className="field__input"
+          inputMode="numeric"
+          value={selectedWorldId}
+          onChange={(event) => onWorldChange(event.target.value)}
+        />
+      </label>
+      <label className="field">
+        <span className="field__label">所属ギルド</span>
+        <select
+          className="field__input field__input--wide"
+          value={selectedGuildId}
+          onChange={(event) => onGuildChange(event.target.value as GvgGuildId | "")}
+        >
+          <option value="">所属ギルドを選択してください</option>
+          {guildCandidates.map((candidate) => (
+            <option key={candidate.guildId} value={candidate.guildId}>
+              {candidate.guildName}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

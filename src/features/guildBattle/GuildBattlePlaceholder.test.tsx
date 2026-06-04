@@ -2,6 +2,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AppModeProvider } from "../../app/appMode";
 import type {
   loadGrandBattleParticipantGuilds,
   loadGrandBattleSnapshot
@@ -712,10 +713,53 @@ describe("GuildBattlePlaceholder", () => {
     await clickSettingsButton();
 
     const notificationSettings = getSettingsDialog().querySelector<HTMLDetailsElement>(".notification-settings");
+    const ownedGuildSettings = notificationSettings?.previousElementSibling;
     expect(notificationSettings?.open).toBe(false);
     expect(notificationSettings?.querySelector("[data-testid='notification-slot']")).not.toBeNull();
-    expect(notificationSettings?.previousElementSibling?.querySelector(".auto-update-toggle")).not.toBeNull();
+    expect(ownedGuildSettings?.classList.contains("owned-guild-settings")).toBe(true);
+    expect(ownedGuildSettings?.previousElementSibling?.querySelector(".auto-update-toggle")).not.toBeNull();
     expect(notificationSettings?.nextElementSibling?.querySelector(".test-mode-settings")).not.toBeNull();
+  });
+
+  it("renders owned guild settings for owner mode collapsed by default", async () => {
+    renderComponent();
+
+    await clickSettingsButton();
+
+    expect(getOwnedGuildSettings().open).toBe(false);
+  });
+
+  it.each(["/123/a_abc", "/123/g_abc"])("hides owned guild settings for shared route %s", async (pathname) => {
+    renderComponent(undefined, undefined, undefined, undefined, undefined, pathname);
+
+    await clickSettingsButton();
+
+    expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
+  });
+
+  it("holds owned guild selection and resets it when world changes", async () => {
+    renderComponent();
+    await loadWorld37();
+    await clickSettingsButton();
+
+    const ownedGuildSettings = getOwnedGuildSettings();
+    const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
+    const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
+
+    if (!worldInput || !guildSelect) {
+      throw new Error("owned guild settings fields were not found");
+    }
+
+    act(() => {
+      updateInput(worldInput, "37");
+      updateSelect(guildSelect, ownGuildId);
+    });
+    expect(guildSelect.value).toBe(ownGuildId);
+
+    act(() => {
+      updateInput(worldInput, "38");
+    });
+    expect(guildSelect.value).toBe("");
   });
 
   it("toggles auto update inside the settings dialog", async () => {
@@ -935,7 +979,8 @@ function renderComponent(
   loadGrandBattleLatestSnapshot: typeof loadGrandBattleSnapshot = vi.fn(() =>
     Promise.resolve(grandBattleSnapshot)
   ),
-  notificationSettings?: ReactNode
+  notificationSettings?: ReactNode,
+  pathname: string = "/app"
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -943,13 +988,15 @@ function renderComponent(
 
   act(() => {
     root?.render(
-      <GuildBattlePlaceholder
-        loadSnapshot={loadSnapshot}
-        loadGrandBattleParticipants={loadGrandBattleParticipants}
-        loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
-        createRealtimeClient={createRealtimeClient}
-        notificationSettings={notificationSettings}
-      />
+      <AppModeProvider pathname={pathname}>
+        <GuildBattlePlaceholder
+          loadSnapshot={loadSnapshot}
+          loadGrandBattleParticipants={loadGrandBattleParticipants}
+          loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
+          createRealtimeClient={createRealtimeClient}
+          notificationSettings={notificationSettings}
+        />
+      </AppModeProvider>
     );
   });
 }
@@ -1131,6 +1178,16 @@ function getSettingsDialog() {
   }
 
   return dialog;
+}
+
+function getOwnedGuildSettings() {
+  const settings = getSettingsDialog().querySelector<HTMLDetailsElement>(".owned-guild-settings");
+
+  if (!settings) {
+    throw new Error("owned guild settings were not found");
+  }
+
+  return settings;
 }
 
 function getGuildSelect() {
