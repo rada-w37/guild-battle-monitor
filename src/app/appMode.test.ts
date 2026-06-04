@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAppMode, resolveRoute } from "./appMode";
+import { getAppModePermissions, resolveAppMode, resolveRoute } from "./appMode";
 
 describe("resolveAppMode", () => {
   it.each([
@@ -30,5 +30,37 @@ describe("resolveRoute", () => {
     ["/123/a_abc/extra", null]
   ] as const)("resolves %s", (pathname, expectedRoute) => {
     expect(resolveRoute(pathname)).toEqual(expectedRoute);
+  });
+});
+
+describe("getAppModePermissions", () => {
+  it("allows all owner settings and editing", () => {
+    expect(getAppModePermissions("owner")).toEqual({
+      canEdit: true,
+      showAlertSettings: true,
+      showNotificationSettings: true,
+      showOwnedGuildSettings: true,
+      showShareSettings: true
+    });
+  });
+
+  it("allows admin editing without owner-only settings", () => {
+    expect(getAppModePermissions("admin")).toEqual({
+      canEdit: true,
+      showAlertSettings: true,
+      showNotificationSettings: true,
+      showOwnedGuildSettings: false,
+      showShareSettings: false
+    });
+  });
+
+  it("keeps guest read-only with only shared settings visible", () => {
+    expect(getAppModePermissions("guest")).toEqual({
+      canEdit: false,
+      showAlertSettings: false,
+      showNotificationSettings: false,
+      showOwnedGuildSettings: false,
+      showShareSettings: false
+    });
   });
 });

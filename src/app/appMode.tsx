@@ -2,6 +2,14 @@ import { createContext, useContext, type ReactNode } from "react";
 
 export type AppMode = "owner" | "admin" | "guest";
 
+export interface AppModePermissions {
+  readonly canEdit: boolean;
+  readonly showAlertSettings: boolean;
+  readonly showNotificationSettings: boolean;
+  readonly showOwnedGuildSettings: boolean;
+  readonly showShareSettings: boolean;
+}
+
 export type AppRoute =
   | { readonly mode: "owner" }
   | { readonly mode: "admin" | "guest"; readonly guildId: string; readonly accessKey: string };
@@ -10,6 +18,16 @@ const AppRouteContext = createContext<AppRoute | null>(null);
 
 export function resolveAppMode(pathname: string): AppMode | null {
   return resolveRoute(pathname)?.mode ?? null;
+}
+
+export function getAppModePermissions(mode: AppMode): AppModePermissions {
+  return {
+    canEdit: mode !== "guest",
+    showAlertSettings: mode !== "guest",
+    showNotificationSettings: mode !== "guest",
+    showOwnedGuildSettings: mode === "owner",
+    showShareSettings: mode === "owner"
+  };
 }
 
 export function resolveRoute(pathname: string): AppRoute | null {

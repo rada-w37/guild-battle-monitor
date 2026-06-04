@@ -762,6 +762,57 @@ describe("GuildBattlePlaceholder", () => {
     expect(guildSelect.value).toBe("");
   });
 
+  it("keeps admin controls editable and uses the URL guild", async () => {
+    window.localStorage.setItem(
+      GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        world: "37",
+        selectedGuildId: otherGuildId,
+        sortByAlert: false,
+        autoUpdate: true
+      })
+    );
+    renderComponent(undefined, undefined, undefined, undefined, <div>notification</div>, `/${ownGuildId}/a_admin`);
+    await loadWorld37();
+    await clickSettingsButton();
+
+    expect(getModeButton("Grand Battle").disabled).toBe(false);
+    expect(getDangerSortCheckbox().disabled).toBe(false);
+    expect(getAutoUpdateButton().disabled).toBe(false);
+    expect(getSettingsDialog().querySelector(".alert-settings")).not.toBeNull();
+    expect(getSettingsDialog().querySelector(".notification-settings")).not.toBeNull();
+    expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".share-settings")).toBeNull();
+    expect(getGuildSelect().value).toBe(ownGuildId);
+    expect(getGuildSelect().disabled).toBe(true);
+  });
+
+  it("keeps guest read-only and hides restricted settings", async () => {
+    renderComponent(undefined, undefined, undefined, undefined, <div>notification</div>, `/${ownGuildId}/g_guest`);
+    await loadWorld37();
+    await clickSettingsButton();
+
+    expect(getModeButton("Guild Battle").disabled).toBe(true);
+    expect(getModeButton("Grand Battle").disabled).toBe(true);
+    expect(getDangerSortCheckbox().disabled).toBe(true);
+    expect(getAutoUpdateButton().disabled).toBe(true);
+    expect(getGuildSelect().disabled).toBe(true);
+    expect(getSettingsDialog().querySelector(".alert-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".notification-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".share-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".test-mode-settings")).toBeNull();
+  });
+
+  it("shows a missing guild message when the shared URL guild is not in the loaded snapshot", async () => {
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/missing-guild/g_guest");
+
+    await loadWorld37();
+
+    expect(document.body.textContent).toContain("ギルドが見つかりません");
+    expect(document.querySelector(".castle-list")).toBeNull();
+  });
+
   it("reports the selected owned guild id and name for persistence", async () => {
     const onChange = vi.fn();
     const persistence = {
