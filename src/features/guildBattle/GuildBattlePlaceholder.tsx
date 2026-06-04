@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
 import {
@@ -87,10 +87,12 @@ type BattleMonitorMode = "guildBattle" | "grandBattle";
 type BattleMonitorSharedState = BattleMonitorSharedViewSettings;
 
 interface GuildBattlePlaceholderProps {
+  readonly afterHeader?: ReactNode;
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly loadGrandBattleParticipants?: typeof loadGrandBattleParticipantGuilds;
   readonly loadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
+  readonly headerActions?: ReactNode;
 }
 
 interface GuildBattleRuntimeService {
@@ -100,10 +102,12 @@ interface GuildBattleRuntimeService {
 }
 
 export function GuildBattlePlaceholder({
+  afterHeader,
   loadSnapshot = loadLocalGvgSnapshot,
   loadGrandBattleParticipants = loadGrandBattleParticipantGuilds,
   loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
-  createRealtimeClient = () => new BrowserGvgRealtimeClient()
+  createRealtimeClient = () => new BrowserGvgRealtimeClient(),
+  headerActions
 }: GuildBattlePlaceholderProps) {
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
@@ -636,17 +640,21 @@ export function GuildBattlePlaceholder({
           <h1 className="placeholder__title" id="app-title">
             {activeMode === "guildBattle" ? "Guild Battle Monitor" : "Grand Battle Monitor"}
           </h1>
-          <button
-            className="settings-button"
-            type="button"
-            aria-label="設定を開く"
-            onClick={() => setIsSettingsDialogOpen(true)}
-          >
-            <svg aria-hidden="true" className="settings-button__icon" viewBox="0 0 24 24">
-              <path d="M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.6A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a9.3 9.3 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.4 2.6h4l.4-2.6a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" />
-            </svg>
-          </button>
+          <div className="monitor-header__actions">
+            {headerActions}
+            <button
+              className="settings-button"
+              type="button"
+              aria-label="設定を開く"
+              onClick={() => setIsSettingsDialogOpen(true)}
+            >
+              <svg aria-hidden="true" className="settings-button__icon" viewBox="0 0 24 24">
+                <path d="M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.6A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a9.3 9.3 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.4 2.6h4l.4-2.6a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" />
+              </svg>
+            </button>
+          </div>
         </div>
+        {afterHeader}
 
         <div className="mode-tabs" aria-label="Battle Monitor mode">
           <button

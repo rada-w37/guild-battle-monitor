@@ -120,6 +120,63 @@ select {
   justify-content: space-between;
 }
 
+.monitor-header__actions,
+.firebase-auth-user {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.firebase-auth-button {
+  padding: 6px 10px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 6px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  cursor: pointer;
+}
+
+.firebase-auth-status,
+.firebase-auth-user {
+  color: var(--app-text-muted);
+  font-size: 0.85rem;
+}
+
+.notification-destination {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-muted);
+}
+
+.notification-destination h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.notification-destination__toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.firebase-message {
+  margin: 12px 0 0;
+  color: var(--app-text-muted);
+  font-size: 0.9rem;
+}
+
+.firebase-message--success {
+  color: #15803d;
+}
+
+.firebase-message--error {
+  color: #b91c1c;
+}
+
 .settings-button {
   display: inline-grid;
   flex: 0 0 auto;
