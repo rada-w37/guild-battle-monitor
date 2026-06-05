@@ -750,14 +750,19 @@ describe("GuildBattlePlaceholder", () => {
       throw new Error("owned guild settings fields were not found");
     }
 
-    act(() => {
+    await act(async () => {
       updateInput(worldInput, "37");
+      await flushPromises();
+    });
+
+    act(() => {
       updateSelect(guildSelect, ownGuildId);
     });
     expect(guildSelect.value).toBe(ownGuildId);
 
-    act(() => {
+    await act(async () => {
       updateInput(worldInput, "38");
+      await flushPromises();
     });
     expect(guildSelect.value).toBe("");
   });
@@ -849,12 +854,59 @@ describe("GuildBattlePlaceholder", () => {
       throw new Error("owned guild settings fields were not found");
     }
 
-    act(() => {
+    await act(async () => {
       updateInput(worldInput, "37");
+      await flushPromises();
     });
     onChange.mockClear();
     act(() => {
       updateSelect(guildSelect, ownGuildId);
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      worldId: 37,
+      guildId: ownGuildId,
+      guildName: "Owner Guild"
+    });
+  });
+
+  it("loads guild candidates from the owned guild world setting and saves the selected guild", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const onChange = vi.fn();
+    const persistence = {
+      isLoading: false,
+      isSignedIn: true,
+      profile: null,
+      onChange
+    } satisfies OwnedGuildProfilePersistence;
+    renderComponent(loadSnapshot, undefined, undefined, undefined, undefined, "/app", persistence);
+    await clickSettingsButton();
+
+    const ownedGuildSettings = getOwnedGuildSettings();
+    const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
+    const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
+
+    if (!worldInput || !guildSelect) {
+      throw new Error("owned guild settings fields were not found");
+    }
+
+    await act(async () => {
+      updateInput(worldInput, "37");
+      await flushPromises();
+    });
+
+    expect(loadSnapshot).toHaveBeenCalledWith("1037");
+    expect(Array.from(guildSelect.options).map((option) => option.textContent ?? "")).toContain("Owner Guild");
+    expect(onChange).toHaveBeenLastCalledWith({
+      worldId: 37,
+      guildId: null,
+      guildName: null
+    });
+
+    onChange.mockClear();
+    await act(async () => {
+      updateSelect(guildSelect, ownGuildId);
+      await flushPromises();
     });
 
     expect(onChange).toHaveBeenCalledWith({

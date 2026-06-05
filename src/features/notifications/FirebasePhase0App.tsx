@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAppMode } from "../../app/appMode";
+import { useAppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
 import { createGuildShare, createGuildShareUrl } from "../guildBattle/guildShare";
@@ -34,12 +34,13 @@ export function FirebasePhase0App({
   saveGuildShare: saveShare = saveGuildShare,
   subscribeToAuthState: subscribeAuthState = subscribeToAuthState
 }: FirebasePhase0AppProps = {}) {
-  const appMode = useAppMode();
+  const appRoute = useAppRoute();
+  const appMode = appRoute?.mode ?? "owner";
   const [authState, setAuthState] = useState<AuthState>({ status: "loading" });
   const [authError, setAuthError] = useState<string | null>(null);
   const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
   const ownedGuildProfilePersistence = useOwnedGuildProfilePersistence(
-    appMode === "owner" ? notificationSettingsUid : null,
+    notificationSettingsUid,
     loadProfile,
     saveProfile
   );
@@ -72,7 +73,16 @@ export function FirebasePhase0App({
 
   return (
     <GuildBattlePlaceholder
-      headerActions={<AuthControl authState={authState} onSignIn={handleSignIn} onSignOut={handleSignOut} />}
+      headerActions={
+        <AuthControl
+          authState={authState}
+          mode={appMode}
+          ownedGuildProfile={ownedGuildProfilePersistence.profile}
+          sharedGuildId={appRoute !== null && appRoute.mode !== "owner" ? appRoute.guildId : null}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
+        />
+      }
       notificationSettings={<NotificationDestinationPanel uid={notificationSettingsUid} />}
       ownedGuildProfilePersistence={ownedGuildProfilePersistence}
       shareSettings={
@@ -304,21 +314,41 @@ function createOwnedGuildProfileKey(profile: OwnedGuildProfile | null): string {
 
 function AuthControl({
   authState,
+  mode,
+  ownedGuildProfile,
+  sharedGuildId,
   onSignIn,
   onSignOut
 }: {
   readonly authState: AuthState;
+  readonly mode: "owner" | "admin" | "guest";
+  readonly ownedGuildProfile: OwnedGuildProfile | null;
+  readonly sharedGuildId: string | null;
   readonly onSignIn: () => void;
   readonly onSignOut: () => void;
 }) {
+  if (mode !== "owner") {
+    const guildName =
+      ownedGuildProfile?.guildId === sharedGuildId && ownedGuildProfile.guildName !== null
+        ? ownedGuildProfile.guildName
+        : "";
+
+    return guildName.length > 0 ? <span className="firebase-auth-status">{guildName}</span> : null;
+  }
+
   if (authState.status === "signed-out") {
-    return <button className="firebase-auth-button" type="button" onClick={onSignIn}>ログイン</button>;
+    return (
+      <div className="firebase-auth-user">
+        <span>Owner</span>
+        <button className="firebase-auth-button" type="button" onClick={onSignIn}>ログイン</button>
+      </div>
+    );
   }
 
   if (authState.status === "signed-in") {
     return (
       <div className="firebase-auth-user">
-        <span>{authState.user.displayName || authState.user.email}</span>
+        <span>{authState.user.displayName || authState.user.email || "Owner"}</span>
         <button className="firebase-auth-button" type="button" onClick={onSignOut}>ログアウト</button>
       </div>
     );

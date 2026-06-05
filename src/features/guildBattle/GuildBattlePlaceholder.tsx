@@ -215,7 +215,10 @@ export function GuildBattlePlaceholder({
     setSelectedOwnedGuildName(profile?.guildName ?? null);
   }, [ownedGuildProfilePersistence?.isLoading, ownedGuildProfilePersistence?.profile]);
 
-  async function loadSnapshotForWorldId(nextWorldId: GvgWorldId) {
+  async function loadSnapshotForWorldId(
+    nextWorldId: GvgWorldId,
+    options: { readonly startRealtimeOnSuccess: boolean } = { startRealtimeOnSuccess: true }
+  ) {
     stopRealtime("snapshot reload", { nextState: "idle" });
     setLoadState({ status: "loading" });
 
@@ -223,7 +226,7 @@ export function GuildBattlePlaceholder({
       const snapshot = await runtimeService.loadSnapshot(nextWorldId);
       setLoadState({ status: "success", data: snapshot });
 
-      if (isAutoUpdateEnabled) {
+      if (options.startRealtimeOnSuccess && isAutoUpdateEnabled) {
         await startRealtime(snapshot);
       }
     } catch (error) {
@@ -604,14 +607,28 @@ export function GuildBattlePlaceholder({
   }
 
   function handleOwnedGuildWorldChange(nextWorldId: string) {
+    const nextWorldNumber = createWorldNumberFromWorldInput(nextWorldId);
     setSelectedOwnedGuildWorldId(nextWorldId);
     setSelectedOwnedGuildId("");
     setSelectedOwnedGuildName(null);
     ownedGuildProfilePersistence?.onChange({
-      worldId: parseOwnedGuildWorldId(nextWorldId),
+      worldId: nextWorldNumber,
       guildId: null,
       guildName: null
     });
+
+    const nextShared = {
+      ...shared,
+      worldInput: nextWorldId,
+      worldNumber: nextWorldNumber
+    };
+    setShared(nextShared);
+    saveViewSettings({ shared: nextShared });
+
+    const nextGvgWorldId = createWorldIdFromWorldNumber(nextWorldNumber);
+    if (nextGvgWorldId !== null) {
+      void loadSnapshotForWorldId(nextGvgWorldId, { startRealtimeOnSuccess: false });
+    }
   }
 
   function handleOwnedGuildChange(nextGuildId: GvgGuildId | "") {
@@ -619,7 +636,7 @@ export function GuildBattlePlaceholder({
     setSelectedOwnedGuildId(nextGuildId);
     setSelectedOwnedGuildName(nextGuildName);
     ownedGuildProfilePersistence?.onChange({
-      worldId: parseOwnedGuildWorldId(selectedOwnedGuildWorldId),
+      worldId: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
       guildId: nextGuildId || null,
       guildName: nextGuildName
     });
@@ -1435,15 +1452,6 @@ function OwnedGuildSettings({
       {showSignInMessage ? <p className="firebase-message">ログインすると保存されます</p> : null}
     </div>
   );
-}
-
-function parseOwnedGuildWorldId(worldId: string): number | null {
-  if (worldId.trim() === "") {
-    return null;
-  }
-
-  const parsedWorldId = Number(worldId);
-  return Number.isInteger(parsedWorldId) && parsedWorldId > 0 ? parsedWorldId : null;
 }
 
 function AlertThresholdSettings({

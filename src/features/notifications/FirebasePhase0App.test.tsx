@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +30,44 @@ afterEach(() => {
 });
 
 describe("FirebasePhase0App owned guild profile persistence", () => {
+  it("shows the signed-in owner display name in the header", async () => {
+    await renderApp(
+      "/app",
+      {
+        status: "signed-in",
+        user: {
+          ...signedInState.user,
+          displayName: "驥第｣ｮ豬ｩ蟷ｳ"
+        }
+      },
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn()
+    );
+
+    expect(document.querySelector(".firebase-auth-user")?.textContent).toContain("驥第｣ｮ豬ｩ蟷ｳ");
+  });
+
+  it.each(["/saved-guild/a_abc", "/saved-guild/g_abc"])(
+    "shows the saved guild name for shared routes when the guild matches: %s",
+    async (pathname) => {
+      const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
+
+      await renderApp(pathname, signedInState, loadProfile, vi.fn());
+
+      expect(loadProfile).toHaveBeenCalledWith("owner-uid");
+      expect(document.querySelector(".firebase-auth-status")?.textContent).toBe("Saved Guild");
+      expect(document.body.textContent).not.toContain("saved-guild");
+    }
+  );
+
+  it("leaves the shared route header blank when the saved guild does not match", async () => {
+    await renderApp("/other-guild/a_abc", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+
+    expect(document.querySelector(".firebase-auth-status")).toBeNull();
+    expect(document.body.textContent).not.toContain("Saved Guild");
+    expect(document.body.textContent).not.toContain("other-guild");
+  });
+
   it("restores the owner profile without saving it again", async () => {
     const profile = createProfile();
     const loadProfile = vi.fn(() => Promise.resolve(profile));
@@ -80,7 +118,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     });
   });
 
-  it.each(["/123/a_abc", "/123/g_abc"])("does not load or save a profile outside owner mode: %s", async (pathname) => {
+  it.each(["/123/a_abc", "/123/g_abc"])("loads a profile for the shared header without saving it: %s", async (pathname) => {
     const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
     const saveProfile = vi.fn(() => Promise.resolve());
 
@@ -88,7 +126,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     await openSettings();
 
     expect(document.querySelector(".owned-guild-settings")).toBeNull();
-    expect(loadProfile).not.toHaveBeenCalled();
+    expect(loadProfile).toHaveBeenCalledWith("owner-uid");
     expect(saveProfile).not.toHaveBeenCalled();
   });
 
@@ -102,7 +140,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
 
     expect(loadProfile).not.toHaveBeenCalled();
     expect(saveProfile).not.toHaveBeenCalled();
-    expect(document.querySelector(".owned-guild-settings")?.textContent).toContain("ログインすると保存されます");
+    expect(document.querySelector(".owned-guild-settings")).not.toBeNull();
   });
 });
 
