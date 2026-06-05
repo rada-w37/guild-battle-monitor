@@ -6,7 +6,7 @@ import { AppModeProvider } from "../../app/appMode";
 import type { AuthState } from "../auth/types";
 import type { GuildShare, OwnedGuildProfile, PublicGuildShare } from "../guildBattle/types";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
-import type { GvgSnapshot, GvgWorldId } from "../gvg/types";
+import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { FirebasePhase0App } from "./FirebasePhase0App";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -64,7 +64,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     }
   );
 
-  it("shows an invalid page when the shared access key does not match", async () => {
+  it("falls back to the normal view when the shared access key does not match", async () => {
     await renderApp(
       "/saved-guild/a_invalid",
       signedInState,
@@ -75,8 +75,56 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
       vi.fn(() => Promise.resolve(createPublicShare()))
     );
 
-    expect(document.body.textContent).toContain("ギルドが見つかりません");
+    expect(document.body.textContent).toContain("Guild Battle Monitor");
     expect(document.body.textContent).not.toContain("Saved Guild");
+    expect(document.querySelector(".firebase-auth-status")).toBeNull();
+  });
+
+  it("falls back to the normal view when the public shared guild document is missing", async () => {
+    const loadPublicShare = vi.fn(() => Promise.resolve(null));
+
+    await renderApp(
+      "/missing-guild/g_missing",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      loadPublicShare
+    );
+
+    expect(loadPublicShare).toHaveBeenCalledWith("missing-guild");
+    expect(document.body.textContent).toContain("Guild Battle Monitor");
+    expect(document.querySelector(".firebase-auth-status")).toBeNull();
+  });
+
+  it("keeps owner-only settings hidden and display guild selection editable in fallback mode", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(createGvgSnapshotWithGuilds()));
+
+    await renderApp(
+      "/missing-guild/g_missing",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve(null)),
+      undefined,
+      loadSnapshot
+    );
+    await openSettings();
+
+    expect(document.querySelector(".notification-settings")).toBeNull();
+    expect(document.querySelector(".owned-guild-settings")).toBeNull();
+    expect(document.querySelector(".share-settings")).toBeNull();
+    expect(document.querySelector(".alert-settings")).not.toBeNull();
+
+    await loadMonitorWorld("37");
+
+    const guildSelect = getMonitorGuildSelect();
+    expect(guildSelect.disabled).toBe(false);
+    await changeMonitorGuild("guild-a");
+    expect(guildSelect.value).toBe("guild-a");
   });
 
   it("restores the owner profile without saving it again", async () => {
@@ -357,6 +405,43 @@ async function changeGuild(guildId: string) {
   });
 }
 
+async function loadMonitorWorld(world: string) {
+  await act(async () => {
+    const input = document.querySelector<HTMLInputElement>(".field__input--world");
+    const form = document.querySelector<HTMLFormElement>(".startup-panel");
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+    if (!input || !form) {
+      throw new Error("monitor world form was not found");
+    }
+
+    valueSetter?.call(input, world);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushPromises();
+  });
+}
+
+async function changeMonitorGuild(guildId: string) {
+  await act(async () => {
+    const select = getMonitorGuildSelect();
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+    valueSetter?.call(select, guildId);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+  });
+}
+
+function getMonitorGuildSelect() {
+  const select = document.querySelector<HTMLSelectElement>(".guild-select-field select");
+
+  if (!select) {
+    throw new Error("monitor guild select was not found");
+  }
+
+  return select;
+}
+
 function getOwnedGuildWorldInput() {
   const input = document.querySelector<HTMLInputElement>(".owned-guild-settings input");
 
@@ -433,6 +518,45 @@ function createGvgSnapshot(): GvgSnapshot {
     capturedAt: "2026-05-27T11:15:36.000Z",
     guildNames: {},
     castles: []
+  };
+}
+
+function createGvgSnapshotWithGuilds(): GvgSnapshot {
+  return {
+    worldId: "1037" as GvgWorldId,
+    capturedAt: "2026-05-27T11:15:36.000Z",
+    guildNames: {
+      ["guild-a" as GvgGuildId]: "Guild A",
+      ["guild-b" as GvgGuildId]: "Guild B"
+    },
+    castles: [
+      {
+        castleId: "1" as GvgCastleId,
+        worldId: "1037" as GvgWorldId,
+        state: "idle",
+        status: "normal",
+        ownerGuildId: "guild-a" as GvgGuildId,
+        attackerGuildId: null,
+        defenseCount: 10,
+        attackCount: 0,
+        fallenAt: null,
+        lastWinPartyKnockOutCount: 0,
+        updatedAt: "2026-05-27T11:15:36.000Z"
+      },
+      {
+        castleId: "2" as GvgCastleId,
+        worldId: "1037" as GvgWorldId,
+        state: "idle",
+        status: "normal",
+        ownerGuildId: "guild-b" as GvgGuildId,
+        attackerGuildId: null,
+        defenseCount: 8,
+        attackCount: 0,
+        fallenAt: null,
+        lastWinPartyKnockOutCount: 0,
+        updatedAt: "2026-05-27T11:15:36.000Z"
+      }
+    ]
   };
 }
 

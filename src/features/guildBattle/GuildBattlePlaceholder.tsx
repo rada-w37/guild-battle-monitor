@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { getAppModePermissions, useAppRoute } from "../../app/appMode";
+import { getAppModePermissions, useAppRoute, type AppMode } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
 import {
@@ -95,6 +95,7 @@ interface GuildBattlePlaceholderProps {
   readonly loadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
   readonly headerActions?: ReactNode;
+  readonly modeOverride?: AppMode;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
   readonly sharedGuild?: SharedGuildContext | null;
@@ -128,13 +129,14 @@ export function GuildBattlePlaceholder({
   loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient(),
   headerActions,
+  modeOverride,
   notificationSettings,
   ownedGuildProfilePersistence,
   sharedGuild,
   shareSettings
 }: GuildBattlePlaceholderProps) {
   const appRoute = useAppRoute();
-  const appMode = sharedGuild?.mode ?? appRoute?.mode ?? "owner";
+  const appMode = modeOverride ?? sharedGuild?.mode ?? appRoute?.mode ?? "owner";
   const modePermissions = getAppModePermissions(appMode);
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");

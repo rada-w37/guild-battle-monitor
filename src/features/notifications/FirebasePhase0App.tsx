@@ -59,7 +59,7 @@ export function FirebasePhase0App({
   );
   const guildShare = useGuildShare(
     appMode === "owner" ? notificationSettingsUid : null,
-    ownedGuildProfilePersistence.profile?.guildId ?? null,
+    appMode === "owner" ? ownedGuildProfilePersistence.profile : null,
     loadShare,
     saveShare
   );
@@ -99,28 +99,29 @@ export function FirebasePhase0App({
     );
   }
 
-  if (sharedGuild.status === "invalid") {
-    return <SharedGuildNotFoundPage />;
-  }
+  const effectiveMode =
+    sharedGuild.status === "valid" ? sharedGuild.sharedGuild.mode : sharedGuild.status === "fallback" ? "guest" : appMode;
+  const effectiveSharedGuild = sharedGuild.status === "valid" ? sharedGuild.sharedGuild : null;
 
   return (
     <GuildBattlePlaceholder
       loadSnapshot={loadSnapshot}
+      modeOverride={sharedGuild.status === "fallback" ? "guest" : undefined}
       headerActions={
         <AuthControl
           authState={authState}
-          mode={sharedGuild.status === "valid" ? sharedGuild.sharedGuild.mode : appMode}
-          sharedGuild={sharedGuild.status === "valid" ? sharedGuild.sharedGuild : null}
+          mode={effectiveMode}
+          sharedGuild={effectiveSharedGuild}
           onSignIn={handleSignIn}
           onSignOut={handleSignOut}
         />
       }
       notificationSettings={<NotificationDestinationPanel uid={notificationSettingsUid} />}
       ownedGuildProfilePersistence={ownedGuildProfilePersistence}
-      sharedGuild={sharedGuild.status === "valid" ? sharedGuild.sharedGuild : null}
+      sharedGuild={effectiveSharedGuild}
       shareSettings={
         <GuildSharePanel
-          guildId={ownedGuildProfilePersistence.profile?.guildId ?? null}
+          profile={ownedGuildProfilePersistence.profile}
           isSignedIn={notificationSettingsUid !== null}
           share={guildShare}
         />
@@ -139,7 +140,7 @@ export function FirebasePhase0App({
 
 function useGuildShare(
   uid: string | null,
-  guildId: string | null,
+  profile: OwnedGuildProfile | null,
   loadShare: typeof loadGuildShare,
   saveShare: typeof saveGuildShare
 ): GuildShare | null {
@@ -148,11 +149,12 @@ function useGuildShare(
   useEffect(() => {
     let isDisposed = false;
 
-    if (uid === null || guildId === null) {
+    if (uid === null || !isCompleteOwnedGuildProfile(profile)) {
       setShare(null);
       return;
     }
 
+    const guildId = profile.guildId;
     setShare(null);
     void loadShare(uid)
       .then(async (loadedShare) => {
@@ -181,7 +183,7 @@ function useGuildShare(
     return () => {
       isDisposed = true;
     };
-  }, [guildId, loadShare, saveShare, uid]);
+  }, [loadShare, profile, saveShare, uid]);
 
   return share;
 }
@@ -189,7 +191,7 @@ function useGuildShare(
 type ResolvedSharedGuildState =
   | { readonly status: "owner" }
   | { readonly status: "loading" }
-  | { readonly status: "invalid" }
+  | { readonly status: "fallback" }
   | { readonly status: "valid"; readonly sharedGuild: SharedGuildContext };
 
 function useResolvedSharedGuild(
@@ -216,7 +218,7 @@ function useResolvedSharedGuild(
         const mode = resolveSharedMode(appRoute.accessKey, share);
 
         if (share === null || mode === null) {
-          setState({ status: "invalid" });
+          setState({ status: "fallback" });
           return;
         }
 
@@ -232,7 +234,7 @@ function useResolvedSharedGuild(
       })
       .catch(() => {
         if (!isDisposed) {
-          setState({ status: "invalid" });
+          setState({ status: "fallback" });
         }
       });
 
@@ -260,6 +262,17 @@ function resolveSharedMode(accessKey: string, share: PublicGuildShare | null): "
   return null;
 }
 
+function isCompleteOwnedGuildProfile(
+  profile: OwnedGuildProfile | null
+): profile is { readonly world: number; readonly guildId: string; readonly guildName: string } {
+  return (
+    profile !== null &&
+    profile.world !== null &&
+    profile.guildId !== null &&
+    profile.guildName !== null
+  );
+}
+
 function usePublicGuildShareCache(
   profile: OwnedGuildProfile | null,
   share: GuildShare | null,
@@ -269,10 +282,7 @@ function usePublicGuildShareCache(
 
   useEffect(() => {
     if (
-      profile?.world === null ||
-      profile === null ||
-      profile.guildId === null ||
-      profile.guildName === null ||
+      !isCompleteOwnedGuildProfile(profile) ||
       share === null ||
       share.guildId !== profile.guildId
     ) {
@@ -302,17 +312,17 @@ function usePublicGuildShareCache(
 }
 
 function GuildSharePanel({
-  guildId,
+  profile,
   isSignedIn,
   share
 }: {
-  readonly guildId: string | null;
+  readonly profile: OwnedGuildProfile | null;
   readonly isSignedIn: boolean;
   readonly share: GuildShare | null;
 }) {
   const [copiedRole, setCopiedRole] = useState<"admin" | "guest" | null>(null);
 
-  if (guildId === null) {
+  if (!isCompleteOwnedGuildProfile(profile)) {
     return <p className="firebase-message">所属ギルドを設定してください</p>;
   }
 
@@ -320,7 +330,7 @@ function GuildSharePanel({
     return <p className="firebase-message">ログインすると共有URLを生成できます</p>;
   }
 
-  if (share === null || share.guildId !== guildId) {
+  if (share === null || share.guildId !== profile.guildId) {
     return <p className="firebase-message">共有URLを生成中です</p>;
   }
 
