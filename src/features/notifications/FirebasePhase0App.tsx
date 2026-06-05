@@ -25,6 +25,21 @@ import { loadNotificationDestination, saveNotificationDestination } from "./noti
 const DEFAULT_DESTINATION_ID = "default";
 const DEFAULT_DESTINATION_NAME = "ギルドDiscord";
 const DEFAULT_SELECTABLE_MENTIONS = ["@here", "@everyone"] as const;
+const OWNED_GUILD_PROFILE_ERROR_MESSAGE =
+  "所属ギルド設定の保存に失敗しました。ログイン状態またはFirestore設定を確認してください。";
+const SHARE_GENERATION_ERROR_MESSAGE =
+  "共有URLの生成に失敗しました。ログイン状態またはFirestore設定を確認してください。";
+
+interface GuildShareState {
+  readonly error: string | null;
+  readonly isLoading: boolean;
+  readonly share: GuildShare | null;
+}
+
+interface PublicGuildShareCacheState {
+  readonly error: string | null;
+  readonly isSaving: boolean;
+}
 
 interface FirebasePhase0AppProps {
   readonly loadOwnedGuildProfile?: typeof loadOwnedGuildProfile;
@@ -65,9 +80,9 @@ export function FirebasePhase0App({
   );
   const sharedGuild = useResolvedSharedGuild(appRoute, loadPublicShare);
 
-  usePublicGuildShareCache(
+  const publicGuildShareCache = usePublicGuildShareCache(
     appMode === "owner" ? ownedGuildProfilePersistence.profile : null,
-    appMode === "owner" ? guildShare : null,
+    appMode === "owner" ? guildShare.share : null,
     savePublicShare
   );
 
@@ -122,6 +137,7 @@ export function FirebasePhase0App({
       shareSettings={
         <GuildSharePanel
           profile={ownedGuildProfilePersistence.profile}
+          publicCache={publicGuildShareCache}
           isSignedIn={notificationSettingsUid !== null}
           share={guildShare}
         />
@@ -143,19 +159,23 @@ function useGuildShare(
   profile: OwnedGuildProfile | null,
   loadShare: typeof loadGuildShare,
   saveShare: typeof saveGuildShare
-): GuildShare | null {
-  const [share, setShare] = useState<GuildShare | null>(null);
+): GuildShareState {
+  const [state, setState] = useState<GuildShareState>({
+    error: null,
+    isLoading: false,
+    share: null
+  });
 
   useEffect(() => {
     let isDisposed = false;
 
     if (uid === null || !isCompleteOwnedGuildProfile(profile)) {
-      setShare(null);
+      setState({ error: null, isLoading: false, share: null });
       return;
     }
 
     const guildId = profile.guildId;
-    setShare(null);
+    setState({ error: null, isLoading: true, share: null });
     void loadShare(uid)
       .then(async (loadedShare) => {
         if (isDisposed) {
@@ -163,20 +183,26 @@ function useGuildShare(
         }
 
         if (loadedShare?.guildId === guildId) {
-          setShare(loadedShare);
+          setState({ error: null, isLoading: false, share: loadedShare });
           return;
         }
 
         const nextShare = createGuildShare(guildId);
-        await saveShare(uid, nextShare);
+        try {
+          await saveShare(uid, nextShare);
+        } catch (error) {
+          console.error("Failed to save users/{uid}/guild/share.", error);
+          throw error;
+        }
 
         if (!isDisposed) {
-          setShare(nextShare);
+          setState({ error: null, isLoading: false, share: nextShare });
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Failed to load or generate users/{uid}/guild/share.", error);
         if (!isDisposed) {
-          setShare(null);
+          setState({ error: SHARE_GENERATION_ERROR_MESSAGE, isLoading: false, share: null });
         }
       });
 
@@ -185,7 +211,7 @@ function useGuildShare(
     };
   }, [loadShare, profile, saveShare, uid]);
 
-  return share;
+  return state;
 }
 
 type ResolvedSharedGuildState =
@@ -232,7 +258,8 @@ function useResolvedSharedGuild(
           }
         });
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Failed to load guildShares/{guildId}.", error);
         if (!isDisposed) {
           setState({ status: "fallback" });
         }
@@ -277,8 +304,12 @@ function usePublicGuildShareCache(
   profile: OwnedGuildProfile | null,
   share: GuildShare | null,
   savePublicShare: typeof savePublicGuildShare
-) {
+): PublicGuildShareCacheState {
   const savedKeyRef = useRef<string | null>(null);
+  const [state, setState] = useState<PublicGuildShareCacheState>({
+    error: null,
+    isSaving: false
+  });
 
   useEffect(() => {
     if (
@@ -287,6 +318,7 @@ function usePublicGuildShareCache(
       share.guildId !== profile.guildId
     ) {
       savedKeyRef.current = null;
+      setState({ error: null, isSaving: false });
       return;
     }
 
@@ -299,26 +331,38 @@ function usePublicGuildShareCache(
     const nextKey = JSON.stringify({ guildId: profile.guildId, ...publicShare });
 
     if (savedKeyRef.current === nextKey) {
+      setState({ error: null, isSaving: false });
       return;
     }
 
     savedKeyRef.current = nextKey;
-    void savePublicShare(profile.guildId, publicShare).catch(() => {
-      if (savedKeyRef.current === nextKey) {
-        savedKeyRef.current = null;
-      }
-    });
+    setState({ error: null, isSaving: true });
+    void savePublicShare(profile.guildId, publicShare)
+      .then(() => {
+        setState({ error: null, isSaving: false });
+      })
+      .catch((error) => {
+        console.error("Failed to save guildShares/{guildId}.", error);
+        if (savedKeyRef.current === nextKey) {
+          savedKeyRef.current = null;
+        }
+        setState({ error: SHARE_GENERATION_ERROR_MESSAGE, isSaving: false });
+      });
   }, [profile, savePublicShare, share]);
+
+  return state;
 }
 
 function GuildSharePanel({
   profile,
+  publicCache,
   isSignedIn,
   share
 }: {
   readonly profile: OwnedGuildProfile | null;
+  readonly publicCache: PublicGuildShareCacheState;
   readonly isSignedIn: boolean;
-  readonly share: GuildShare | null;
+  readonly share: GuildShareState;
 }) {
   const [copiedRole, setCopiedRole] = useState<"admin" | "guest" | null>(null);
 
@@ -330,12 +374,16 @@ function GuildSharePanel({
     return <p className="firebase-message">ログインすると共有URLを生成できます</p>;
   }
 
-  if (share === null || share.guildId !== profile.guildId) {
+  if (share.error !== null || publicCache.error !== null) {
+    return <p className="firebase-message firebase-message--error">{share.error ?? publicCache.error}</p>;
+  }
+
+  if (share.isLoading || publicCache.isSaving || share.share === null || share.share.guildId !== profile.guildId) {
     return <p className="firebase-message">共有URLを生成中です</p>;
   }
 
-  const adminUrl = createGuildShareUrl(window.location.origin, share.guildId, share.adminAccessKey);
-  const guestUrl = createGuildShareUrl(window.location.origin, share.guildId, share.guestAccessKey);
+  const adminUrl = createGuildShareUrl(window.location.origin, share.share.guildId, share.share.adminAccessKey);
+  const guestUrl = createGuildShareUrl(window.location.origin, share.share.guildId, share.share.guestAccessKey);
 
   async function handleCopy(role: "admin" | "guest", url: string) {
     try {
@@ -393,6 +441,7 @@ function useOwnedGuildProfilePersistence(
   saveProfile: typeof saveOwnedGuildProfile
 ): OwnedGuildProfilePersistence {
   const [profile, setProfile] = useState<OwnedGuildProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const persistedProfileKeyRef = useRef<string | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
@@ -403,11 +452,13 @@ function useOwnedGuildProfilePersistence(
 
     if (uid === null) {
       setProfile(null);
+      setError(null);
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
+    setError(null);
     void loadProfile(uid)
       .then((loadedProfile) => {
         if (!isDisposed) {
@@ -416,7 +467,8 @@ function useOwnedGuildProfilePersistence(
           setIsLoading(false);
         }
       })
-      .catch(() => {
+      .catch((loadError) => {
+        console.error("Failed to load users/{uid}/guild/profile.", loadError);
         if (!isDisposed) {
           setProfile(null);
           setIsLoading(false);
@@ -430,6 +482,7 @@ function useOwnedGuildProfilePersistence(
 
   function handleChange(nextProfile: OwnedGuildProfile) {
     setProfile(nextProfile);
+    setError(null);
 
     if (uid === null || isLoading) {
       return;
@@ -445,14 +498,17 @@ function useOwnedGuildProfilePersistence(
     saveQueueRef.current = saveQueueRef.current
       .catch(() => {})
       .then(() => saveProfile(uid, nextProfile))
-      .catch(() => {
+      .catch((saveError) => {
+        console.error("Failed to save users/{uid}/guild/profile.", saveError);
         if (persistedProfileKeyRef.current === nextProfileKey) {
           persistedProfileKeyRef.current = null;
         }
+        setError(OWNED_GUILD_PROFILE_ERROR_MESSAGE);
       });
   }
 
   return {
+    error,
     isLoading,
     isSignedIn: uid !== null,
     profile,

@@ -110,6 +110,7 @@ export interface SharedGuildContext {
 }
 
 export interface OwnedGuildProfilePersistence {
+  readonly error?: string | null;
   readonly isLoading: boolean;
   readonly isSignedIn: boolean;
   readonly profile: OwnedGuildProfile | null;
@@ -827,6 +828,7 @@ export function GuildBattlePlaceholder({
               modePermissions.showOwnedGuildSettings ? (
                 <OwnedGuildSettings
                   guildCandidates={guildCandidates}
+                  error={ownedGuildProfilePersistence?.error ?? null}
                   isLoading={ownedGuildProfilePersistence?.isLoading ?? false}
                   selectedGuildId={selectedOwnedGuildId}
                   selectedGuildName={selectedOwnedGuildName}
@@ -1438,6 +1440,7 @@ function SettingsDialog({
 }
 
 function OwnedGuildSettings({
+  error,
   guildCandidates,
   isLoading,
   selectedGuildId,
@@ -1447,6 +1450,7 @@ function OwnedGuildSettings({
   onGuildChange,
   onWorldChange
 }: {
+  readonly error: string | null;
   readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
   readonly isLoading: boolean;
   readonly selectedGuildId: GvgGuildId | "";
@@ -1487,6 +1491,7 @@ function OwnedGuildSettings({
           ))}
         </select>
       </label>
+      {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
       {showSignInMessage ? <p className="firebase-message">ログインすると保存されます</p> : null}
     </div>
   );

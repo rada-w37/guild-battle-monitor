@@ -177,6 +177,40 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     });
   });
 
+  it("shows an error when owned guild profile save fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const saveProfile = vi.fn(() => Promise.reject(new Error("profile write failed")));
+
+    try {
+      await renderApp(
+        "/app",
+        signedInState,
+        vi.fn(() => Promise.resolve(null)),
+        saveProfile,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        vi.fn(() => Promise.resolve(createGvgSnapshotWithGuilds()))
+      );
+      await openOwnedGuildSettings();
+      await changeWorld("37");
+
+      expect(saveProfile).toHaveBeenCalledWith("owner-uid", {
+        world: 37,
+        guildId: null,
+        guildName: null
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "Failed to save users/{uid}/guild/profile.",
+        expect.any(Error)
+      );
+      expect(document.body.textContent).toContain("所属ギルド設定の保存に失敗");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it.each(["/123/a_admin", "/123/g_guest"])("does not load or save owner profile outside owner mode: %s", async (pathname) => {
     const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
     const saveProfile = vi.fn(() => Promise.resolve());
@@ -262,6 +296,69 @@ describe("FirebasePhase0App guild share settings", () => {
     expect(nextShare.guildId).toBe("saved-guild");
     expect(nextShare.adminAccessKey).not.toBe(previousShare.adminAccessKey);
     expect(nextShare.guestAccessKey).not.toBe(previousShare.guestAccessKey);
+  });
+
+  it("shows an error when users/{uid}/guild/share generation fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const saveShare = vi.fn(() => Promise.reject(new Error("share write failed")));
+
+    try {
+      await renderApp(
+        "/app",
+        signedInState,
+        vi.fn(() => Promise.resolve(createProfile())),
+        vi.fn(),
+        vi.fn(() => Promise.resolve(null)),
+        saveShare
+      );
+      await openSettings();
+      await openDetails(getShareSettings());
+
+      expect(saveShare).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "Failed to save users/{uid}/guild/share.",
+        expect.any(Error)
+      );
+      expect(getShareSettings().textContent).toContain("共有URLの生成に失敗");
+      expect(getShareSettings().textContent).not.toContain("共有URLを生成中です");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("shows an error when guildShares/{guildId} save fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const savePublicShare = vi.fn(() => Promise.reject(new Error("public share write failed")));
+
+    try {
+      await renderApp(
+        "/app",
+        signedInState,
+        vi.fn(() => Promise.resolve(createProfile())),
+        vi.fn(),
+        vi.fn(() => Promise.resolve(createShare("saved-guild"))),
+        vi.fn(),
+        undefined,
+        savePublicShare
+      );
+      await openSettings();
+      await openDetails(getShareSettings());
+
+      expect(savePublicShare).toHaveBeenCalledWith("saved-guild", {
+        world: 37,
+        guildName: "Saved Guild",
+        adminAccessKey: "a_admin",
+        guestAccessKey: "g_guest"
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "Failed to save guildShares/{guildId}.",
+        expect.any(Error)
+      );
+      expect(getShareSettings().textContent).toContain("共有URLの生成に失敗");
+      expect(getShareSettings().textContent).not.toContain("共有URLを生成中です");
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("copies a generated shared URL", async () => {
