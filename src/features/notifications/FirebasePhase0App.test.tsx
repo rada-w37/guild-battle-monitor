@@ -262,9 +262,14 @@ describe("FirebasePhase0App guild share settings", () => {
     );
     await openSettings();
 
-    const settings = getShareSettings();
+    const settings = document.querySelector<HTMLDetailsElement>(".owned-guild-settings");
+    if (!settings) {
+      throw new Error("owned guild settings were not found");
+    }
     expect(settings.open).toBe(false);
     await openDetails(settings);
+    expect(getShareSettings()).not.toBeNull();
+    expect(document.querySelector(".share-settings")).toBeNull();
 
     expect(saveShare).toHaveBeenCalledTimes(1);
     const savedShare = saveShare.mock.calls[0][1];
@@ -297,8 +302,7 @@ describe("FirebasePhase0App guild share settings", () => {
       vi.fn(() => Promise.resolve(previousShare)),
       saveShare
     );
-    await openSettings();
-    await openDetails(getShareSettings());
+    await openOwnedGuildSettings();
 
     const nextShare = saveShare.mock.calls[0][1];
     expect(nextShare.guildId).toBe("saved-guild");
@@ -319,8 +323,7 @@ describe("FirebasePhase0App guild share settings", () => {
         vi.fn(() => Promise.resolve(null)),
         saveShare
       );
-      await openSettings();
-      await openDetails(getShareSettings());
+      await openOwnedGuildSettings();
 
       expect(saveShare).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(
@@ -349,8 +352,7 @@ describe("FirebasePhase0App guild share settings", () => {
         undefined,
         savePublicShare
       );
-      await openSettings();
-      await openDetails(getShareSettings());
+      await openOwnedGuildSettings();
 
       expect(savePublicShare).toHaveBeenCalledWith("saved-guild", {
         world: 37,
@@ -381,8 +383,7 @@ describe("FirebasePhase0App guild share settings", () => {
       vi.fn(() => Promise.resolve(createShare("saved-guild"))),
       vi.fn()
     );
-    await openSettings();
-    await openDetails(getShareSettings());
+    await openOwnedGuildSettings();
 
     const copyButton = Array.from(getShareSettings().querySelectorAll<HTMLButtonElement>("button")).find(
       (button) => button.textContent === "コピー"
@@ -414,8 +415,7 @@ describe("FirebasePhase0App guild share settings", () => {
       loadShare,
       saveShare
     );
-    await openSettings();
-    await openDetails(getShareSettings());
+    await openOwnedGuildSettings();
 
     expect(getShareSettings().textContent).toContain("所属ギルドを設定してください");
     expect(loadShare).not.toHaveBeenCalled();
@@ -568,7 +568,7 @@ function getOwnedGuildSelect() {
 }
 
 function getShareSettings() {
-  const settings = document.querySelector<HTMLDetailsElement>(".share-settings");
+  const settings = document.querySelector<HTMLElement>(".owned-guild-settings__share");
 
   if (!settings) {
     throw new Error("share settings were not found");

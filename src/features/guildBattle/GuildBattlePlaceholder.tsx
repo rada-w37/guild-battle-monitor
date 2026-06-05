@@ -884,6 +884,7 @@ export function GuildBattlePlaceholder({
                   selectedGuildId={selectedOwnedGuildId}
                   selectedGuildName={selectedOwnedGuildName}
                   selectedWorldId={selectedOwnedGuildWorldId}
+                  shareSettings={modePermissions.canManageShareUrls ? shareSettings : undefined}
                   showSignInMessage={
                     ownedGuildProfilePersistence !== undefined && !ownedGuildProfilePersistence.isSignedIn
                   }
@@ -892,7 +893,6 @@ export function GuildBattlePlaceholder({
                 />
               ) : undefined
             }
-            shareSettings={modePermissions.canManageShareUrls ? shareSettings : undefined}
             showAlertSettings={modePermissions.showAlertSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
@@ -1374,7 +1374,6 @@ function SettingsDialog({
   isTestModeEnabled,
   notificationSettings,
   ownedGuildSettings,
-  shareSettings,
   showAlertSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
@@ -1395,7 +1394,6 @@ function SettingsDialog({
   readonly isTestModeEnabled: boolean;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildSettings?: ReactNode;
-  readonly shareSettings?: ReactNode;
   readonly showAlertSettings: boolean;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
@@ -1469,12 +1467,6 @@ function SettingsDialog({
               {notificationSettings}
             </details>
           ) : null}
-          {shareSettings !== undefined ? (
-            <details className="settings-section share-settings">
-              <summary>共有URL設定</summary>
-              {shareSettings}
-            </details>
-          ) : null}
           {IS_DEV && showGuildBattleOnlySettings && canEditBattleState ? (
             <section className="settings-section">
               <TestModeSettings
@@ -1497,6 +1489,7 @@ function OwnedGuildSettings({
   selectedGuildId,
   selectedGuildName,
   selectedWorldId,
+  shareSettings,
   showSignInMessage,
   onGuildChange,
   onWorldChange
@@ -1507,6 +1500,7 @@ function OwnedGuildSettings({
   readonly selectedGuildId: GvgGuildId | "";
   readonly selectedGuildName: string | null;
   readonly selectedWorldId: string;
+  readonly shareSettings?: ReactNode;
   readonly showSignInMessage: boolean;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
   readonly onWorldChange: (worldId: string) => void;
@@ -1542,6 +1536,7 @@ function OwnedGuildSettings({
           ))}
         </select>
       </label>
+      {shareSettings !== undefined ? <div className="owned-guild-settings__share">{shareSettings}</div> : null}
       {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
       {showSignInMessage ? <p className="firebase-message">ログインすると保存されます</p> : null}
     </div>
