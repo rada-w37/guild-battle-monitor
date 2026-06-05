@@ -889,11 +889,14 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(worldInput, "37");
       await flushPromises();
     });
+    const displayGuildSelect = getGuildSelect();
     onChange.mockClear();
     act(() => {
       updateSelect(guildSelect, ownGuildId);
     });
 
+    expect(getWorldInput().value).toBe("37");
+    expect(displayGuildSelect.value).toBe("");
     expect(onChange).toHaveBeenCalledWith({
       world: 37,
       guildId: ownGuildId,
@@ -916,10 +919,13 @@ describe("GuildBattlePlaceholder", () => {
     const ownedGuildSettings = getOwnedGuildSettings();
     const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
     const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
+    const monitorWorldInput = getWorldInput();
 
     if (!worldInput || !guildSelect) {
       throw new Error("owned guild settings fields were not found");
     }
+
+    expect(monitorWorldInput.value).toBe("");
 
     await act(async () => {
       updateInput(worldInput, "37");
@@ -927,6 +933,8 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(loadSnapshot).toHaveBeenCalledWith("1037");
+    expect(monitorWorldInput.value).toBe("");
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
     expect(Array.from(guildSelect.options).map((option) => option.textContent ?? "")).toContain("Owner Guild");
     expect(onChange).toHaveBeenLastCalledWith({
       world: 37,

@@ -176,6 +176,10 @@ export function GuildBattlePlaceholder({
   const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
   const [selectedOwnedGuildId, setSelectedOwnedGuildId] = useState<GvgGuildId | "">("");
   const [selectedOwnedGuildName, setSelectedOwnedGuildName] = useState<string | null>(null);
+  const [ownedGuildCandidateLoadState, setOwnedGuildCandidateLoadState] = useState<
+    AsyncLoadState<readonly GuildBattleGuildCandidateViewModel[]>
+  >({ status: "idle" });
+  const [ownedGuildCandidates, setOwnedGuildCandidates] = useState<readonly GuildBattleGuildCandidateViewModel[]>([]);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -189,6 +193,7 @@ export function GuildBattlePlaceholder({
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
   const grandBattleRuntimeRef = useRef<GrandBattleRealtimeSnapshotRuntime | null>(null);
   const removeGrandBattleRealtimeListenerRef = useRef<(() => void) | null>(null);
+  const ownedGuildCandidateRequestSeqRef = useRef(0);
   const grandBattleParticipantRequestSeqRef = useRef(0);
   const grandBattleSnapshotRequestSeqRef = useRef(0);
 
@@ -235,6 +240,7 @@ export function GuildBattlePlaceholder({
     setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
     setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
     setSelectedOwnedGuildName(profile?.guildName ?? null);
+    void loadOwnedGuildCandidatesForWorld(profile?.world ?? null);
   }, [ownedGuildProfilePersistence?.isLoading, ownedGuildProfilePersistence?.profile]);
 
   useEffect(() => {
@@ -664,6 +670,38 @@ export function GuildBattlePlaceholder({
     saveViewSettings({ selectedGuildId: nextGuildId });
   }
 
+  async function loadOwnedGuildCandidatesForWorld(profileWorld: number | null) {
+    const nextGvgWorldId = createWorldIdFromWorldNumber(profileWorld);
+    const requestSeq = ownedGuildCandidateRequestSeqRef.current + 1;
+    ownedGuildCandidateRequestSeqRef.current = requestSeq;
+
+    if (nextGvgWorldId === null) {
+      setOwnedGuildCandidates([]);
+      setOwnedGuildCandidateLoadState({ status: "idle" });
+      return;
+    }
+
+    setOwnedGuildCandidateLoadState({ status: "loading" });
+
+    try {
+      const snapshot = await runtimeService.loadSnapshot(nextGvgWorldId);
+      const candidates = createGuildBattleGuildCandidates(snapshot);
+
+      if (ownedGuildCandidateRequestSeqRef.current === requestSeq) {
+        setOwnedGuildCandidates(candidates);
+        setOwnedGuildCandidateLoadState({ status: "success", data: candidates });
+      }
+    } catch (error) {
+      if (ownedGuildCandidateRequestSeqRef.current === requestSeq) {
+        setOwnedGuildCandidates([]);
+        setOwnedGuildCandidateLoadState({
+          status: "error",
+          error: error instanceof Error ? error : new Error("owned guild candidates load failed")
+        });
+      }
+    }
+  }
+
   function handleOwnedGuildWorldChange(nextWorldId: string) {
     const nextWorldNumber = createWorldNumberFromWorldInput(nextWorldId);
     setSelectedOwnedGuildWorldId(nextWorldId);
@@ -674,23 +712,11 @@ export function GuildBattlePlaceholder({
       guildId: null,
       guildName: null
     });
-
-    const nextShared = {
-      ...shared,
-      worldInput: nextWorldId,
-      worldNumber: nextWorldNumber
-    };
-    setShared(nextShared);
-    saveViewSettings({ shared: nextShared });
-
-    const nextGvgWorldId = createWorldIdFromWorldNumber(nextWorldNumber);
-    if (nextGvgWorldId !== null) {
-      void loadSnapshotForWorldId(nextGvgWorldId, { startRealtimeOnSuccess: false });
-    }
+    void loadOwnedGuildCandidatesForWorld(nextWorldNumber);
   }
 
   function handleOwnedGuildChange(nextGuildId: GvgGuildId | "") {
-    const nextGuildName = guildCandidates.find((candidate) => candidate.guildId === nextGuildId)?.guildName ?? null;
+    const nextGuildName = ownedGuildCandidates.find((candidate) => candidate.guildId === nextGuildId)?.guildName ?? null;
     setSelectedOwnedGuildId(nextGuildId);
     setSelectedOwnedGuildName(nextGuildName);
     ownedGuildProfilePersistence?.onChange({
@@ -849,9 +875,12 @@ export function GuildBattlePlaceholder({
             ownedGuildSettings={
               modePermissions.canManageGuildProfile ? (
                 <OwnedGuildSettings
-                  guildCandidates={guildCandidates}
+                  guildCandidates={ownedGuildCandidates}
                   error={ownedGuildProfilePersistence?.error ?? null}
-                  isLoading={ownedGuildProfilePersistence?.isLoading ?? false}
+                  isLoading={
+                    (ownedGuildProfilePersistence?.isLoading ?? false) ||
+                    ownedGuildCandidateLoadState.status === "loading"
+                  }
                   selectedGuildId={selectedOwnedGuildId}
                   selectedGuildName={selectedOwnedGuildName}
                   selectedWorldId={selectedOwnedGuildWorldId}
