@@ -36,7 +36,9 @@ describe("resolveRoute", () => {
 describe("getAppModePermissions", () => {
   it("allows all owner settings and editing", () => {
     expect(getAppModePermissions("owner")).toEqual({
-      canEdit: true,
+      canEditAlertSettings: true,
+      canEditBattleState: true,
+      canEditViewSettings: true,
       showAlertSettings: true,
       showNotificationSettings: true,
       showOwnedGuildSettings: true,
@@ -46,7 +48,9 @@ describe("getAppModePermissions", () => {
 
   it("allows admin editing without owner-only settings", () => {
     expect(getAppModePermissions("admin")).toEqual({
-      canEdit: true,
+      canEditAlertSettings: true,
+      canEditBattleState: true,
+      canEditViewSettings: true,
       showAlertSettings: true,
       showNotificationSettings: true,
       showOwnedGuildSettings: false,
@@ -54,10 +58,12 @@ describe("getAppModePermissions", () => {
     });
   });
 
-  it("keeps guest read-only with only shared settings visible", () => {
+  it("keeps guest battle state read-only while allowing personal view settings", () => {
     expect(getAppModePermissions("guest")).toEqual({
-      canEdit: false,
-      showAlertSettings: false,
+      canEditAlertSettings: true,
+      canEditBattleState: false,
+      canEditViewSettings: true,
+      showAlertSettings: true,
       showNotificationSettings: false,
       showOwnedGuildSettings: false,
       showShareSettings: false

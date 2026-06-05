@@ -3,7 +3,9 @@ import { createContext, useContext, type ReactNode } from "react";
 export type AppMode = "owner" | "admin" | "guest";
 
 export interface AppModePermissions {
-  readonly canEdit: boolean;
+  readonly canEditBattleState: boolean;
+  readonly canEditViewSettings: boolean;
+  readonly canEditAlertSettings: boolean;
   readonly showAlertSettings: boolean;
   readonly showNotificationSettings: boolean;
   readonly showOwnedGuildSettings: boolean;
@@ -21,9 +23,13 @@ export function resolveAppMode(pathname: string): AppMode | null {
 }
 
 export function getAppModePermissions(mode: AppMode): AppModePermissions {
+  const canEditBattleState = mode !== "guest";
+
   return {
-    canEdit: mode !== "guest",
-    showAlertSettings: mode !== "guest",
+    canEditBattleState,
+    canEditViewSettings: true,
+    canEditAlertSettings: true,
+    showAlertSettings: true,
     showNotificationSettings: mode !== "guest",
     showOwnedGuildSettings: mode === "owner",
     showShareSettings: mode === "owner"

@@ -787,21 +787,37 @@ describe("GuildBattlePlaceholder", () => {
     expect(getGuildSelect().disabled).toBe(true);
   });
 
-  it("keeps guest read-only and hides restricted settings", async () => {
+  it("keeps guest battle state read-only while allowing personal settings", async () => {
     renderComponent(undefined, undefined, undefined, undefined, <div>notification</div>, `/${ownGuildId}/g_guest`);
     await loadWorld37();
     await clickSettingsButton();
 
     expect(getModeButton("Guild Battle").disabled).toBe(true);
     expect(getModeButton("Grand Battle").disabled).toBe(true);
-    expect(getDangerSortCheckbox().disabled).toBe(true);
-    expect(getAutoUpdateButton().disabled).toBe(true);
     expect(getGuildSelect().disabled).toBe(true);
-    expect(getSettingsDialog().querySelector(".alert-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".alert-settings")).not.toBeNull();
+    expect(getThresholdInputs().every((input) => !input.disabled)).toBe(true);
+    expect(getDangerSortCheckbox().disabled).toBe(false);
+    expect(getAutoUpdateButton().disabled).toBe(false);
     expect(getSettingsDialog().querySelector(".notification-settings")).toBeNull();
     expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
     expect(getSettingsDialog().querySelector(".share-settings")).toBeNull();
     expect(getSettingsDialog().querySelector(".test-mode-settings")).toBeNull();
+
+    await clickDangerSortCheckbox();
+    expect(getStoredViewSettings().sortByAlert).toBe(true);
+
+    const initialAutoUpdate = getAutoUpdateButton().textContent === "ON";
+    await clickAutoUpdateButton();
+    expect(getStoredViewSettings().autoUpdate).toBe(!initialAutoUpdate);
+
+    act(() => {
+      updateInput(getThresholdInputs()[0], "40");
+    });
+    await commitThresholdInputWithKey(0, "Enter");
+    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
+      '"warningDefenseCount":40'
+    );
   });
 
   it("shows a missing guild message when the shared URL guild is not in the loaded snapshot", async () => {
@@ -1214,6 +1230,21 @@ async function clickButton(label: string) {
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function clickAutoUpdateButton() {
+  await act(async () => {
+    getAutoUpdateButton().click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function clickDangerSortCheckbox() {
+  await act(async () => {
+    getDangerSortCheckbox().click();
     await Promise.resolve();
   });
 }

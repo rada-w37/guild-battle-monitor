@@ -250,7 +250,7 @@ export function GuildBattlePlaceholder({
   }
 
   async function handleAutoUpdateToggle() {
-    if (!modePermissions.canEdit) {
+    if (!modePermissions.canEditViewSettings) {
       return;
     }
 
@@ -349,7 +349,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleAlertThresholdChange(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
-    if (!modePermissions.canEdit) {
+    if (!modePermissions.canEditAlertSettings) {
       return false;
     }
 
@@ -367,7 +367,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleAlertThresholdReset() {
-    if (!modePermissions.canEdit) {
+    if (!modePermissions.canEditAlertSettings) {
       return;
     }
 
@@ -595,7 +595,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGuildChange(nextGuildId: string) {
-    if (!modePermissions.canEdit || sharedGuildId !== null) {
+    if (!modePermissions.canEditBattleState || sharedGuildId !== null) {
       return;
     }
 
@@ -626,7 +626,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
-    if (!modePermissions.canEdit) {
+    if (!modePermissions.canEditViewSettings) {
       return;
     }
 
@@ -651,7 +651,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleModeChange(nextMode: BattleMonitorMode) {
-    if (!modePermissions.canEdit) {
+    if (!modePermissions.canEditBattleState) {
       return;
     }
 
@@ -737,7 +737,7 @@ export function GuildBattlePlaceholder({
         <div className="mode-tabs" aria-label="Battle Monitor mode">
           <button
             className={`mode-tabs__button${activeMode === "guildBattle" ? " mode-tabs__button--active" : ""}`}
-            disabled={!modePermissions.canEdit}
+            disabled={!modePermissions.canEditBattleState}
             type="button"
             aria-pressed={activeMode === "guildBattle"}
             onClick={() => handleModeChange("guildBattle")}
@@ -746,7 +746,7 @@ export function GuildBattlePlaceholder({
           </button>
           <button
             className={`mode-tabs__button${activeMode === "grandBattle" ? " mode-tabs__button--active" : ""}`}
-            disabled={!modePermissions.canEdit}
+            disabled={!modePermissions.canEditBattleState}
             type="button"
             aria-pressed={activeMode === "grandBattle"}
             onClick={() => handleModeChange("grandBattle")}
@@ -758,7 +758,9 @@ export function GuildBattlePlaceholder({
         {isSettingsDialogOpen ? (
           <SettingsDialog
             alertThresholdError={alertThresholdError}
-            canEdit={modePermissions.canEdit}
+            canEditAlertSettings={modePermissions.canEditAlertSettings}
+            canEditBattleState={modePermissions.canEditBattleState}
+            canEditViewSettings={modePermissions.canEditViewSettings}
             castleSortMode={castleSortMode}
             editableAlertThresholds={editableAlertThresholds}
             isAutoUpdateEnabled={isAutoUpdateEnabled}
@@ -821,12 +823,12 @@ export function GuildBattlePlaceholder({
 
         <SnapshotStatus
           alertThresholds={alertThresholds}
-          canEdit={modePermissions.canEdit}
+          canEdit={modePermissions.canEditBattleState}
           castleSortMode={castleSortMode}
           guildCandidates={guildCandidates}
           guildSelectValue={guildSelectValue}
           isAutoUpdateEnabled={isAutoUpdateEnabled}
-          isTestModeEnabled={modePermissions.canEdit && IS_DEV && isTestModeEnabled}
+          isTestModeEnabled={modePermissions.canEditBattleState && IS_DEV && isTestModeEnabled}
           loadState={loadState}
           realtimeState={realtimeState}
           selectedGuildId={sharedGuildId ?? guildSelectValue}
@@ -1254,7 +1256,9 @@ function TestModeSettings({
 
 function SettingsDialog({
   alertThresholdError,
-  canEdit,
+  canEditAlertSettings,
+  canEditBattleState,
+  canEditViewSettings,
   castleSortMode,
   editableAlertThresholds,
   isAutoUpdateEnabled,
@@ -1273,7 +1277,9 @@ function SettingsDialog({
   onTestModeChange
 }: {
   readonly alertThresholdError: string | null;
-  readonly canEdit: boolean;
+  readonly canEditAlertSettings: boolean;
+  readonly canEditBattleState: boolean;
+  readonly canEditViewSettings: boolean;
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly editableAlertThresholds: EditableGuildBattleAlertThresholds;
   readonly isAutoUpdateEnabled: boolean;
@@ -1309,7 +1315,7 @@ function SettingsDialog({
         <div className="settings-dialog__body">
           {showAlertSettings ? (
             <AlertThresholdSettings
-              canEdit={canEdit}
+              canEdit={canEditAlertSettings}
               error={alertThresholdError}
               thresholds={editableAlertThresholds}
               onChange={onAlertThresholdChange}
@@ -1323,7 +1329,7 @@ function SettingsDialog({
               <input
                 type="checkbox"
                 checked={castleSortMode === "alertLevel"}
-                disabled={!canEdit}
+                disabled={!canEditViewSettings}
                 onChange={(event) => onSortModeChange(event.target.checked ? "alertLevel" : "castleId")}
               />
               <span>危険度順で表示</span>
@@ -1335,7 +1341,7 @@ function SettingsDialog({
             <div className="auto-update-setting">
               <button
                 className={`auto-update-toggle ${isAutoUpdateEnabled ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
-                disabled={!canEdit}
+                disabled={!canEditViewSettings}
                 type="button"
                 onClick={onAutoUpdateToggle}
               >
@@ -1361,11 +1367,11 @@ function SettingsDialog({
               {shareSettings}
             </details>
           ) : null}
-          {IS_DEV && showGuildBattleOnlySettings && canEdit ? (
+          {IS_DEV && showGuildBattleOnlySettings && canEditBattleState ? (
             <section className="settings-section">
               <TestModeSettings
                 checked={isTestModeEnabled}
-                disabled={!canEdit || isRealtimeActive}
+                disabled={!canEditBattleState || isRealtimeActive}
                 onChange={onTestModeChange}
               />
             </section>
