@@ -37,7 +37,7 @@ export function getAppModePermissions(mode: AppMode): AppModePermissions {
 }
 
 export function resolveRoute(pathname: string): AppRoute | null {
-  if (pathname === "/app" || pathname === "/app/") {
+  if (pathname === "/") {
     return { mode: "owner" };
   }
 

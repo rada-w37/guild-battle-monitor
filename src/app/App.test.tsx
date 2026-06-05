@@ -26,7 +26,25 @@ describe("App routing", () => {
     act(() => root.unmount());
   });
 
-  it("keeps the existing app available on the owner URL", () => {
+  it("keeps the existing app available on the root owner URL", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <AppModeProvider pathname="/">
+          <App />
+        </AppModeProvider>
+      );
+    });
+
+    expect(container.textContent).toContain("Guild Battle Monitor");
+    expect(container.textContent).not.toContain("Invalid URL");
+
+    act(() => root.unmount());
+  });
+
+  it("treats the old /app owner URL as invalid", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -38,8 +56,8 @@ describe("App routing", () => {
       );
     });
 
-    expect(container.textContent).toContain("Guild Battle Monitor");
-    expect(container.textContent).not.toContain("Invalid URL");
+    expect(container.textContent).toContain("Invalid URL");
+    expect(container.textContent).not.toContain("Guild Battle Monitor");
 
     act(() => root.unmount());
   });

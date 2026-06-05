@@ -3,11 +3,11 @@ import { getAppModePermissions, resolveAppMode, resolveRoute } from "./appMode";
 
 describe("resolveAppMode", () => {
   it.each([
-    ["/app", "owner"],
-    ["/app/", "owner"],
+    ["/", "owner"],
     ["/123/a_abc", "admin"],
     ["/123/g_abc", "guest"],
-    ["/", null],
+    ["/app", null],
+    ["/app/", null],
     ["/invalid", null],
     ["/guildId/accessKey", null]
   ] as const)("resolves %s to %s", (pathname, expectedMode) => {
@@ -17,11 +17,11 @@ describe("resolveAppMode", () => {
 
 describe("resolveRoute", () => {
   it.each([
-    ["/app", { mode: "owner" }],
-    ["/app/", { mode: "owner" }],
+    ["/", { mode: "owner" }],
     ["/123/a_abc", { mode: "admin", guildId: "123", accessKey: "a_abc" }],
     ["/123/g_abc", { mode: "guest", guildId: "123", accessKey: "g_abc" }],
-    ["/", null],
+    ["/app", null],
+    ["/app/", null],
     ["/invalid", null],
     ["/app/test", null],
     ["/123", null],
