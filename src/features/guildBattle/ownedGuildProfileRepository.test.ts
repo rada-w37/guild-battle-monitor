@@ -31,14 +31,14 @@ describe("ownedGuildProfileRepository", () => {
     firestoreMocks.getDoc.mockResolvedValue({
       exists: () => true,
       data: () => ({
-        worldId: 37,
+        world: 37,
         guildId: "guild-id",
         guildName: "Guild Name"
       })
     });
 
     await expect(loadOwnedGuildProfile("owner-uid")).resolves.toEqual({
-      worldId: 37,
+      world: 37,
       guildId: "guild-id",
       guildName: "Guild Name"
     });
@@ -47,7 +47,7 @@ describe("ownedGuildProfileRepository", () => {
 
   it("saves users/{uid}/guild/profile with a server timestamp", async () => {
     const profile = {
-      worldId: 38,
+      world: 38,
       guildId: null,
       guildName: null
     };
@@ -63,5 +63,6 @@ describe("ownedGuildProfileRepository", () => {
       },
       { merge: true }
     );
+    expect(firestoreMocks.setDoc.mock.calls[0][1]).not.toHaveProperty("worldId");
   });
 });

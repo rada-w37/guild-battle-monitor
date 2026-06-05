@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadGuildShare, saveGuildShare } from "./guildShareRepository";
+import {
+  loadGuildShare,
+  loadPublicGuildShare,
+  saveGuildShare,
+  savePublicGuildShare
+} from "./guildShareRepository";
 
 const firestoreMocks = vi.hoisted(() => ({
   doc: vi.fn(() => "share-ref"),
@@ -62,5 +67,49 @@ describe("guildShareRepository", () => {
       },
       { merge: true }
     );
+  });
+
+  it("loads guildShares/{guildId}", async () => {
+    firestoreMocks.getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        world: 37,
+        guildName: "Guild Name",
+        adminAccessKey: "a_admin",
+        guestAccessKey: "g_guest"
+      })
+    });
+
+    await expect(loadPublicGuildShare("12345")).resolves.toEqual({
+      world: 37,
+      guildName: "Guild Name",
+      adminAccessKey: "a_admin",
+      guestAccessKey: "g_guest"
+    });
+    expect(firestoreMocks.doc).toHaveBeenCalledWith("firestore", "guildShares", "12345");
+  });
+
+  it("saves guildShares/{guildId} without ownerUid or guildId fields", async () => {
+    await savePublicGuildShare("12345", {
+      world: 37,
+      guildName: "Guild Name",
+      adminAccessKey: "a_admin",
+      guestAccessKey: "g_guest"
+    });
+
+    expect(firestoreMocks.doc).toHaveBeenCalledWith("firestore", "guildShares", "12345");
+    expect(firestoreMocks.setDoc).toHaveBeenCalledWith(
+      "share-ref",
+      {
+        world: 37,
+        guildName: "Guild Name",
+        adminAccessKey: "a_admin",
+        guestAccessKey: "g_guest",
+        updatedAt: "server-timestamp"
+      },
+      { merge: true }
+    );
+    expect(firestoreMocks.setDoc.mock.calls[0][1]).not.toHaveProperty("ownerUid");
+    expect(firestoreMocks.setDoc.mock.calls[0][1]).not.toHaveProperty("guildId");
   });
 });

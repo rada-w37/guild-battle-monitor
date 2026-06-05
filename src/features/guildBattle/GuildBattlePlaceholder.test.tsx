@@ -14,7 +14,11 @@ import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
 import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY } from "./alertThresholdStorage";
-import { GuildBattlePlaceholder, type OwnedGuildProfilePersistence } from "./GuildBattlePlaceholder";
+import {
+  GuildBattlePlaceholder,
+  type OwnedGuildProfilePersistence,
+  type SharedGuildContext
+} from "./GuildBattlePlaceholder";
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "./viewSettingsStorage";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -767,20 +771,32 @@ describe("GuildBattlePlaceholder", () => {
     expect(guildSelect.value).toBe("");
   });
 
-  it("keeps admin controls editable and uses the URL guild", async () => {
+  it("keeps admin controls editable with the shared guild world fixed", async () => {
     window.localStorage.setItem(
       GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
       JSON.stringify({
-        world: "37",
+        world: "38",
         selectedGuildId: otherGuildId,
         sortByAlert: false,
         autoUpdate: true
       })
     );
-    renderComponent(undefined, undefined, undefined, undefined, <div>notification</div>, `/${ownGuildId}/a_admin`);
-    await loadWorld37();
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      <div>notification</div>,
+      `/${ownGuildId}/a_admin`,
+      undefined,
+      createSharedGuild("admin")
+    );
+    await flushPromises();
+    await flushPromises();
     await clickSettingsButton();
 
+    expect(getWorldInput().value).toBe("37");
+    expect(getWorldInput().disabled).toBe(true);
     expect(getModeButton("Grand Battle").disabled).toBe(false);
     expect(getDangerSortCheckbox().disabled).toBe(false);
     expect(getAutoUpdateButton().disabled).toBe(false);
@@ -788,18 +804,35 @@ describe("GuildBattlePlaceholder", () => {
     expect(getSettingsDialog().querySelector(".notification-settings")).not.toBeNull();
     expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
     expect(getSettingsDialog().querySelector(".share-settings")).toBeNull();
+    expect(getGuildSelect().value).toBe(otherGuildId);
+    expect(getGuildSelect().disabled).toBe(false);
+
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
     expect(getGuildSelect().value).toBe(ownGuildId);
-    expect(getGuildSelect().disabled).toBe(true);
   });
 
   it("keeps guest battle state read-only while allowing personal settings", async () => {
-    renderComponent(undefined, undefined, undefined, undefined, <div>notification</div>, `/${ownGuildId}/g_guest`);
-    await loadWorld37();
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      <div>notification</div>,
+      `/${ownGuildId}/g_guest`,
+      undefined,
+      createSharedGuild("guest")
+    );
+    await flushPromises();
+    await flushPromises();
     await clickSettingsButton();
 
+    expect(getWorldInput().value).toBe("37");
+    expect(getWorldInput().disabled).toBe(true);
     expect(getModeButton("Guild Battle").disabled).toBe(true);
     expect(getModeButton("Grand Battle").disabled).toBe(true);
-    expect(getGuildSelect().disabled).toBe(true);
+    expect(getGuildSelect().disabled).toBe(false);
     expect(getSettingsDialog().querySelector(".alert-settings")).not.toBeNull();
     expect(getThresholdInputs().every((input) => !input.disabled)).toBe(true);
     expect(getDangerSortCheckbox().disabled).toBe(false);
@@ -823,15 +856,11 @@ describe("GuildBattlePlaceholder", () => {
     expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
       '"warningDefenseCount":40'
     );
-  });
 
-  it("shows a missing guild message when the shared URL guild is not in the loaded snapshot", async () => {
-    renderComponent(undefined, undefined, undefined, undefined, undefined, "/missing-guild/g_guest");
-
-    await loadWorld37();
-
-    expect(document.body.textContent).toContain("ギルドが見つかりません");
-    expect(document.querySelector(".castle-list")).toBeNull();
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
+    expect(getStoredViewSettings().selectedGuildId).toBe(ownGuildId);
   });
 
   it("reports the selected owned guild id and name for persistence", async () => {
@@ -864,7 +893,7 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(onChange).toHaveBeenCalledWith({
-      worldId: 37,
+      world: 37,
       guildId: ownGuildId,
       guildName: "Owner Guild"
     });
@@ -898,7 +927,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(loadSnapshot).toHaveBeenCalledWith("1037");
     expect(Array.from(guildSelect.options).map((option) => option.textContent ?? "")).toContain("Owner Guild");
     expect(onChange).toHaveBeenLastCalledWith({
-      worldId: 37,
+      world: 37,
       guildId: null,
       guildName: null
     });
@@ -910,7 +939,7 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(onChange).toHaveBeenCalledWith({
-      worldId: 37,
+      world: 37,
       guildId: ownGuildId,
       guildName: "Owner Guild"
     });
@@ -1135,7 +1164,8 @@ function renderComponent(
   ),
   notificationSettings?: ReactNode,
   pathname: string = "/app",
-  ownedGuildProfilePersistence?: OwnedGuildProfilePersistence
+  ownedGuildProfilePersistence?: OwnedGuildProfilePersistence,
+  sharedGuild?: SharedGuildContext | null
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -1151,10 +1181,20 @@ function renderComponent(
           createRealtimeClient={createRealtimeClient}
           notificationSettings={notificationSettings}
           ownedGuildProfilePersistence={ownedGuildProfilePersistence}
+          sharedGuild={sharedGuild}
         />
       </AppModeProvider>
     );
   });
+}
+
+function createSharedGuild(mode: "admin" | "guest"): SharedGuildContext {
+  return {
+    mode,
+    guildId: ownGuildId,
+    world: 37,
+    guildName: "Owner Guild"
+  };
 }
 
 async function loadWorld37() {

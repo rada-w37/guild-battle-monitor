@@ -1,18 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { useAppRoute } from "../../app/appMode";
+import { useAppRoute, type AppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
 import { createGuildShare, createGuildShareUrl } from "../guildBattle/guildShare";
-import { loadGuildShare, saveGuildShare } from "../guildBattle/guildShareRepository";
+import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
+import {
+  loadGuildShare,
+  loadPublicGuildShare,
+  saveGuildShare,
+  savePublicGuildShare
+} from "../guildBattle/guildShareRepository";
 import {
   GuildBattlePlaceholder,
-  type OwnedGuildProfilePersistence
+  type OwnedGuildProfilePersistence,
+  type SharedGuildContext
 } from "../guildBattle/GuildBattlePlaceholder";
 import {
   loadOwnedGuildProfile,
   saveOwnedGuildProfile
 } from "../guildBattle/ownedGuildProfileRepository";
-import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
+import type { GuildShare, OwnedGuildProfile, PublicGuildShare } from "../guildBattle/types";
 import { loadNotificationDestination, saveNotificationDestination } from "./notificationDestinationRepository";
 
 const DEFAULT_DESTINATION_ID = "default";
@@ -22,16 +29,22 @@ const DEFAULT_SELECTABLE_MENTIONS = ["@here", "@everyone"] as const;
 interface FirebasePhase0AppProps {
   readonly loadOwnedGuildProfile?: typeof loadOwnedGuildProfile;
   readonly loadGuildShare?: typeof loadGuildShare;
+  readonly loadPublicGuildShare?: typeof loadPublicGuildShare;
   readonly saveOwnedGuildProfile?: typeof saveOwnedGuildProfile;
   readonly saveGuildShare?: typeof saveGuildShare;
+  readonly savePublicGuildShare?: typeof savePublicGuildShare;
+  readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly subscribeToAuthState?: typeof subscribeToAuthState;
 }
 
 export function FirebasePhase0App({
   loadOwnedGuildProfile: loadProfile = loadOwnedGuildProfile,
   loadGuildShare: loadShare = loadGuildShare,
+  loadPublicGuildShare: loadPublicShare = loadPublicGuildShare,
   saveOwnedGuildProfile: saveProfile = saveOwnedGuildProfile,
   saveGuildShare: saveShare = saveGuildShare,
+  savePublicGuildShare: savePublicShare = savePublicGuildShare,
+  loadSnapshot = loadLocalGvgSnapshot,
   subscribeToAuthState: subscribeAuthState = subscribeToAuthState
 }: FirebasePhase0AppProps = {}) {
   const appRoute = useAppRoute();
@@ -40,7 +53,7 @@ export function FirebasePhase0App({
   const [authError, setAuthError] = useState<string | null>(null);
   const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
   const ownedGuildProfilePersistence = useOwnedGuildProfilePersistence(
-    notificationSettingsUid,
+    appMode === "owner" ? notificationSettingsUid : null,
     loadProfile,
     saveProfile
   );
@@ -49,6 +62,13 @@ export function FirebasePhase0App({
     ownedGuildProfilePersistence.profile?.guildId ?? null,
     loadShare,
     saveShare
+  );
+  const sharedGuild = useResolvedSharedGuild(appRoute, loadPublicShare);
+
+  usePublicGuildShareCache(
+    appMode === "owner" ? ownedGuildProfilePersistence.profile : null,
+    appMode === "owner" ? guildShare : null,
+    savePublicShare
   );
 
   useEffect(() => subscribeAuthState(setAuthState), [subscribeAuthState]);
@@ -71,20 +91,33 @@ export function FirebasePhase0App({
     }
   }
 
+  if (sharedGuild.status === "loading") {
+    return (
+      <main>
+        <p>Loading</p>
+      </main>
+    );
+  }
+
+  if (sharedGuild.status === "invalid") {
+    return <SharedGuildNotFoundPage />;
+  }
+
   return (
     <GuildBattlePlaceholder
+      loadSnapshot={loadSnapshot}
       headerActions={
         <AuthControl
           authState={authState}
-          mode={appMode}
-          ownedGuildProfile={ownedGuildProfilePersistence.profile}
-          sharedGuildId={appRoute !== null && appRoute.mode !== "owner" ? appRoute.guildId : null}
+          mode={sharedGuild.status === "valid" ? sharedGuild.sharedGuild.mode : appMode}
+          sharedGuild={sharedGuild.status === "valid" ? sharedGuild.sharedGuild : null}
           onSignIn={handleSignIn}
           onSignOut={handleSignOut}
         />
       }
       notificationSettings={<NotificationDestinationPanel uid={notificationSettingsUid} />}
       ownedGuildProfilePersistence={ownedGuildProfilePersistence}
+      sharedGuild={sharedGuild.status === "valid" ? sharedGuild.sharedGuild : null}
       shareSettings={
         <GuildSharePanel
           guildId={ownedGuildProfilePersistence.profile?.guildId ?? null}
@@ -151,6 +184,121 @@ function useGuildShare(
   }, [guildId, loadShare, saveShare, uid]);
 
   return share;
+}
+
+type ResolvedSharedGuildState =
+  | { readonly status: "owner" }
+  | { readonly status: "loading" }
+  | { readonly status: "invalid" }
+  | { readonly status: "valid"; readonly sharedGuild: SharedGuildContext };
+
+function useResolvedSharedGuild(
+  appRoute: AppRoute | null,
+  loadPublicShare: typeof loadPublicGuildShare
+): ResolvedSharedGuildState {
+  const [state, setState] = useState<ResolvedSharedGuildState>({ status: "owner" });
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    if (appRoute === null || appRoute.mode === "owner") {
+      setState({ status: "owner" });
+      return;
+    }
+
+    setState({ status: "loading" });
+    void loadPublicShare(appRoute.guildId)
+      .then((share) => {
+        if (isDisposed) {
+          return;
+        }
+
+        const mode = resolveSharedMode(appRoute.accessKey, share);
+
+        if (share === null || mode === null) {
+          setState({ status: "invalid" });
+          return;
+        }
+
+        setState({
+          status: "valid",
+          sharedGuild: {
+            mode,
+            guildId: appRoute.guildId,
+            world: share.world,
+            guildName: share.guildName
+          }
+        });
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setState({ status: "invalid" });
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [appRoute, loadPublicShare]);
+
+  return state;
+}
+
+function resolveSharedMode(accessKey: string, share: PublicGuildShare | null): "admin" | "guest" | null {
+  if (share === null) {
+    return null;
+  }
+
+  if (accessKey === share.adminAccessKey) {
+    return "admin";
+  }
+
+  if (accessKey === share.guestAccessKey) {
+    return "guest";
+  }
+
+  return null;
+}
+
+function usePublicGuildShareCache(
+  profile: OwnedGuildProfile | null,
+  share: GuildShare | null,
+  savePublicShare: typeof savePublicGuildShare
+) {
+  const savedKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      profile?.world === null ||
+      profile === null ||
+      profile.guildId === null ||
+      profile.guildName === null ||
+      share === null ||
+      share.guildId !== profile.guildId
+    ) {
+      savedKeyRef.current = null;
+      return;
+    }
+
+    const publicShare = {
+      world: profile.world,
+      guildName: profile.guildName,
+      adminAccessKey: share.adminAccessKey,
+      guestAccessKey: share.guestAccessKey
+    };
+    const nextKey = JSON.stringify({ guildId: profile.guildId, ...publicShare });
+
+    if (savedKeyRef.current === nextKey) {
+      return;
+    }
+
+    savedKeyRef.current = nextKey;
+    void savePublicShare(profile.guildId, publicShare).catch(() => {
+      if (savedKeyRef.current === nextKey) {
+        savedKeyRef.current = null;
+      }
+    });
+  }, [profile, savePublicShare, share]);
 }
 
 function GuildSharePanel({
@@ -305,7 +453,7 @@ function useOwnedGuildProfilePersistence(
 function createOwnedGuildProfileKey(profile: OwnedGuildProfile | null): string {
   return JSON.stringify(
     profile ?? {
-      worldId: null,
+      world: null,
       guildId: null,
       guildName: null
     }
@@ -315,23 +463,18 @@ function createOwnedGuildProfileKey(profile: OwnedGuildProfile | null): string {
 function AuthControl({
   authState,
   mode,
-  ownedGuildProfile,
-  sharedGuildId,
+  sharedGuild,
   onSignIn,
   onSignOut
 }: {
   readonly authState: AuthState;
   readonly mode: "owner" | "admin" | "guest";
-  readonly ownedGuildProfile: OwnedGuildProfile | null;
-  readonly sharedGuildId: string | null;
+  readonly sharedGuild: SharedGuildContext | null;
   readonly onSignIn: () => void;
   readonly onSignOut: () => void;
 }) {
   if (mode !== "owner") {
-    const guildName =
-      ownedGuildProfile?.guildId === sharedGuildId && ownedGuildProfile.guildName !== null
-        ? ownedGuildProfile.guildName
-        : "";
+    const guildName = sharedGuild?.guildName ?? "";
 
     return guildName.length > 0 ? <span className="firebase-auth-status">{guildName}</span> : null;
   }
@@ -363,6 +506,14 @@ function AuthControl({
   }
 
   return null;
+}
+
+function SharedGuildNotFoundPage() {
+  return (
+    <main>
+      <h1>ギルドが見つかりません</h1>
+    </main>
+  );
 }
 
 function NotificationDestinationPanel({ uid }: { readonly uid: string | null }) {

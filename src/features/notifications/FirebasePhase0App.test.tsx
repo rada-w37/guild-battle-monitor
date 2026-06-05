@@ -1,10 +1,12 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppModeProvider } from "../../app/appMode";
 import type { AuthState } from "../auth/types";
-import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
+import type { GuildShare, OwnedGuildProfile, PublicGuildShare } from "../guildBattle/types";
+import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
+import type { GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { FirebasePhase0App } from "./FirebasePhase0App";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -47,25 +49,34 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     expect(document.querySelector(".firebase-auth-user")?.textContent).toContain("驥第｣ｮ豬ｩ蟷ｳ");
   });
 
-  it.each(["/saved-guild/a_abc", "/saved-guild/g_abc"])(
-    "shows the saved guild name for shared routes when the guild matches: %s",
+  it.each(["/saved-guild/a_admin", "/saved-guild/g_guest"])(
+    "shows the public guild name for shared routes when the access key matches: %s",
     async (pathname) => {
       const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
+      const loadPublicShare = vi.fn(() => Promise.resolve(createPublicShare()));
 
-      await renderApp(pathname, signedInState, loadProfile, vi.fn());
+      await renderApp(pathname, signedInState, loadProfile, vi.fn(), undefined, undefined, loadPublicShare);
 
-      expect(loadProfile).toHaveBeenCalledWith("owner-uid");
+      expect(loadProfile).not.toHaveBeenCalled();
+      expect(loadPublicShare).toHaveBeenCalledWith("saved-guild");
       expect(document.querySelector(".firebase-auth-status")?.textContent).toBe("Saved Guild");
       expect(document.body.textContent).not.toContain("saved-guild");
     }
   );
 
-  it("leaves the shared route header blank when the saved guild does not match", async () => {
-    await renderApp("/other-guild/a_abc", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+  it("shows an invalid page when the shared access key does not match", async () => {
+    await renderApp(
+      "/saved-guild/a_invalid",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve(createPublicShare()))
+    );
 
-    expect(document.querySelector(".firebase-auth-status")).toBeNull();
+    expect(document.body.textContent).toContain("ギルドが見つかりません");
     expect(document.body.textContent).not.toContain("Saved Guild");
-    expect(document.body.textContent).not.toContain("other-guild");
   });
 
   it("restores the owner profile without saving it again", async () => {
@@ -93,7 +104,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     await changeWorld("38");
     expect(saveProfile).toHaveBeenCalledTimes(1);
     expect(saveProfile).toHaveBeenLastCalledWith("owner-uid", {
-      worldId: 38,
+      world: 38,
       guildId: null,
       guildName: null
     });
@@ -112,21 +123,20 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     await changeGuild("");
 
     expect(saveProfile).toHaveBeenCalledWith("owner-uid", {
-      worldId: 37,
+      world: 37,
       guildId: null,
       guildName: null
     });
   });
 
-  it.each(["/123/a_abc", "/123/g_abc"])("loads a profile for the shared header without saving it: %s", async (pathname) => {
+  it.each(["/123/a_admin", "/123/g_guest"])("does not load or save owner profile outside owner mode: %s", async (pathname) => {
     const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
     const saveProfile = vi.fn(() => Promise.resolve());
 
     await renderApp(pathname, signedInState, loadProfile, saveProfile);
-    await openSettings();
 
     expect(document.querySelector(".owned-guild-settings")).toBeNull();
-    expect(loadProfile).toHaveBeenCalledWith("owner-uid");
+    expect(loadProfile).not.toHaveBeenCalled();
     expect(saveProfile).not.toHaveBeenCalled();
   });
 
@@ -148,8 +158,18 @@ describe("FirebasePhase0App guild share settings", () => {
   it("shows owner share settings collapsed and generates URLs after guild setup", async () => {
     const loadShare = vi.fn(() => Promise.resolve(null));
     const saveShare = createSaveShareMock();
+    const savePublicShare = createSavePublicShareMock();
 
-    await renderApp("/app", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn(), loadShare, saveShare);
+    await renderApp(
+      "/app",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      loadShare,
+      saveShare,
+      undefined,
+      savePublicShare
+    );
     await openSettings();
 
     const settings = getShareSettings();
@@ -165,6 +185,14 @@ describe("FirebasePhase0App guild share settings", () => {
       `${window.location.origin}/saved-guild/${savedShare.adminAccessKey}`,
       `${window.location.origin}/saved-guild/${savedShare.guestAccessKey}`
     ]);
+    expect(savePublicShare).toHaveBeenCalledWith("saved-guild", {
+      world: 37,
+      guildName: "Saved Guild",
+      adminAccessKey: savedShare.adminAccessKey,
+      guestAccessKey: savedShare.guestAccessKey
+    });
+    expect(savePublicShare.mock.calls[0][1]).not.toHaveProperty("ownerUid");
+    expect(savePublicShare.mock.calls[0][1]).not.toHaveProperty("guildId");
   });
 
   it("regenerates access keys when the saved share belongs to another guild", async () => {
@@ -227,7 +255,8 @@ describe("FirebasePhase0App guild share settings", () => {
     await renderApp(
       "/app",
       signedInState,
-      vi.fn(() => Promise.resolve({ worldId: 37, guildId: null, guildName: null })),
+      vi.fn(() => Promise.resolve({ world: 37,
+      guildId: null, guildName: null })),
       vi.fn(),
       loadShare,
       saveShare
@@ -241,9 +270,8 @@ describe("FirebasePhase0App guild share settings", () => {
     expect(getShareUrlInputs()).toHaveLength(0);
   });
 
-  it.each(["/123/a_abc", "/123/g_abc"])("hides share settings outside owner mode: %s", async (pathname) => {
+  it.each(["/123/a_admin", "/123/g_guest"])("hides share settings outside owner mode: %s", async (pathname) => {
     await renderApp(pathname, signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
-    await openSettings();
 
     expect(document.querySelector(".share-settings")).toBeNull();
   });
@@ -255,7 +283,10 @@ async function renderApp(
   loadProfile: (uid: string) => Promise<OwnedGuildProfile | null>,
   saveProfile: (uid: string, profile: OwnedGuildProfile) => Promise<void>,
   loadShare: (uid: string) => Promise<GuildShare | null> = vi.fn(() => Promise.resolve(null)),
-  saveShare: (uid: string, share: GuildShare) => Promise<void> = vi.fn(() => Promise.resolve())
+  saveShare: (uid: string, share: GuildShare) => Promise<void> = vi.fn(() => Promise.resolve()),
+  loadPublicShare: (guildId: string) => Promise<PublicGuildShare | null> = vi.fn(() => Promise.resolve(createPublicShare())),
+  savePublicShare: (guildId: string, share: PublicGuildShare) => Promise<void> = vi.fn(() => Promise.resolve()),
+  loadSnapshot: typeof loadLocalGvgSnapshot = vi.fn(() => Promise.resolve(createGvgSnapshot()))
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -267,8 +298,11 @@ async function renderApp(
         <FirebasePhase0App
           loadGuildShare={loadShare}
           loadOwnedGuildProfile={loadProfile}
+          loadPublicGuildShare={loadPublicShare}
+          loadSnapshot={loadSnapshot}
           saveGuildShare={saveShare}
           saveOwnedGuildProfile={saveProfile}
+          savePublicGuildShare={savePublicShare}
           subscribeToAuthState={(onStateChanged) => {
             onStateChanged(authState);
             return () => {};
@@ -366,7 +400,7 @@ async function openDetails(details: HTMLDetailsElement) {
 
 function createProfile(): OwnedGuildProfile {
   return {
-    worldId: 37,
+    world: 37,
     guildId: "saved-guild",
     guildName: "Saved Guild"
   };
@@ -382,6 +416,28 @@ function createShare(guildId: string): GuildShare {
 
 function createSaveShareMock() {
   return vi.fn<(uid: string, share: GuildShare) => Promise<void>>(() => Promise.resolve());
+}
+
+function createPublicShare(): PublicGuildShare {
+  return {
+    world: 37,
+    guildName: "Saved Guild",
+    adminAccessKey: "a_admin",
+    guestAccessKey: "g_guest"
+  };
+}
+
+function createGvgSnapshot(): GvgSnapshot {
+  return {
+    worldId: "1037" as GvgWorldId,
+    capturedAt: "2026-05-27T11:15:36.000Z",
+    guildNames: {},
+    castles: []
+  };
+}
+
+function createSavePublicShareMock() {
+  return vi.fn<(guildId: string, share: PublicGuildShare) => Promise<void>>(() => Promise.resolve());
 }
 
 async function flushPromises() {

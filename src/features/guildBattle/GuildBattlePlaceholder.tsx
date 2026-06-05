@@ -97,7 +97,15 @@ interface GuildBattlePlaceholderProps {
   readonly headerActions?: ReactNode;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
+  readonly sharedGuild?: SharedGuildContext | null;
   readonly shareSettings?: ReactNode;
+}
+
+export interface SharedGuildContext {
+  readonly mode: "admin" | "guest";
+  readonly guildId: string;
+  readonly world: number;
+  readonly guildName: string;
 }
 
 export interface OwnedGuildProfilePersistence {
@@ -122,14 +130,23 @@ export function GuildBattlePlaceholder({
   headerActions,
   notificationSettings,
   ownedGuildProfilePersistence,
+  sharedGuild,
   shareSettings
 }: GuildBattlePlaceholderProps) {
   const appRoute = useAppRoute();
-  const modePermissions = getAppModePermissions(appRoute?.mode ?? "owner");
-  const sharedGuildId = appRoute !== null && appRoute.mode !== "owner" ? appRoute.guildId : null;
+  const appMode = sharedGuild?.mode ?? appRoute?.mode ?? "owner";
+  const modePermissions = getAppModePermissions(appMode);
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
-  const [shared, setShared] = useState<BattleMonitorSharedState>(initialViewSettings.shared);
+  const [shared, setShared] = useState<BattleMonitorSharedState>(() =>
+    sharedGuild === undefined || sharedGuild === null
+      ? initialViewSettings.shared
+      : {
+          ...initialViewSettings.shared,
+          worldInput: String(sharedGuild.world),
+          worldNumber: sharedGuild.world
+        }
+  );
   const [grandBattleDraftSource, setGrandBattleDraftSource] = useState<GrandBattleSource>(() =>
     createInitialGrandBattleSource(initialViewSettings.shared)
   );
@@ -150,7 +167,7 @@ export function GuildBattlePlaceholder({
     status: "idle"
   });
   const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
-  const [selectedGuildId, setSelectedGuildId] = useState(sharedGuildId ?? initialViewSettings.guildBattle.selectedGuildId);
+  const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
   const [selectedOwnedGuildId, setSelectedOwnedGuildId] = useState<GvgGuildId | "">("");
   const [selectedOwnedGuildName, setSelectedOwnedGuildName] = useState<string | null>(null);
@@ -210,10 +227,26 @@ export function GuildBattlePlaceholder({
     }
 
     const profile = ownedGuildProfilePersistence.profile;
-    setSelectedOwnedGuildWorldId(profile?.worldId === null || profile === null ? "" : String(profile.worldId));
+    setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
     setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
     setSelectedOwnedGuildName(profile?.guildName ?? null);
   }, [ownedGuildProfilePersistence?.isLoading, ownedGuildProfilePersistence?.profile]);
+
+  useEffect(() => {
+    if (sharedGuild === undefined || sharedGuild === null) {
+      return;
+    }
+
+    const nextShared = {
+      ...shared,
+      worldInput: String(sharedGuild.world),
+      worldNumber: sharedGuild.world
+    };
+    setShared(nextShared);
+    void loadSnapshotForWorldId(createWorldIdFromWorldNumber(sharedGuild.world) as GvgWorldId, {
+      startRealtimeOnSuccess: false
+    });
+  }, [sharedGuild]);
 
   async function loadSnapshotForWorldId(
     nextWorldId: GvgWorldId,
@@ -381,6 +414,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleWorldChange(nextWorld: string) {
+    if (sharedGuild !== undefined && sharedGuild !== null) {
+      return;
+    }
+
     const nextShared = {
       ...shared,
       worldInput: nextWorld,
@@ -598,7 +635,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGuildChange(nextGuildId: string) {
-    if (!modePermissions.canEditBattleState || sharedGuildId !== null) {
+    if (!modePermissions.canEditViewSettings) {
       return;
     }
 
@@ -612,7 +649,7 @@ export function GuildBattlePlaceholder({
     setSelectedOwnedGuildId("");
     setSelectedOwnedGuildName(null);
     ownedGuildProfilePersistence?.onChange({
-      worldId: nextWorldNumber,
+      world: nextWorldNumber,
       guildId: null,
       guildName: null
     });
@@ -636,7 +673,7 @@ export function GuildBattlePlaceholder({
     setSelectedOwnedGuildId(nextGuildId);
     setSelectedOwnedGuildName(nextGuildName);
     ownedGuildProfilePersistence?.onChange({
-      worldId: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
+      world: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
       guildId: nextGuildId || null,
       guildName: nextGuildName
     });
@@ -829,7 +866,7 @@ export function GuildBattlePlaceholder({
               type="text"
               value={world}
               onChange={(event) => handleWorldChange(event.target.value)}
-              disabled={isLoading}
+              disabled={isLoading || (sharedGuild !== undefined && sharedGuild !== null)}
               inputMode="numeric"
             />
           </label>
@@ -840,7 +877,7 @@ export function GuildBattlePlaceholder({
 
         <SnapshotStatus
           alertThresholds={alertThresholds}
-          canEdit={modePermissions.canEditBattleState}
+          canEdit={modePermissions.canEditViewSettings}
           castleSortMode={castleSortMode}
           guildCandidates={guildCandidates}
           guildSelectValue={guildSelectValue}
@@ -848,8 +885,7 @@ export function GuildBattlePlaceholder({
           isTestModeEnabled={modePermissions.canEditBattleState && IS_DEV && isTestModeEnabled}
           loadState={loadState}
           realtimeState={realtimeState}
-          selectedGuildId={sharedGuildId ?? guildSelectValue}
-          sharedGuildId={sharedGuildId}
+          selectedGuildId={guildSelectValue}
           showDevDetails={IS_DEV}
           onGuildChange={handleGuildChange}
           onOpenSettings={() => setIsSettingsDialogOpen(true)}
@@ -1581,7 +1617,6 @@ function SnapshotStatus({
   loadState,
   realtimeState,
   selectedGuildId,
-  sharedGuildId,
   showDevDetails,
   onGuildChange,
   onOpenSettings,
@@ -1599,7 +1634,6 @@ function SnapshotStatus({
   readonly loadState: AsyncLoadState<GvgSnapshot>;
   readonly realtimeState: GvgRealtimeConnectionState;
   readonly selectedGuildId: string;
-  readonly sharedGuildId: string | null;
   readonly showDevDetails: boolean;
   readonly onGuildChange: (guildId: string) => void;
   readonly onOpenSettings: () => void;
@@ -1638,7 +1672,6 @@ function SnapshotStatus({
       isTestModeEnabled={isTestModeEnabled}
       realtimeState={realtimeState}
       selectedGuildId={selectedGuildId}
-      sharedGuildId={sharedGuildId}
       showDevDetails={showDevDetails}
       snapshot={loadState.data}
       onGuildChange={onGuildChange}
@@ -1660,7 +1693,6 @@ function SnapshotSummary({
   isTestModeEnabled,
   realtimeState,
   selectedGuildId,
-  sharedGuildId,
   showDevDetails,
   snapshot,
   onGuildChange,
@@ -1678,7 +1710,6 @@ function SnapshotSummary({
   readonly isTestModeEnabled: boolean;
   readonly realtimeState: GvgRealtimeConnectionState;
   readonly selectedGuildId: string;
-  readonly sharedGuildId: string | null;
   readonly showDevDetails: boolean;
   readonly snapshot: GvgSnapshot;
   readonly onGuildChange: (guildId: string) => void;
@@ -1701,8 +1732,6 @@ function SnapshotSummary({
   );
   const shouldShowDevDetails = IS_DEV && showDevDetails;
   const shouldShowTestControls = IS_DEV && isTestModeEnabled;
-  const isSharedGuildMissing =
-    sharedGuildId !== null && !guildCandidates.some((candidate) => candidate.guildId === sharedGuildId);
 
   return (
     <section className="snapshot-summary" aria-labelledby="snapshot-title">
@@ -1716,29 +1745,23 @@ function SnapshotSummary({
           onClick={onOpenSettings}
         />
       </div>
-      {isSharedGuildMissing ? (
-        <p className="status-message status-message--error">ギルドが見つかりません</p>
-      ) : (
-        <>
-          <BattleMonitorGuildSelect
-            candidates={guildCandidates}
-            disabled={!canEdit || sharedGuildId !== null}
-            value={guildSelectValue}
-            onChange={onGuildChange}
-          />
-          {shouldShowDevDetails ? <DevSnapshotDetails snapshot={snapshot} /> : null}
-          <BattleMonitorCastleList
-            capturedAt={snapshot.capturedAt}
-            isTestModeEnabled={shouldShowTestControls}
-            showOwnerGuild={castleDisplay.mode === "allCastles"}
-            showDevDetails={shouldShowDevDetails}
-            viewModels={sortedCastles}
-            onTestModeDefenseIncrease={onTestModeDefenseIncrease}
-            onTestModeAttackIncrease={onTestModeAttackIncrease}
-            onTestModeRevive={onTestModeRevive}
-          />
-        </>
-      )}
+      <BattleMonitorGuildSelect
+        candidates={guildCandidates}
+        disabled={!canEdit}
+        value={guildSelectValue}
+        onChange={onGuildChange}
+      />
+      {shouldShowDevDetails ? <DevSnapshotDetails snapshot={snapshot} /> : null}
+      <BattleMonitorCastleList
+        capturedAt={snapshot.capturedAt}
+        isTestModeEnabled={shouldShowTestControls}
+        showOwnerGuild={castleDisplay.mode === "allCastles"}
+        showDevDetails={shouldShowDevDetails}
+        viewModels={sortedCastles}
+        onTestModeDefenseIncrease={onTestModeDefenseIncrease}
+        onTestModeAttackIncrease={onTestModeAttackIncrease}
+        onTestModeRevive={onTestModeRevive}
+      />
     </section>
   );
 }

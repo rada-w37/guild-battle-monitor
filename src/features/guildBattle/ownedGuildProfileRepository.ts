@@ -34,8 +34,10 @@ async function requireFirestore(): Promise<import("firebase/firestore").Firestor
 }
 
 function createOwnedGuildProfile(data: import("firebase/firestore").DocumentData): OwnedGuildProfile {
+  const world = typeof data.world === "number" ? data.world : data.worldId;
+
   return {
-    worldId: typeof data.worldId === "number" && Number.isInteger(data.worldId) ? data.worldId : null,
+    world: typeof world === "number" && Number.isInteger(world) ? world : null,
     guildId: typeof data.guildId === "string" ? data.guildId : null,
     guildName: typeof data.guildName === "string" ? data.guildName : null
   };

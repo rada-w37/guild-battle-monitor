@@ -80,13 +80,20 @@ export interface GuildBattleGuildCandidateViewModel {
 }
 
 export interface OwnedGuildProfile {
-  readonly worldId: number | null;
+  readonly world: number | null;
   readonly guildId: string | null;
   readonly guildName: string | null;
 }
 
 export interface GuildShare {
   readonly guildId: string;
+  readonly adminAccessKey: string;
+  readonly guestAccessKey: string;
+}
+
+export interface PublicGuildShare {
+  readonly world: number;
+  readonly guildName: string;
   readonly adminAccessKey: string;
   readonly guestAccessKey: string;
 }
