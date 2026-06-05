@@ -843,24 +843,26 @@ describe("GuildBattlePlaceholder", () => {
     expect(getSettingsDialog().querySelector(".test-mode-settings")).toBeNull();
 
     await clickDangerSortCheckbox();
-    expect(getStoredViewSettings().sortByAlert).toBe(true);
+    expect(getDangerSortCheckbox().checked).toBe(true);
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
 
     const initialAutoUpdate = getAutoUpdateButton().textContent === "ON";
     await clickAutoUpdateButton();
-    expect(getStoredViewSettings().autoUpdate).toBe(!initialAutoUpdate);
+    expect(getAutoUpdateButton().textContent === "ON").toBe(!initialAutoUpdate);
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
 
     act(() => {
       updateInput(getThresholdInputs()[0], "40");
     });
     await commitThresholdInputWithKey(0, "Enter");
-    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
-      '"warningDefenseCount":40'
-    );
+    expect(getThresholdInputs()[0].value).toBe("40");
+    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toBeNull();
 
     await act(async () => {
       updateSelect(getGuildSelect(), ownGuildId);
     });
-    expect(getStoredViewSettings().selectedGuildId).toBe(ownGuildId);
+    expect(getGuildSelect().value).toBe(ownGuildId);
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
   });
 
   it("reports the selected owned guild id and name for persistence", async () => {
@@ -871,7 +873,7 @@ describe("GuildBattlePlaceholder", () => {
       profile: null,
       onChange
     } satisfies OwnedGuildProfilePersistence;
-    renderComponent(undefined, undefined, undefined, undefined, undefined, "/app", persistence);
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/", persistence);
     await loadWorld37();
     await clickSettingsButton();
 
@@ -908,7 +910,7 @@ describe("GuildBattlePlaceholder", () => {
       profile: null,
       onChange
     } satisfies OwnedGuildProfilePersistence;
-    renderComponent(loadSnapshot, undefined, undefined, undefined, undefined, "/app", persistence);
+    renderComponent(loadSnapshot, undefined, undefined, undefined, undefined, "/", persistence);
     await clickSettingsButton();
 
     const ownedGuildSettings = getOwnedGuildSettings();
@@ -1163,7 +1165,7 @@ function renderComponent(
     Promise.resolve(grandBattleSnapshot)
   ),
   notificationSettings?: ReactNode,
-  pathname: string = "/app",
+  pathname: string = "/",
   ownedGuildProfilePersistence?: OwnedGuildProfilePersistence,
   sharedGuild?: SharedGuildContext | null
 ) {

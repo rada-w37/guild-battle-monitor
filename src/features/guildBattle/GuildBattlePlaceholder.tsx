@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { getAppModePermissions, useAppRoute, type AppMode } from "../../app/appMode";
+import { getAppModePermissions, useAppRoute, type AppMode, type AppModePermissions } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
 import {
@@ -98,6 +98,7 @@ interface GuildBattlePlaceholderProps {
   readonly modeOverride?: AppMode;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
+  readonly permissionsOverride?: Partial<AppModePermissions>;
   readonly sharedGuild?: SharedGuildContext | null;
   readonly shareSettings?: ReactNode;
 }
@@ -133,12 +134,13 @@ export function GuildBattlePlaceholder({
   modeOverride,
   notificationSettings,
   ownedGuildProfilePersistence,
+  permissionsOverride,
   sharedGuild,
   shareSettings
 }: GuildBattlePlaceholderProps) {
   const appRoute = useAppRoute();
   const appMode = modeOverride ?? sharedGuild?.mode ?? appRoute?.mode ?? "owner";
-  const modePermissions = getAppModePermissions(appMode);
+  const modePermissions = { ...getAppModePermissions(appMode), ...permissionsOverride };
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
   const [shared, setShared] = useState<BattleMonitorSharedState>(() =>
@@ -401,7 +403,9 @@ export function GuildBattlePlaceholder({
 
     setAlertThresholdError(null);
     setEditableAlertThresholds(validation.thresholds);
-    saveGuildBattleAlertThresholds(validation.thresholds);
+    if (modePermissions.canPersistViewSettings) {
+      saveGuildBattleAlertThresholds(validation.thresholds);
+    }
     return true;
   }
 
@@ -413,10 +417,16 @@ export function GuildBattlePlaceholder({
     const defaultThresholds = getDefaultEditableGuildBattleAlertThresholds();
     setAlertThresholdError(null);
     setEditableAlertThresholds(defaultThresholds);
-    saveGuildBattleAlertThresholds(defaultThresholds);
+    if (modePermissions.canPersistViewSettings) {
+      saveGuildBattleAlertThresholds(defaultThresholds);
+    }
   }
 
   function handleWorldChange(nextWorld: string) {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     if (sharedGuild !== undefined && sharedGuild !== null) {
       return;
     }
@@ -431,6 +441,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGrandBattleWorldInputChange(nextWorld: string) {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     setGrandBattleDraftSource((currentSource) => ({
       ...currentSource,
       worldInput: nextWorld,
@@ -439,6 +453,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGrandBattleWorldCommit() {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     const nextWorldNumber = createWorldNumberFromWorldInput(grandBattleDraftSource.worldInput);
     const nextDraftSource = {
       ...grandBattleDraftSource,
@@ -699,6 +717,10 @@ export function GuildBattlePlaceholder({
     readonly shared?: BattleMonitorSharedState;
     readonly selectedGuildId?: string;
   }) {
+    if (!modePermissions.canPersistViewSettings) {
+      return;
+    }
+
     saveBattleMonitorViewSettings({
       shared: settings.shared ?? shared,
       guildBattle: {
@@ -823,9 +845,9 @@ export function GuildBattlePlaceholder({
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
-            notificationSettings={modePermissions.showNotificationSettings ? notificationSettings : undefined}
+            notificationSettings={modePermissions.canManageNotifications ? notificationSettings : undefined}
             ownedGuildSettings={
-              modePermissions.showOwnedGuildSettings ? (
+              modePermissions.canManageGuildProfile ? (
                 <OwnedGuildSettings
                   guildCandidates={guildCandidates}
                   error={ownedGuildProfilePersistence?.error ?? null}
@@ -841,7 +863,7 @@ export function GuildBattlePlaceholder({
                 />
               ) : undefined
             }
-            shareSettings={modePermissions.showShareSettings ? shareSettings : undefined}
+            shareSettings={modePermissions.canManageShareUrls ? shareSettings : undefined}
             showAlertSettings={modePermissions.showAlertSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}

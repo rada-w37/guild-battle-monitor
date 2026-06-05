@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAppRoute, type AppRoute } from "../../app/appMode";
+import { useAppRoute, type AppModePermissions, type AppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
 import { createGuildShare, createGuildShareUrl } from "../guildBattle/guildShare";
@@ -67,6 +67,20 @@ export function FirebasePhase0App({
   const [authState, setAuthState] = useState<AuthState>({ status: "loading" });
   const [authError, setAuthError] = useState<string | null>(null);
   const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
+  const isSignedInOwner = appMode === "owner" && authState.status === "signed-in";
+  const permissionsOverride: Partial<AppModePermissions> | undefined =
+    appMode === "owner" && !isSignedInOwner
+      ? {
+          canEditBattleState: false,
+          canPersistViewSettings: false,
+          canManageNotifications: false,
+          canManageGuildProfile: false,
+          canManageShareUrls: false,
+          showNotificationSettings: false,
+          showOwnedGuildSettings: false,
+          showShareSettings: false
+        }
+      : undefined;
   const ownedGuildProfilePersistence = useOwnedGuildProfilePersistence(
     appMode === "owner" ? notificationSettingsUid : null,
     loadProfile,
@@ -122,6 +136,7 @@ export function FirebasePhase0App({
     <GuildBattlePlaceholder
       loadSnapshot={loadSnapshot}
       modeOverride={sharedGuild.status === "fallback" ? "guest" : undefined}
+      permissionsOverride={permissionsOverride}
       headerActions={
         <AuthControl
           authState={authState}
@@ -548,7 +563,6 @@ function AuthControl({
   if (authState.status === "signed-out") {
     return (
       <div className="firebase-auth-user">
-        <span>Owner</span>
         <button className="firebase-auth-button" type="button" onClick={onSignIn}>ログイン</button>
       </div>
     );
@@ -564,11 +578,11 @@ function AuthControl({
   }
 
   if (authState.status === "loading") {
-    return <span className="firebase-auth-status">認証確認中</span>;
+    return null;
   }
 
   if (authState.status === "error") {
-    return <span className="firebase-auth-status">認証エラー</span>;
+    return null;
   }
 
   return null;

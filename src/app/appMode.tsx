@@ -5,7 +5,11 @@ export type AppMode = "owner" | "admin" | "guest";
 export interface AppModePermissions {
   readonly canEditBattleState: boolean;
   readonly canEditViewSettings: boolean;
+  readonly canPersistViewSettings: boolean;
   readonly canEditAlertSettings: boolean;
+  readonly canManageNotifications: boolean;
+  readonly canManageGuildProfile: boolean;
+  readonly canManageShareUrls: boolean;
   readonly showAlertSettings: boolean;
   readonly showNotificationSettings: boolean;
   readonly showOwnedGuildSettings: boolean;
@@ -24,15 +28,22 @@ export function resolveAppMode(pathname: string): AppMode | null {
 
 export function getAppModePermissions(mode: AppMode): AppModePermissions {
   const canEditBattleState = mode !== "guest";
+  const canManageNotifications = mode !== "guest";
+  const canManageGuildProfile = mode === "owner";
+  const canManageShareUrls = mode === "owner";
 
   return {
     canEditBattleState,
     canEditViewSettings: true,
+    canPersistViewSettings: mode === "owner",
     canEditAlertSettings: true,
+    canManageNotifications,
+    canManageGuildProfile,
+    canManageShareUrls,
     showAlertSettings: true,
-    showNotificationSettings: mode !== "guest",
-    showOwnedGuildSettings: mode === "owner",
-    showShareSettings: mode === "owner"
+    showNotificationSettings: canManageNotifications,
+    showOwnedGuildSettings: canManageGuildProfile,
+    showShareSettings: canManageShareUrls
   };
 }
 

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppModeProvider } from "../../app/appMode";
 import type { AuthState } from "../auth/types";
 import type { GuildShare, OwnedGuildProfile, PublicGuildShare } from "../guildBattle/types";
+import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSettingsStorage";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { FirebasePhase0App } from "./FirebasePhase0App";
@@ -26,6 +27,7 @@ let root: Root | null = null;
 
 afterEach(() => {
   act(() => root?.unmount());
+  window.localStorage.clear();
   container?.remove();
   container = null;
   root = null;
@@ -34,7 +36,7 @@ afterEach(() => {
 describe("FirebasePhase0App owned guild profile persistence", () => {
   it("shows the signed-in owner display name in the header", async () => {
     await renderApp(
-      "/app",
+      "/",
       {
         status: "signed-in",
         user: {
@@ -132,7 +134,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     const loadProfile = vi.fn(() => Promise.resolve(profile));
     const saveProfile = vi.fn(() => Promise.resolve());
 
-    await renderApp("/app", signedInState, loadProfile, saveProfile);
+    await renderApp("/", signedInState, loadProfile, saveProfile);
     await openOwnedGuildSettings();
 
     expect(loadProfile).toHaveBeenCalledWith("owner-uid");
@@ -146,7 +148,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
     const saveProfile = vi.fn(() => Promise.resolve());
 
-    await renderApp("/app", signedInState, loadProfile, saveProfile);
+    await renderApp("/", signedInState, loadProfile, saveProfile);
     await openOwnedGuildSettings();
 
     await changeWorld("38");
@@ -166,7 +168,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
     const saveProfile = vi.fn(() => Promise.resolve());
 
-    await renderApp("/app", signedInState, loadProfile, saveProfile);
+    await renderApp("/", signedInState, loadProfile, saveProfile);
     await openOwnedGuildSettings();
     await changeGuild("");
 
@@ -183,7 +185,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
 
     try {
       await renderApp(
-        "/app",
+        "/",
         signedInState,
         vi.fn(() => Promise.resolve(null)),
         saveProfile,
@@ -226,13 +228,19 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
     const saveProfile = vi.fn(() => Promise.resolve());
 
-    await renderApp("/app", { status: "signed-out" }, loadProfile, saveProfile);
-    await openOwnedGuildSettings();
-    await changeWorld("37");
+    await renderApp("/", { status: "signed-out" }, loadProfile, saveProfile);
+    await openSettings();
 
+    expect(document.querySelector(".notification-settings")).toBeNull();
+    expect(document.querySelector(".owned-guild-settings")).toBeNull();
+    expect(document.querySelector(".share-settings")).toBeNull();
     expect(loadProfile).not.toHaveBeenCalled();
     expect(saveProfile).not.toHaveBeenCalled();
-    expect(document.querySelector(".owned-guild-settings")).not.toBeNull();
+
+    await loadMonitorWorld("37");
+    expect(document.querySelector<HTMLInputElement>(".field__input--world")?.value).toBe("37");
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+    expect(saveProfile).not.toHaveBeenCalled();
   });
 });
 
@@ -243,7 +251,7 @@ describe("FirebasePhase0App guild share settings", () => {
     const savePublicShare = createSavePublicShareMock();
 
     await renderApp(
-      "/app",
+      "/",
       signedInState,
       vi.fn(() => Promise.resolve(createProfile())),
       vi.fn(),
@@ -282,7 +290,7 @@ describe("FirebasePhase0App guild share settings", () => {
     const saveShare = createSaveShareMock();
 
     await renderApp(
-      "/app",
+      "/",
       signedInState,
       vi.fn(() => Promise.resolve(createProfile())),
       vi.fn(),
@@ -304,7 +312,7 @@ describe("FirebasePhase0App guild share settings", () => {
 
     try {
       await renderApp(
-        "/app",
+        "/",
         signedInState,
         vi.fn(() => Promise.resolve(createProfile())),
         vi.fn(),
@@ -332,7 +340,7 @@ describe("FirebasePhase0App guild share settings", () => {
 
     try {
       await renderApp(
-        "/app",
+        "/",
         signedInState,
         vi.fn(() => Promise.resolve(createProfile())),
         vi.fn(),
@@ -366,7 +374,7 @@ describe("FirebasePhase0App guild share settings", () => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 
     await renderApp(
-      "/app",
+      "/",
       signedInState,
       vi.fn(() => Promise.resolve(createProfile())),
       vi.fn(),
@@ -398,7 +406,7 @@ describe("FirebasePhase0App guild share settings", () => {
     const saveShare = createSaveShareMock();
 
     await renderApp(
-      "/app",
+      "/",
       signedInState,
       vi.fn(() => Promise.resolve({ world: 37,
       guildId: null, guildName: null })),
