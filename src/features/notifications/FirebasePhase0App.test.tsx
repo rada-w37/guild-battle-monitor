@@ -61,7 +61,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
 
       expect(loadProfile).not.toHaveBeenCalled();
       expect(loadPublicShare).toHaveBeenCalledWith("saved-guild");
-      expect(document.querySelector(".firebase-auth-status")?.textContent).toBe("Saved Guild");
+      expect(document.querySelector(".firebase-auth-status")?.textContent).toBe("W37 : Saved Guild");
       expect(document.body.textContent).not.toContain("saved-guild");
     }
   );

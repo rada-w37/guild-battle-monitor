@@ -555,9 +555,11 @@ function AuthControl({
   readonly onSignOut: () => void;
 }) {
   if (mode !== "owner") {
-    const guildName = sharedGuild?.guildName ?? "";
+    if (sharedGuild === null || sharedGuild.guildName.length === 0 || !Number.isFinite(sharedGuild.world)) {
+      return null;
+    }
 
-    return guildName.length > 0 ? <span className="firebase-auth-status">{guildName}</span> : null;
+    return <span className="firebase-auth-status">{`W${sharedGuild.world} : ${sharedGuild.guildName}`}</span>;
   }
 
   if (authState.status === "signed-out") {

@@ -795,8 +795,7 @@ describe("GuildBattlePlaceholder", () => {
     await flushPromises();
     await clickSettingsButton();
 
-    expect(getWorldInput().value).toBe("37");
-    expect(getWorldInput().disabled).toBe(true);
+    expect(document.querySelector(".startup-panel")).toBeNull();
     expect(getModeButton("Grand Battle").disabled).toBe(false);
     expect(getDangerSortCheckbox().disabled).toBe(false);
     expect(getAutoUpdateButton().disabled).toBe(false);
@@ -828,8 +827,7 @@ describe("GuildBattlePlaceholder", () => {
     await flushPromises();
     await clickSettingsButton();
 
-    expect(getWorldInput().value).toBe("37");
-    expect(getWorldInput().disabled).toBe(true);
+    expect(document.querySelector(".startup-panel")).toBeNull();
     expect(getModeButton("Guild Battle").disabled).toBe(true);
     expect(getModeButton("Grand Battle").disabled).toBe(true);
     expect(getGuildSelect().disabled).toBe(false);

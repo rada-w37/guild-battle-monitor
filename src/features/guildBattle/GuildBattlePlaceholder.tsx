@@ -906,29 +906,31 @@ export function GuildBattlePlaceholder({
 
         {activeMode === "guildBattle" ? (
           <>
-        <form
-          className="startup-panel"
-          aria-label="起動"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleRefresh();
-          }}
-        >
-          <label className="field">
-            <span className="field__label">world</span>
-            <input
-              className="field__input field__input--world"
-              type="text"
-              value={world}
-              onChange={(event) => handleWorldChange(event.target.value)}
-              disabled={isLoading || (sharedGuild !== undefined && sharedGuild !== null)}
-              inputMode="numeric"
-            />
-          </label>
-          <button className="load-form__button" type="submit" disabled={isLoading || world.trim().length === 0}>
-            更新
-          </button>
-        </form>
+        {sharedGuild === undefined || sharedGuild === null ? (
+          <form
+            className="startup-panel"
+            aria-label="起動"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleRefresh();
+            }}
+          >
+            <label className="field">
+              <span className="field__label">world</span>
+              <input
+                className="field__input field__input--world"
+                type="text"
+                value={world}
+                onChange={(event) => handleWorldChange(event.target.value)}
+                disabled={isLoading}
+                inputMode="numeric"
+              />
+            </label>
+            <button className="load-form__button" type="submit" disabled={isLoading || world.trim().length === 0}>
+              更新
+            </button>
+          </form>
+        ) : null}
 
         <SnapshotStatus
           alertThresholds={alertThresholds}
