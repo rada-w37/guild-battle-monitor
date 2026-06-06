@@ -917,21 +917,19 @@ export function GuildBattlePlaceholder({
             settingsDraftExternal={combinedSettingsDraftExternal}
             notificationSettings={modePermissions.canManageNotifications ? notificationSettings : undefined}
             ownedGuildSettings={
-              modePermissions.canManageGuildProfile ? (
+              modePermissions.canManageGuildProfile && ownedGuildProfilePersistence !== undefined ? (
                 <OwnedGuildSettings
                   guildCandidates={ownedGuildCandidates}
-                  error={ownedGuildWorldError ?? ownedGuildProfilePersistence?.error ?? null}
+                  error={ownedGuildWorldError ?? ownedGuildProfilePersistence.error ?? null}
                   isLoading={
-                    (ownedGuildProfilePersistence?.isLoading ?? false) ||
+                    ownedGuildProfilePersistence.isLoading ||
                     ownedGuildCandidateLoadState.status === "loading"
                   }
                   selectedGuildId={selectedOwnedGuildId}
                   selectedGuildName={selectedOwnedGuildName}
                   selectedWorldId={selectedOwnedGuildWorldId}
                   shareSettings={modePermissions.canManageShareUrls ? shareSettings : undefined}
-                  showSignInMessage={
-                    ownedGuildProfilePersistence !== undefined && !ownedGuildProfilePersistence.isSignedIn
-                  }
+                  showSignInMessage={!ownedGuildProfilePersistence.isSignedIn}
                   onGuildChange={handleOwnedGuildChange}
                   onWorldBlur={handleOwnedGuildWorldBlur}
                   onWorldChange={handleOwnedGuildWorldChange}
