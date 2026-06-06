@@ -456,6 +456,22 @@ describe("FirebasePhase0App guild share settings", () => {
 });
 
 describe("FirebasePhase0App notification settings draft", () => {
+  it("shows the webhook URL only for the owner notification settings", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    expect(getNotificationToggle()).not.toBeNull();
+    expect(getNotificationEndpointInput()).not.toBeNull();
+  });
+
+  it("hides the webhook URL but keeps notification toggle visible for admin", async () => {
+    await renderApp("/123/a_admin", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    expect(getNotificationToggle()).not.toBeNull();
+    expect(document.querySelector("#notification-endpoint")).toBeNull();
+  });
+
   it("saves notification changes only from the common settings save button", async () => {
     const saveDestination = vi.fn<
       (uid: string, destinationId: string, input: NotificationDestinationInput) => Promise<void>
@@ -681,6 +697,16 @@ function getNotificationEndpointInput() {
 
   if (!input) {
     throw new Error("notification endpoint input was not found");
+  }
+
+  return input;
+}
+
+function getNotificationToggle() {
+  const input = document.querySelector<HTMLInputElement>(".notification-destination__toggle input[type='checkbox']");
+
+  if (!input) {
+    throw new Error("notification toggle was not found");
   }
 
   return input;

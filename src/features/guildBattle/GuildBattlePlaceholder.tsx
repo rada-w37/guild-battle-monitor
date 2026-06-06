@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { getAppModePermissions, useAppRoute, type AppMode, type AppModePermissions } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
@@ -308,20 +308,29 @@ export function GuildBattlePlaceholder({
     await loadSnapshotForWorldId(worldId);
   }
 
-  async function handleAutoUpdateToggle() {
+  async function handleViewSettingsSave(nextSettings: {
+    readonly autoUpdate?: boolean;
+    readonly sortMode?: GuildBattleCastleListSortMode;
+  }) {
     if (!modePermissions.canEditViewSettings) {
       return;
     }
 
-    const nextEnabled = !isAutoUpdateEnabled;
     const nextShared = {
       ...shared,
-      autoUpdate: nextEnabled
+      autoUpdate: nextSettings.autoUpdate ?? shared.autoUpdate,
+      sortMode: nextSettings.sortMode ?? shared.sortMode
     };
+    const isAutoUpdateChanged = nextShared.autoUpdate !== shared.autoUpdate;
+
     setShared(nextShared);
     saveViewSettings({ shared: nextShared });
 
-    if (!nextEnabled) {
+    if (!isAutoUpdateChanged) {
+      return;
+    }
+
+    if (!nextShared.autoUpdate) {
       stopRealtime("auto update disabled", { nextState: "idle" });
       stopGrandBattleRealtime("auto update disabled", { nextState: "idle" });
       return;
@@ -730,19 +739,6 @@ export function GuildBattlePlaceholder({
     setSelectedOwnedGuildName(nextGuildName);
   }
 
-  function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
-    if (!modePermissions.canEditViewSettings) {
-      return;
-    }
-
-    const nextShared = {
-      ...shared,
-      sortMode: nextSortMode
-    };
-    setShared(nextShared);
-    saveViewSettings({ shared: nextShared });
-  }
-
   function saveViewSettings(settings: {
     readonly shared?: BattleMonitorSharedState;
     readonly selectedGuildId?: string;
@@ -945,10 +941,9 @@ export function GuildBattlePlaceholder({
             showAlertSettings={modePermissions.showAlertSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
-            onAutoUpdateToggle={handleAutoUpdateToggle}
             onClose={() => setIsSettingsDialogOpen(false)}
-            onSortModeChange={handleSortModeChange}
             onTestModeChange={setIsTestModeEnabled}
+            onViewSettingsSave={handleViewSettingsSave}
           />
         ) : null}
 
@@ -1401,6 +1396,15 @@ export function confirmDiscardDraft(): boolean {
   return window.confirm("未保存の変更があります。変更を破棄して閉じますか？");
 }
 
+function blurInputOnEnter(event: ReactKeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
 function TestModeSettings({
   checked,
   disabled,
@@ -1442,10 +1446,9 @@ function SettingsDialog({
   showAlertSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
-  onAutoUpdateToggle,
   onClose,
-  onSortModeChange,
-  onTestModeChange
+  onTestModeChange,
+  onViewSettingsSave
 }: {
   readonly alertThresholdError: string | null;
   readonly canEditAlertSettings: boolean;
@@ -1462,10 +1465,12 @@ function SettingsDialog({
   readonly showAlertSettings: boolean;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
-  readonly onAutoUpdateToggle: () => Promise<void>;
   readonly onClose: () => void;
-  readonly onSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
   readonly onTestModeChange: (checked: boolean) => void;
+  readonly onViewSettingsSave: (settings: {
+    readonly autoUpdate?: boolean;
+    readonly sortMode?: GuildBattleCastleListSortMode;
+  }) => Promise<void>;
 }) {
   const [draftAlertThresholds, setDraftAlertThresholds] = useState(editableAlertThresholds);
   const [draftAlertThresholdError, setDraftAlertThresholdError] = useState(alertThresholdError);
@@ -1513,12 +1518,11 @@ function SettingsDialog({
       return;
     }
 
-    if (showGuildBattleOnlySettings && canEditViewSettings && isSortDirty) {
-      onSortModeChange(draftSortMode);
-    }
-
-    if (canEditViewSettings && isAutoUpdateDirty) {
-      await onAutoUpdateToggle();
+    if (canEditViewSettings && (isSortDirty || isAutoUpdateDirty)) {
+      await onViewSettingsSave({
+        autoUpdate: isAutoUpdateDirty ? draftAutoUpdate : undefined,
+        sortMode: showGuildBattleOnlySettings && isSortDirty ? draftSortMode : undefined
+      });
     }
 
     if (IS_DEV && showGuildBattleOnlySettings && canEditBattleState && isTestModeDirty) {
@@ -1728,6 +1732,7 @@ function OwnedGuildSettings({
           value={selectedWorldId}
           onBlur={onWorldBlur}
           onChange={(event) => onWorldChange(event.target.value)}
+          onKeyDown={blurInputOnEnter}
         />
       </label>
       <label className="field">
@@ -1856,16 +1861,7 @@ function ThresholdInput({
           value={draftValue}
           onBlur={commitDraftValue}
           onChange={(event) => setDraftValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitDraftValue();
-            }
-
-            if (event.key === "Tab") {
-              commitDraftValue();
-            }
-          }}
+          onKeyDown={blurInputOnEnter}
         />
       </span>
     </label>

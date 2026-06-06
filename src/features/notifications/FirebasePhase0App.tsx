@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useAppRoute, type AppModePermissions, type AppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
@@ -102,7 +102,8 @@ export function FirebasePhase0App({
   const notificationDestinationDraft = useNotificationDestinationDraft(
     notificationSettingsUid,
     loadDestination,
-    saveDestination
+    saveDestination,
+    appMode === "owner"
   );
 
   const publicGuildShareCache = usePublicGuildShareCache(savePublicShare);
@@ -200,7 +201,9 @@ export function FirebasePhase0App({
           onSignOut={handleSignOut}
         />
       }
-      notificationSettings={<NotificationDestinationPanel draft={notificationDestinationDraft} />}
+      notificationSettings={
+        <NotificationDestinationPanel draft={notificationDestinationDraft} showWebhookUrl={appMode === "owner"} />
+      }
       ownedGuildProfilePersistence={ownedGuildProfilePersistenceWithShare}
       sharedGuild={effectiveSharedGuild}
       shareSettings={
@@ -701,7 +704,8 @@ interface NotificationDestinationDraftController {
 function useNotificationDestinationDraft(
   uid: string | null,
   loadDestination: typeof loadNotificationDestination,
-  saveDestination: typeof saveNotificationDestination
+  saveDestination: typeof saveNotificationDestination,
+  canEditEndpoint: boolean
 ): NotificationDestinationDraftController {
   const [persisted, setPersisted] = useState<NotificationDestinationDraft>({ enabled: true, endpoint: "" });
   const [draft, setDraft] = useState<NotificationDestinationDraft>({ enabled: true, endpoint: "" });
@@ -750,6 +754,12 @@ function useNotificationDestinationDraft(
     };
   }, [loadDestination, uid]);
 
+  useEffect(() => {
+    if (!canEditEndpoint) {
+      setValidationError(null);
+    }
+  }, [canEditEndpoint]);
+
   function setDraftEndpoint(endpoint: string) {
     setDraft((currentDraft) => ({ ...currentDraft, endpoint }));
     setMessage(null);
@@ -763,6 +773,11 @@ function useNotificationDestinationDraft(
   }
 
   function validateEndpoint() {
+    if (!canEditEndpoint) {
+      setValidationError(null);
+      return;
+    }
+
     const validation = validateWebhookUrl(draft.endpoint);
     setValidationError(validation);
   }
@@ -772,7 +787,7 @@ function useNotificationDestinationDraft(
       return true;
     }
 
-    const validation = validateWebhookUrl(draft.endpoint);
+    const validation = canEditEndpoint ? validateWebhookUrl(draft.endpoint) : null;
     setValidationError(validation);
 
     if (validation !== null) {
@@ -818,7 +833,7 @@ function useNotificationDestinationDraft(
   return {
     draft,
     external: {
-      hasValidationError: validationError !== null,
+      hasValidationError: canEditEndpoint && validationError !== null,
       isDirty,
       onCancel: cancelDraft,
       onSave: saveDraft
@@ -849,7 +864,22 @@ function validateWebhookUrl(endpoint: string): string | null {
   }
 }
 
-function NotificationDestinationPanel({ draft }: { readonly draft: NotificationDestinationDraftController }) {
+function blurInputOnEnter(event: ReactKeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
+function NotificationDestinationPanel({
+  draft,
+  showWebhookUrl
+}: {
+  readonly draft: NotificationDestinationDraftController;
+  readonly showWebhookUrl: boolean;
+}) {
   const { uid, status, message, isError, validationError } = draft;
 
   return (
@@ -864,24 +894,31 @@ function NotificationDestinationPanel({ draft }: { readonly draft: NotificationD
         />
         Discord通知を有効にする
       </label>
-      <label className="field" htmlFor="notification-endpoint">
-        <span className="field__label">Discord Webhook URL</span>
-        <input
-          autoCapitalize="none"
-          autoComplete="off"
-          autoCorrect="off"
-          className="field__input"
-          disabled={uid === null || status !== "idle"}
-          id="notification-endpoint"
-          name="notification-endpoint"
-          spellCheck={false}
-          type="url"
-          value={draft.draft.endpoint}
-          onBlur={draft.validateEndpoint}
-          onChange={(event) => draft.setEndpoint(event.target.value)}
-        />
-      </label>
-      {validationError !== null ? <p className="firebase-message firebase-message--error">{validationError}</p> : null}
+      {showWebhookUrl ? (
+        <>
+          <label className="field" htmlFor="notification-endpoint">
+            <span className="field__label">Discord Webhook URL</span>
+            <input
+              autoCapitalize="none"
+              autoComplete="off"
+              autoCorrect="off"
+              className="field__input"
+              disabled={uid === null || status !== "idle"}
+              id="notification-endpoint"
+              name="notification-endpoint"
+              spellCheck={false}
+              type="url"
+              value={draft.draft.endpoint}
+              onBlur={draft.validateEndpoint}
+              onChange={(event) => draft.setEndpoint(event.target.value)}
+              onKeyDown={blurInputOnEnter}
+            />
+          </label>
+          {validationError !== null ? (
+            <p className="firebase-message firebase-message--error">{validationError}</p>
+          ) : null}
+        </>
+      ) : null}
       {uid === null ? <p className="firebase-message">ログイン後に通知先設定を利用できます。</p> : null}
       {status === "loading" ? <p className="firebase-message">通知先設定を読込中です。</p> : null}
       {status === "saving" ? <p className="firebase-message">通知先設定を保存中です。</p> : null}

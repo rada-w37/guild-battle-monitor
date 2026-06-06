@@ -1016,6 +1016,31 @@ describe("GuildBattlePlaceholder", () => {
     expect(getSettingsSaveButton().disabled).toBe(true);
   });
 
+  it("blurs owned guild world input with Enter and then validates it", async () => {
+    const persistence = {
+      isLoading: false,
+      isSignedIn: true,
+      profile: { world: 37, guildId: null, guildName: null },
+      onChange: vi.fn()
+    } satisfies OwnedGuildProfilePersistence;
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/", persistence);
+    await clickSettingsButton();
+
+    const worldInput = getOwnedGuildWorldInput();
+    worldInput.focus();
+    act(() => {
+      updateInput(worldInput, "W37");
+    });
+
+    await act(async () => {
+      worldInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement).not.toBe(worldInput);
+    expect(getSettingsDialog().textContent ?? "").toContain("ワールドは数字で入力してください。");
+  });
+
   it("removes the cancel button and keeps the save button disabled when clean", async () => {
     renderComponent();
     await clickSettingsButton();
@@ -1101,6 +1126,22 @@ describe("GuildBattlePlaceholder", () => {
     expect(getStoredViewSettings().autoUpdate).toBe(false);
     await clickSaveSettingsButton();
     expect(getStoredViewSettings().autoUpdate).toBe(true);
+  });
+
+  it("saves sort and auto update drafts together without overwriting local settings", async () => {
+    renderComponent();
+
+    await clickSettingsButton();
+    await clickDangerSortCheckbox();
+    await clickAutoUpdateButton();
+
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+
+    await clickSaveSettingsButton();
+
+    const storedSettings = getStoredViewSettings();
+    expect(storedSettings.sortByAlert).toBe(true);
+    expect(storedSettings.autoUpdate).toBe(false);
   });
 
   it("closes without confirmation or success message after saving", async () => {
@@ -1672,7 +1713,9 @@ async function blurThresholdInput(index: number) {
 
 async function commitThresholdInputWithKey(index: number, key: "Enter" | "Tab") {
   await act(async () => {
-    getThresholdInputs()[index].dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    const input = getThresholdInputs()[index];
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     await Promise.resolve();
   });
 }
