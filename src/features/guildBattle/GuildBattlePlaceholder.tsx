@@ -99,8 +99,16 @@ interface GuildBattlePlaceholderProps {
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
   readonly permissionsOverride?: Partial<AppModePermissions>;
+  readonly settingsDraftExternal?: SettingsDraftExternal;
   readonly sharedGuild?: SharedGuildContext | null;
   readonly shareSettings?: ReactNode;
+}
+
+export interface SettingsDraftExternal {
+  readonly hasValidationError: boolean;
+  readonly isDirty: boolean;
+  readonly onCancel: () => void;
+  readonly onSave: () => Promise<boolean>;
 }
 
 export interface SharedGuildContext {
@@ -135,6 +143,7 @@ export function GuildBattlePlaceholder({
   notificationSettings,
   ownedGuildProfilePersistence,
   permissionsOverride,
+  settingsDraftExternal,
   sharedGuild,
   shareSettings
 }: GuildBattlePlaceholderProps) {
@@ -858,6 +867,7 @@ export function GuildBattlePlaceholder({
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
+            settingsDraftExternal={settingsDraftExternal}
             notificationSettings={modePermissions.canManageNotifications ? notificationSettings : undefined}
             ownedGuildSettings={
               modePermissions.canManageGuildProfile ? (
@@ -1360,6 +1370,7 @@ function SettingsDialog({
   isAutoUpdateEnabled,
   isRealtimeActive,
   isTestModeEnabled,
+  settingsDraftExternal,
   notificationSettings,
   ownedGuildSettings,
   showAlertSettings,
@@ -1379,6 +1390,7 @@ function SettingsDialog({
   readonly isAutoUpdateEnabled: boolean;
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
+  readonly settingsDraftExternal?: SettingsDraftExternal;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildSettings?: ReactNode;
   readonly showAlertSettings: boolean;
@@ -1401,8 +1413,9 @@ function SettingsDialog({
   const isSortDirty = draftSortMode !== castleSortMode;
   const isAutoUpdateDirty = draftAutoUpdate !== isAutoUpdateEnabled;
   const isTestModeDirty = draftTestMode !== isTestModeEnabled;
-  const isDirty = isAlertDirty || isSortDirty || isAutoUpdateDirty || isTestModeDirty;
-  const hasValidationError = draftAlertThresholdError !== null;
+  const isDirty =
+    isAlertDirty || isSortDirty || isAutoUpdateDirty || isTestModeDirty || (settingsDraftExternal?.isDirty ?? false);
+  const hasValidationError = draftAlertThresholdError !== null || (settingsDraftExternal?.hasValidationError ?? false);
 
   function updateDraftAlertThresholds(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
     const validation = validateGuildBattleAlertThresholds(nextThresholds);
@@ -1450,11 +1463,21 @@ function SettingsDialog({
       onTestModeChange(draftTestMode);
     }
 
+    if (settingsDraftExternal?.isDirty && !(await settingsDraftExternal.onSave())) {
+      setSaveError("設定の保存に失敗しました");
+      return;
+    }
+
     setSaveMessage("設定を保存しました");
   }
 
+  function handleCancel() {
+    settingsDraftExternal?.onCancel();
+    onClose();
+  }
+
   return (
-    <div className="settings-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="settings-dialog-backdrop" role="presentation" onMouseDown={handleCancel}>
       <section
         aria-labelledby="settings-dialog-title"
         aria-modal="true"
@@ -1464,7 +1487,7 @@ function SettingsDialog({
       >
         <div className="settings-dialog__header">
           <h2 id="settings-dialog-title">設定</h2>
-          <button className="settings-dialog__close" type="button" aria-label="設定を閉じる" onClick={onClose}>
+          <button className="settings-dialog__close" type="button" aria-label="設定を閉じる" onClick={handleCancel}>
             ×
           </button>
         </div>
@@ -1550,7 +1573,7 @@ function SettingsDialog({
             >
               保存
             </button>
-            <button className="load-form__button load-form__button--secondary" type="button" onClick={onClose}>
+            <button className="load-form__button load-form__button--secondary" type="button" onClick={handleCancel}>
               キャンセル
             </button>
           </section>

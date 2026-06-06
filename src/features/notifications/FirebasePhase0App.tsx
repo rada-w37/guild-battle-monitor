@@ -13,6 +13,7 @@ import {
 import {
   GuildBattlePlaceholder,
   type OwnedGuildProfilePersistence,
+  type SettingsDraftExternal,
   type SharedGuildContext
 } from "../guildBattle/GuildBattlePlaceholder";
 import {
@@ -45,9 +46,11 @@ interface FirebasePhase0AppProps {
   readonly loadOwnedGuildProfile?: typeof loadOwnedGuildProfile;
   readonly loadGuildShare?: typeof loadGuildShare;
   readonly loadPublicGuildShare?: typeof loadPublicGuildShare;
+  readonly loadNotificationDestination?: typeof loadNotificationDestination;
   readonly saveOwnedGuildProfile?: typeof saveOwnedGuildProfile;
   readonly saveGuildShare?: typeof saveGuildShare;
   readonly savePublicGuildShare?: typeof savePublicGuildShare;
+  readonly saveNotificationDestination?: typeof saveNotificationDestination;
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly subscribeToAuthState?: typeof subscribeToAuthState;
 }
@@ -56,9 +59,11 @@ export function FirebasePhase0App({
   loadOwnedGuildProfile: loadProfile = loadOwnedGuildProfile,
   loadGuildShare: loadShare = loadGuildShare,
   loadPublicGuildShare: loadPublicShare = loadPublicGuildShare,
+  loadNotificationDestination: loadDestination = loadNotificationDestination,
   saveOwnedGuildProfile: saveProfile = saveOwnedGuildProfile,
   saveGuildShare: saveShare = saveGuildShare,
   savePublicGuildShare: savePublicShare = savePublicGuildShare,
+  saveNotificationDestination: saveDestination = saveNotificationDestination,
   loadSnapshot = loadLocalGvgSnapshot,
   subscribeToAuthState: subscribeAuthState = subscribeToAuthState
 }: FirebasePhase0AppProps = {}) {
@@ -93,6 +98,11 @@ export function FirebasePhase0App({
     saveShare
   );
   const sharedGuild = useResolvedSharedGuild(appRoute, loadPublicShare);
+  const notificationDestinationDraft = useNotificationDestinationDraft(
+    notificationSettingsUid,
+    loadDestination,
+    saveDestination
+  );
 
   const publicGuildShareCache = usePublicGuildShareCache(
     appMode === "owner" ? ownedGuildProfilePersistence.profile : null,
@@ -137,6 +147,7 @@ export function FirebasePhase0App({
       loadSnapshot={loadSnapshot}
       modeOverride={sharedGuild.status === "fallback" ? "guest" : undefined}
       permissionsOverride={permissionsOverride}
+      settingsDraftExternal={notificationDestinationDraft.external}
       headerActions={
         <AuthControl
           authState={authState}
@@ -146,7 +157,7 @@ export function FirebasePhase0App({
           onSignOut={handleSignOut}
         />
       }
-      notificationSettings={<NotificationDestinationPanel uid={notificationSettingsUid} />}
+      notificationSettings={<NotificationDestinationPanel draft={notificationDestinationDraft} />}
       ownedGuildProfilePersistence={ownedGuildProfilePersistence}
       sharedGuild={effectiveSharedGuild}
       shareSettings={
@@ -598,30 +609,60 @@ function SharedGuildNotFoundPage() {
   );
 }
 
-function NotificationDestinationPanel({ uid }: { readonly uid: string | null }) {
-  const [endpoint, setEndpoint] = useState("");
-  const [enabled, setEnabled] = useState(true);
+interface NotificationDestinationDraft {
+  readonly enabled: boolean;
+  readonly endpoint: string;
+}
+
+interface NotificationDestinationDraftController {
+  readonly draft: NotificationDestinationDraft;
+  readonly external: SettingsDraftExternal;
+  readonly isError: boolean;
+  readonly message: string | null;
+  readonly setEnabled: (enabled: boolean) => void;
+  readonly setEndpoint: (endpoint: string) => void;
+  readonly status: "loading" | "idle" | "saving";
+  readonly uid: string | null;
+  readonly validateEndpoint: () => void;
+  readonly validationError: string | null;
+}
+
+function useNotificationDestinationDraft(
+  uid: string | null,
+  loadDestination: typeof loadNotificationDestination,
+  saveDestination: typeof saveNotificationDestination
+): NotificationDestinationDraftController {
+  const [persisted, setPersisted] = useState<NotificationDestinationDraft>({ enabled: true, endpoint: "" });
+  const [draft, setDraft] = useState<NotificationDestinationDraft>({ enabled: true, endpoint: "" });
   const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const isDirty = persisted.enabled !== draft.enabled || persisted.endpoint !== draft.endpoint;
 
   useEffect(() => {
     let isDisposed = false;
     setStatus("loading");
     setMessage(null);
+    setValidationError(null);
 
     if (uid === null) {
-      setEndpoint("");
-      setEnabled(true);
+      const initialDraft = { enabled: true, endpoint: "" };
+      setPersisted(initialDraft);
+      setDraft(initialDraft);
       setStatus("idle");
       return;
     }
 
-    void loadNotificationDestination(uid, DEFAULT_DESTINATION_ID)
+    void loadDestination(uid, DEFAULT_DESTINATION_ID)
       .then((destination) => {
         if (!isDisposed) {
-          setEndpoint(typeof destination?.config.endpoint === "string" ? destination.config.endpoint : "");
-          setEnabled(destination?.enabled ?? true);
+          const loadedDraft = {
+            endpoint: typeof destination?.config.endpoint === "string" ? destination.config.endpoint : "",
+            enabled: destination?.enabled ?? true
+          };
+          setPersisted(loadedDraft);
+          setDraft(loadedDraft);
           setStatus("idle");
         }
       })
@@ -636,11 +677,39 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string | null }) 
     return () => {
       isDisposed = true;
     };
-  }, [uid]);
+  }, [loadDestination, uid]);
 
-  async function handleSave() {
+  function setDraftEndpoint(endpoint: string) {
+    setDraft((currentDraft) => ({ ...currentDraft, endpoint }));
+    setMessage(null);
+    setIsError(false);
+  }
+
+  function setDraftEnabled(enabled: boolean) {
+    setDraft((currentDraft) => ({ ...currentDraft, enabled }));
+    setMessage(null);
+    setIsError(false);
+  }
+
+  function validateEndpoint() {
+    const validation = validateWebhookUrl(draft.endpoint);
+    setValidationError(validation);
+  }
+
+  async function saveDraft(): Promise<boolean> {
     if (uid === null) {
-      return;
+      return true;
+    }
+
+    const validation = validateWebhookUrl(draft.endpoint);
+    setValidationError(validation);
+
+    if (validation !== null) {
+      return false;
+    }
+
+    if (!isDirty) {
+      return true;
     }
 
     setStatus("saving");
@@ -648,32 +717,79 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string | null }) 
     setIsError(false);
 
     try {
-      await saveNotificationDestination(uid, DEFAULT_DESTINATION_ID, {
+      await saveDestination(uid, DEFAULT_DESTINATION_ID, {
         name: DEFAULT_DESTINATION_NAME,
         provider: "discord",
         type: "webhook",
-        enabled,
+        enabled: draft.enabled,
         selectableMentions: DEFAULT_SELECTABLE_MENTIONS,
-        config: { endpoint: endpoint.trim() }
+        config: { endpoint: draft.endpoint.trim() }
       });
+      setPersisted({ enabled: draft.enabled, endpoint: draft.endpoint });
       setMessage("通知先設定を保存しました。");
+      return true;
     } catch {
       setIsError(true);
       setMessage("通知先設定の保存に失敗しました。");
+      return false;
     } finally {
       setStatus("idle");
     }
   }
+
+  function cancelDraft() {
+    setDraft(persisted);
+    setValidationError(null);
+    setMessage(null);
+    setIsError(false);
+  }
+
+  return {
+    draft,
+    external: {
+      hasValidationError: validationError !== null,
+      isDirty,
+      onCancel: cancelDraft,
+      onSave: saveDraft
+    },
+    isError,
+    message,
+    setEnabled: setDraftEnabled,
+    setEndpoint: setDraftEndpoint,
+    status,
+    uid,
+    validateEndpoint,
+    validationError
+  };
+}
+
+function validateWebhookUrl(endpoint: string): string | null {
+  const trimmedEndpoint = endpoint.trim();
+
+  if (trimmedEndpoint.length === 0) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmedEndpoint);
+    return url.protocol === "http:" || url.protocol === "https:" ? null : "Webhook URLの形式を確認してください。";
+  } catch {
+    return "Webhook URLの形式を確認してください。";
+  }
+}
+
+function NotificationDestinationPanel({ draft }: { readonly draft: NotificationDestinationDraftController }) {
+  const { uid, status, message, isError, validationError } = draft;
 
   return (
     <section className="notification-destination" aria-labelledby="notification-destination-title">
       <h3 id="notification-destination-title">Discord通知</h3>
       <label className="notification-destination__toggle">
         <input
-          checked={enabled}
+          checked={draft.draft.enabled}
           disabled={uid === null || status !== "idle"}
           type="checkbox"
-          onChange={(event) => setEnabled(event.target.checked)}
+          onChange={(event) => draft.setEnabled(event.target.checked)}
         />
         Discord通知を有効にする
       </label>
@@ -689,15 +805,15 @@ function NotificationDestinationPanel({ uid }: { readonly uid: string | null }) 
           name="notification-endpoint"
           spellCheck={false}
           type="url"
-          value={endpoint}
-          onChange={(event) => setEndpoint(event.target.value)}
+          value={draft.draft.endpoint}
+          onBlur={draft.validateEndpoint}
+          onChange={(event) => draft.setEndpoint(event.target.value)}
         />
       </label>
-      <button className="load-form__button" disabled={uid === null || status !== "idle"} type="button" onClick={handleSave}>
-        {status === "saving" ? "保存中" : "保存"}
-      </button>
+      {validationError !== null ? <p className="firebase-message firebase-message--error">{validationError}</p> : null}
       {uid === null ? <p className="firebase-message">ログイン後に通知先設定を利用できます。</p> : null}
       {status === "loading" ? <p className="firebase-message">通知先設定を読込中です。</p> : null}
+      {status === "saving" ? <p className="firebase-message">通知先設定を保存中です。</p> : null}
       {message !== null ? (
         <p className={`firebase-message ${isError ? "firebase-message--error" : "firebase-message--success"}`}>
           {message}
