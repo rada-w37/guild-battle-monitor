@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { createAppCapabilities } from "../../app/appCapabilities";
 import { getAppModePermissions, useAppRoute, type AppMode, type AppModePermissions } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
@@ -151,6 +152,19 @@ export function GuildBattlePlaceholder({
   const appRoute = useAppRoute();
   const appMode = modeOverride ?? sharedGuild?.mode ?? appRoute?.mode ?? "owner";
   const modePermissions = { ...getAppModePermissions(appMode), ...permissionsOverride };
+  const appCapabilities = createAppCapabilities({
+    firebaseEnabled:
+      ownedGuildProfilePersistence !== undefined ||
+      notificationSettings !== undefined ||
+      settingsDraftExternal !== undefined ||
+      shareSettings !== undefined,
+    hasNotificationSettings: notificationSettings !== undefined,
+    hasOwnedGuildProfilePersistence: ownedGuildProfilePersistence !== undefined,
+    hasShareSettings: shareSettings !== undefined,
+    isSignedInOwner: ownedGuildProfilePersistence?.isSignedIn ?? false,
+    mode: appMode,
+    modePermissions
+  });
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
   const [shared, setShared] = useState<BattleMonitorSharedState>(() =>
@@ -312,7 +326,7 @@ export function GuildBattlePlaceholder({
     readonly autoUpdate?: boolean;
     readonly sortMode?: GuildBattleCastleListSortMode;
   }) {
-    if (!modePermissions.canEditViewSettings) {
+    if (!appCapabilities.localSettings.editable) {
       return;
     }
 
@@ -430,14 +444,14 @@ export function GuildBattlePlaceholder({
 
     setAlertThresholdError(null);
     setEditableAlertThresholds(validation.thresholds);
-    if (modePermissions.canPersistViewSettings) {
+    if (appCapabilities.localSettings.persistable) {
       saveGuildBattleAlertThresholds(validation.thresholds);
     }
     return true;
   }
 
   function handleWorldChange(nextWorld: string) {
-    if (!modePermissions.canEditViewSettings) {
+    if (!appCapabilities.localSettings.editable) {
       return;
     }
 
@@ -455,7 +469,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGrandBattleWorldInputChange(nextWorld: string) {
-    if (!modePermissions.canEditViewSettings) {
+    if (!appCapabilities.localSettings.editable) {
       return;
     }
 
@@ -467,7 +481,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGrandBattleWorldCommit() {
-    if (!modePermissions.canEditViewSettings) {
+    if (!appCapabilities.localSettings.editable) {
       return;
     }
 
@@ -670,7 +684,7 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGuildChange(nextGuildId: string) {
-    if (!modePermissions.canEditViewSettings) {
+    if (!appCapabilities.localSettings.editable) {
       return;
     }
 
@@ -743,7 +757,7 @@ export function GuildBattlePlaceholder({
     readonly shared?: BattleMonitorSharedState;
     readonly selectedGuildId?: string;
   }) {
-    if (!modePermissions.canPersistViewSettings) {
+    if (!appCapabilities.localSettings.persistable) {
       return;
     }
 
@@ -821,7 +835,7 @@ export function GuildBattlePlaceholder({
     guildName: selectedOwnedGuildName
   };
   const ownedGuildDraftExternal: SettingsDraftExternal | undefined =
-    modePermissions.canManageGuildProfile && ownedGuildProfilePersistence !== undefined
+    appCapabilities.ownedGuildProfile.visible && ownedGuildProfilePersistence !== undefined
       ? {
           hasValidationError: ownedGuildWorldError !== null,
           isDirty: !isSameOwnedGuildProfile(ownedGuildDraftProfile, ownedGuildProfilePersistence.profile),
@@ -908,16 +922,16 @@ export function GuildBattlePlaceholder({
             alertThresholdError={alertThresholdError}
             canEditAlertSettings={modePermissions.canEditAlertSettings}
             canEditBattleState={modePermissions.canEditBattleState}
-            canEditViewSettings={modePermissions.canEditViewSettings}
+            canEditViewSettings={appCapabilities.localSettings.editable}
             castleSortMode={castleSortMode}
             editableAlertThresholds={editableAlertThresholds}
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
             settingsDraftExternal={combinedSettingsDraftExternal}
-            notificationSettings={modePermissions.canManageNotifications ? notificationSettings : undefined}
+            notificationSettings={appCapabilities.notifications.visible ? notificationSettings : undefined}
             ownedGuildSettings={
-              modePermissions.canManageGuildProfile && ownedGuildProfilePersistence !== undefined ? (
+              appCapabilities.ownedGuildProfile.visible && ownedGuildProfilePersistence !== undefined ? (
                 <OwnedGuildSettings
                   guildCandidates={ownedGuildCandidates}
                   error={ownedGuildWorldError ?? ownedGuildProfilePersistence.error ?? null}
@@ -928,7 +942,7 @@ export function GuildBattlePlaceholder({
                   selectedGuildId={selectedOwnedGuildId}
                   selectedGuildName={selectedOwnedGuildName}
                   selectedWorldId={selectedOwnedGuildWorldId}
-                  shareSettings={modePermissions.canManageShareUrls ? shareSettings : undefined}
+                  shareSettings={appCapabilities.shareUrls.visible ? shareSettings : undefined}
                   showSignInMessage={!ownedGuildProfilePersistence.isSignedIn}
                   onGuildChange={handleOwnedGuildChange}
                   onWorldBlur={handleOwnedGuildWorldBlur}
@@ -975,7 +989,7 @@ export function GuildBattlePlaceholder({
 
         <SnapshotStatus
           alertThresholds={alertThresholds}
-          canEdit={modePermissions.canEditViewSettings}
+          canEdit={appCapabilities.localSettings.editable}
           castleSortMode={castleSortMode}
           guildCandidates={guildCandidates}
           guildSelectValue={guildSelectValue}
