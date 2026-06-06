@@ -184,6 +184,7 @@ export function GuildBattlePlaceholder({
   const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
+  const [ownedGuildWorldError, setOwnedGuildWorldError] = useState<string | null>(null);
   const [selectedOwnedGuildId, setSelectedOwnedGuildId] = useState<GvgGuildId | "">("");
   const [selectedOwnedGuildName, setSelectedOwnedGuildName] = useState<string | null>(null);
   const [ownedGuildCandidateLoadState, setOwnedGuildCandidateLoadState] = useState<
@@ -248,6 +249,7 @@ export function GuildBattlePlaceholder({
 
     const profile = ownedGuildProfilePersistence.profile;
     setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
+    setOwnedGuildWorldError(null);
     setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
     setSelectedOwnedGuildName(profile?.guildName ?? null);
     void loadOwnedGuildCandidatesForWorld(profile?.world ?? null);
@@ -700,10 +702,25 @@ export function GuildBattlePlaceholder({
   }
 
   function handleOwnedGuildWorldChange(nextWorldId: string) {
-    const nextWorldNumber = createWorldNumberFromWorldInput(nextWorldId);
     setSelectedOwnedGuildWorldId(nextWorldId);
     setSelectedOwnedGuildId("");
     setSelectedOwnedGuildName(null);
+    setOwnedGuildCandidates([]);
+    setOwnedGuildCandidateLoadState({ status: "idle" });
+  }
+
+  function handleOwnedGuildWorldBlur() {
+    const validationError = validateOwnedGuildWorldInput(selectedOwnedGuildWorldId);
+
+    if (validationError !== null) {
+      setOwnedGuildWorldError(validationError);
+      setOwnedGuildCandidates([]);
+      setOwnedGuildCandidateLoadState({ status: "idle" });
+      return;
+    }
+
+    const nextWorldNumber = createWorldNumberFromWorldInput(selectedOwnedGuildWorldId);
+    setOwnedGuildWorldError(null);
     void loadOwnedGuildCandidatesForWorld(nextWorldNumber);
   }
 
@@ -810,18 +827,33 @@ export function GuildBattlePlaceholder({
   const ownedGuildDraftExternal: SettingsDraftExternal | undefined =
     modePermissions.canManageGuildProfile && ownedGuildProfilePersistence !== undefined
       ? {
-          hasValidationError: false,
+          hasValidationError: ownedGuildWorldError !== null,
           isDirty: !isSameOwnedGuildProfile(ownedGuildDraftProfile, ownedGuildProfilePersistence.profile),
           onCancel: () => {
             const profile = ownedGuildProfilePersistence.profile;
             setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
+            setOwnedGuildWorldError(null);
             setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
             setSelectedOwnedGuildName(profile?.guildName ?? null);
             void loadOwnedGuildCandidatesForWorld(profile?.world ?? null);
           },
           onSave: () => {
             if (ownedGuildProfilePersistence.onSave !== undefined) {
+              const validationError = validateOwnedGuildWorldInput(selectedOwnedGuildWorldId);
+
+              if (validationError !== null) {
+                setOwnedGuildWorldError(validationError);
+                return Promise.resolve(false);
+              }
+
               return ownedGuildProfilePersistence.onSave(ownedGuildDraftProfile);
+            }
+
+            const validationError = validateOwnedGuildWorldInput(selectedOwnedGuildWorldId);
+
+            if (validationError !== null) {
+              setOwnedGuildWorldError(validationError);
+              return Promise.resolve(false);
             }
 
             ownedGuildProfilePersistence.onChange(ownedGuildDraftProfile);
@@ -892,7 +924,7 @@ export function GuildBattlePlaceholder({
               modePermissions.canManageGuildProfile ? (
                 <OwnedGuildSettings
                   guildCandidates={ownedGuildCandidates}
-                  error={ownedGuildProfilePersistence?.error ?? null}
+                  error={ownedGuildWorldError ?? ownedGuildProfilePersistence?.error ?? null}
                   isLoading={
                     (ownedGuildProfilePersistence?.isLoading ?? false) ||
                     ownedGuildCandidateLoadState.status === "loading"
@@ -905,6 +937,7 @@ export function GuildBattlePlaceholder({
                     ownedGuildProfilePersistence !== undefined && !ownedGuildProfilePersistence.isSignedIn
                   }
                   onGuildChange={handleOwnedGuildChange}
+                  onWorldBlur={handleOwnedGuildWorldBlur}
                   onWorldChange={handleOwnedGuildWorldChange}
                 />
               ) : undefined
@@ -1354,6 +1387,20 @@ function createWorldNumberFromWorldInput(world: string): number | null {
   return worldNumber;
 }
 
+function validateOwnedGuildWorldInput(world: string): string | null {
+  const trimmedWorld = world.trim();
+
+  if (trimmedWorld.length === 0) {
+    return null;
+  }
+
+  return createWorldNumberFromWorldInput(world) === null ? "ワールドは数字で入力してください。" : null;
+}
+
+export function confirmDiscardDraft(): boolean {
+  return window.confirm("未保存の変更があります。変更を破棄して閉じますか？");
+}
+
 function TestModeSettings({
   checked,
   disabled,
@@ -1425,7 +1472,6 @@ function SettingsDialog({
   const [draftSortMode, setDraftSortMode] = useState(castleSortMode);
   const [draftAutoUpdate, setDraftAutoUpdate] = useState(isAutoUpdateEnabled);
   const [draftTestMode, setDraftTestMode] = useState(isTestModeEnabled);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const isAlertDirty = !isSameEditableAlertThresholds(draftAlertThresholds, editableAlertThresholds);
@@ -1438,7 +1484,6 @@ function SettingsDialog({
 
   function updateDraftAlertThresholds(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
     const validation = validateGuildBattleAlertThresholds(nextThresholds);
-    setSaveMessage(null);
     setSaveError(null);
 
     if (!validation.valid) {
@@ -1454,12 +1499,10 @@ function SettingsDialog({
   function resetDraftAlertThresholds() {
     setDraftAlertThresholds(getDefaultEditableGuildBattleAlertThresholds());
     setDraftAlertThresholdError(null);
-    setSaveMessage(null);
     setSaveError(null);
   }
 
   async function handleSave() {
-    setSaveMessage(null);
     setSaveError(null);
 
     if (!isDirty || hasValidationError) {
@@ -1487,16 +1530,25 @@ function SettingsDialog({
       return;
     }
 
-    setSaveMessage("設定を保存しました");
+    onClose();
   }
 
-  function handleCancel() {
+  function requestClose() {
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+
+    if (!confirmDiscardDraft()) {
+      return;
+    }
+
     settingsDraftExternal?.onCancel();
     onClose();
   }
 
   return (
-    <div className="settings-dialog-backdrop" role="presentation" onMouseDown={handleCancel}>
+    <div className="settings-dialog-backdrop" role="presentation" onMouseDown={requestClose}>
       <section
         aria-labelledby="settings-dialog-title"
         aria-modal="true"
@@ -1506,7 +1558,7 @@ function SettingsDialog({
       >
         <div className="settings-dialog__header">
           <h2 id="settings-dialog-title">設定</h2>
-          <button className="settings-dialog__close" type="button" aria-label="設定を閉じる" onClick={handleCancel}>
+          <button className="settings-dialog__close" type="button" aria-label="設定を閉じる" onClick={requestClose}>
             ×
           </button>
         </div>
@@ -1529,7 +1581,6 @@ function SettingsDialog({
                 checked={draftSortMode === "alertLevel"}
                 disabled={!canEditViewSettings}
                 onChange={(event) => {
-                  setSaveMessage(null);
                   setSaveError(null);
                   setDraftSortMode(event.target.checked ? "alertLevel" : "castleId");
                 }}
@@ -1546,7 +1597,6 @@ function SettingsDialog({
                 disabled={!canEditViewSettings}
                 type="button"
                 onClick={() => {
-                  setSaveMessage(null);
                   setSaveError(null);
                   setDraftAutoUpdate((current) => !current);
                 }}
@@ -1573,7 +1623,6 @@ function SettingsDialog({
                 checked={draftTestMode}
                 disabled={!canEditBattleState || isRealtimeActive}
                 onChange={(checked) => {
-                  setSaveMessage(null);
                   setSaveError(null);
                   setDraftTestMode(checked);
                 }}
@@ -1581,8 +1630,6 @@ function SettingsDialog({
             </section>
           ) : null}
           <section className="settings-dialog__actions">
-            {isDirty ? <p className="firebase-message">未保存の変更があります</p> : null}
-            {saveMessage !== null ? <p className="firebase-message firebase-message--success">{saveMessage}</p> : null}
             {saveError !== null ? <p className="firebase-message firebase-message--error">{saveError}</p> : null}
             <button
               className="load-form__button"
@@ -1591,9 +1638,6 @@ function SettingsDialog({
               onClick={() => void handleSave()}
             >
               保存
-            </button>
-            <button className="load-form__button load-form__button--secondary" type="button" onClick={handleCancel}>
-              キャンセル
             </button>
           </section>
         </div>
@@ -1658,6 +1702,7 @@ function OwnedGuildSettings({
   shareSettings,
   showSignInMessage,
   onGuildChange,
+  onWorldBlur,
   onWorldChange
 }: {
   readonly error: string | null;
@@ -1669,6 +1714,7 @@ function OwnedGuildSettings({
   readonly shareSettings?: ReactNode;
   readonly showSignInMessage: boolean;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+  readonly onWorldBlur: () => void;
   readonly onWorldChange: (worldId: string) => void;
 }) {
   return (
@@ -1680,6 +1726,7 @@ function OwnedGuildSettings({
           disabled={isLoading}
           inputMode="numeric"
           value={selectedWorldId}
+          onBlur={onWorldBlur}
           onChange={(event) => onWorldChange(event.target.value)}
         />
       </label>

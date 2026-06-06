@@ -131,7 +131,13 @@ export function FirebasePhase0App({
   const ownedGuildProfilePersistenceWithShare = {
     ...ownedGuildProfilePersistence,
     onSave: async (profile: OwnedGuildProfile) => {
-      ownedGuildProfilePersistence.onChange(profile);
+      const profileSaved = ownedGuildProfilePersistence.onSave !== undefined
+        ? await ownedGuildProfilePersistence.onSave(profile)
+        : true;
+
+      if (!profileSaved) {
+        return false;
+      }
 
       if (!isCompleteOwnedGuildProfile(profile)) {
         return true;
@@ -561,31 +567,40 @@ function useOwnedGuildProfilePersistence(
     };
   }, [loadProfile, uid]);
 
-  function handleChange(nextProfile: OwnedGuildProfile) {
+  async function saveProfileNow(nextProfile: OwnedGuildProfile): Promise<boolean> {
     setProfile(nextProfile);
     setError(null);
 
     if (uid === null || isLoading) {
-      return;
+      return true;
     }
 
     const nextProfileKey = createOwnedGuildProfileKey(nextProfile);
 
     if (persistedProfileKeyRef.current === nextProfileKey) {
-      return;
+      return true;
     }
 
     persistedProfileKeyRef.current = nextProfileKey;
-    saveQueueRef.current = saveQueueRef.current
-      .catch(() => {})
-      .then(() => saveProfile(uid, nextProfile))
-      .catch((saveError) => {
-        console.error("Failed to save users/{uid}/guild/profile.", saveError);
-        if (persistedProfileKeyRef.current === nextProfileKey) {
-          persistedProfileKeyRef.current = null;
-        }
-        setError(OWNED_GUILD_PROFILE_ERROR_MESSAGE);
-      });
+
+    try {
+      saveQueueRef.current = saveQueueRef.current
+        .catch(() => {})
+        .then(() => saveProfile(uid, nextProfile));
+      await saveQueueRef.current;
+      return true;
+    } catch (saveError) {
+      console.error("Failed to save users/{uid}/guild/profile.", saveError);
+      if (persistedProfileKeyRef.current === nextProfileKey) {
+        persistedProfileKeyRef.current = null;
+      }
+      setError(OWNED_GUILD_PROFILE_ERROR_MESSAGE);
+      return false;
+    }
+  }
+
+  function handleChange(nextProfile: OwnedGuildProfile) {
+    void saveProfileNow(nextProfile);
   }
 
   return {
@@ -593,7 +608,8 @@ function useOwnedGuildProfilePersistence(
     isLoading,
     isSignedIn: uid !== null,
     profile,
-    onChange: handleChange
+    onChange: handleChange,
+    onSave: saveProfileNow
   };
 }
 

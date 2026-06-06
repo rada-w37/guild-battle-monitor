@@ -161,6 +161,7 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
       guildId: null,
       guildName: null
     });
+    await openOwnedGuildSettings();
     expect(getOwnedGuildSelect().value).toBe("");
 
     await changeWorld("38");
@@ -288,6 +289,7 @@ describe("FirebasePhase0App guild share settings", () => {
     expect(savedShare.guildId).toBe("saved-guild");
     expect(savedShare.adminAccessKey).toMatch(/^a_/);
     expect(savedShare.guestAccessKey).toMatch(/^g_/);
+    await openOwnedGuildSettings();
     expect(getShareUrlInputs().map((input) => input.value)).toEqual([
       `${window.location.origin}/saved-guild/${savedShare.adminAccessKey}`,
       `${window.location.origin}/saved-guild/${savedShare.guestAccessKey}`

@@ -760,6 +760,7 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(worldInput, "37");
       await flushPromises();
     });
+    await blurOwnedGuildWorldInput();
 
     act(() => {
       updateSelect(guildSelect, ownGuildId);
@@ -889,6 +890,7 @@ describe("GuildBattlePlaceholder", () => {
       updateInput(worldInput, "37");
       await flushPromises();
     });
+    await blurOwnedGuildWorldInput();
     const displayGuildSelect = getGuildSelect();
     onChange.mockClear();
     act(() => {
@@ -934,6 +936,8 @@ describe("GuildBattlePlaceholder", () => {
       await flushPromises();
     });
 
+    expect(loadSnapshot).not.toHaveBeenCalled();
+    await blurOwnedGuildWorldInput();
     expect(loadSnapshot).toHaveBeenCalledWith("1037");
     expect(monitorWorldInput.value).toBe("");
     expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
@@ -955,6 +959,132 @@ describe("GuildBattlePlaceholder", () => {
     });
   });
 
+  it("keeps focus while typing owned guild world and loads candidates on blur", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const persistence = {
+      isLoading: false,
+      isSignedIn: true,
+      profile: { world: 37, guildId: null, guildName: null },
+      onChange: vi.fn()
+    } satisfies OwnedGuildProfilePersistence;
+    renderComponent(loadSnapshot, undefined, undefined, undefined, undefined, "/", persistence);
+    await clickSettingsButton();
+    loadSnapshot.mockClear();
+
+    const worldInput = getOwnedGuildWorldInput();
+    worldInput.focus();
+
+    await act(async () => {
+      updateInput(worldInput, "3");
+      await flushPromises();
+    });
+    expect(document.activeElement).toBe(worldInput);
+    expect(loadSnapshot).not.toHaveBeenCalled();
+
+    await act(async () => {
+      updateInput(worldInput, "37");
+      await flushPromises();
+    });
+    expect(document.activeElement).toBe(worldInput);
+    expect(loadSnapshot).not.toHaveBeenCalled();
+
+    await blurOwnedGuildWorldInput();
+    expect(loadSnapshot).toHaveBeenCalledWith("1037");
+  });
+
+  it("validates owned guild world only on blur", async () => {
+    const persistence = {
+      isLoading: false,
+      isSignedIn: true,
+      profile: { world: 37, guildId: null, guildName: null },
+      onChange: vi.fn()
+    } satisfies OwnedGuildProfilePersistence;
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/", persistence);
+    await clickSettingsButton();
+
+    const worldInput = getOwnedGuildWorldInput();
+    act(() => {
+      updateInput(worldInput, "W37");
+    });
+
+    expect(getSettingsDialog().textContent ?? "").not.toContain("ワールドは数字で入力してください。");
+    expect(getSettingsSaveButton().disabled).toBe(false);
+
+    await blurOwnedGuildWorldInput();
+
+    expect(getSettingsDialog().textContent ?? "").toContain("ワールドは数字で入力してください。");
+    expect(getSettingsSaveButton().disabled).toBe(true);
+  });
+
+  it("removes the cancel button and keeps the save button disabled when clean", async () => {
+    renderComponent();
+    await clickSettingsButton();
+
+    expect(getSettingsSaveButton().disabled).toBe(true);
+    expect(getSettingsDialog().querySelector(".settings-dialog__actions .load-form__button--secondary")).toBeNull();
+  });
+
+  it("closes without confirmation when settings are clean", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    try {
+      renderComponent();
+      await clickSettingsButton();
+      await clickSettingsCloseButton();
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(querySettingsDialog()).toBeNull();
+
+      await clickSettingsButton();
+      await clickSettingsBackdrop();
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(querySettingsDialog()).toBeNull();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it("keeps the dialog open when dirty close confirmation is cancelled", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    try {
+      renderComponent();
+      await clickSettingsButton();
+      await clickDangerSortCheckbox();
+      await clickSettingsCloseButton();
+
+      expect(confirm).toHaveBeenCalledWith("未保存の変更があります。変更を破棄して閉じますか？");
+      expect(querySettingsDialog()).not.toBeNull();
+
+      await clickSettingsBackdrop();
+
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(querySettingsDialog()).not.toBeNull();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it("discards draft and closes when dirty close confirmation is accepted", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    try {
+      renderComponent();
+      await clickSettingsButton();
+      await clickDangerSortCheckbox();
+      expect(getDangerSortCheckbox().checked).toBe(true);
+
+      await clickSettingsCloseButton();
+      expect(querySettingsDialog()).toBeNull();
+
+      await clickSettingsButton();
+      expect(getDangerSortCheckbox().checked).toBe(false);
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
   it("toggles auto update inside the settings dialog", async () => {
     renderComponent();
 
@@ -965,11 +1095,33 @@ describe("GuildBattlePlaceholder", () => {
     expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
     await clickSaveSettingsButton();
     expect(getStoredViewSettings().autoUpdate).toBe(false);
+    await clickSettingsButton();
     await clickButton("OFF");
     expect(getAutoUpdateButton().textContent).toBe("ON");
     expect(getStoredViewSettings().autoUpdate).toBe(false);
     await clickSaveSettingsButton();
     expect(getStoredViewSettings().autoUpdate).toBe(true);
+  });
+
+  it("closes without confirmation or success message after saving", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    try {
+      renderComponent(vi.fn(() => Promise.resolve(snapshot)));
+      await clickSettingsButton();
+      await clickDangerSortCheckbox();
+      await clickSaveSettingsButton();
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(querySettingsDialog()).toBeNull();
+      expect(getStoredViewSettings().sortByAlert).toBe(true);
+      expect(document.body.textContent ?? "").not.toContain("設定を保存しました");
+
+      await clickSettingsButton();
+      expect(getSettingsSaveButton().disabled).toBe(true);
+    } finally {
+      confirm.mockRestore();
+    }
   });
 
   it("does not load while typing world and loads with the update button", async () => {
@@ -1360,15 +1512,47 @@ async function clickDangerSortCheckbox() {
 }
 
 async function clickSaveSettingsButton() {
+  const button = getSettingsSaveButton();
+
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+function getSettingsSaveButton() {
   const button = getSettingsDialog().querySelector<HTMLButtonElement>(".settings-dialog__actions button");
 
   if (!button) {
     throw new Error("settings save button was not found");
   }
 
+  return button;
+}
+
+async function clickSettingsCloseButton() {
+  const button = getSettingsDialog().querySelector<HTMLButtonElement>(".settings-dialog__close");
+
+  if (!button) {
+    throw new Error("settings close button was not found");
+  }
+
   await act(async () => {
     button.click();
     await Promise.resolve();
+  });
+}
+
+async function clickSettingsBackdrop() {
+  const backdrop = document.querySelector<HTMLElement>(".settings-dialog-backdrop");
+
+  if (!backdrop) {
+    throw new Error("settings backdrop was not found");
+  }
+
+  await act(async () => {
+    backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     await Promise.resolve();
   });
 }
@@ -1423,6 +1607,10 @@ function getSettingsDialog() {
   return dialog;
 }
 
+function querySettingsDialog() {
+  return document.querySelector<HTMLElement>("[role='dialog']");
+}
+
 function getOwnedGuildSettings() {
   const settings = getSettingsDialog().querySelector<HTMLDetailsElement>(".owned-guild-settings");
 
@@ -1431,6 +1619,24 @@ function getOwnedGuildSettings() {
   }
 
   return settings;
+}
+
+function getOwnedGuildWorldInput() {
+  const input = getOwnedGuildSettings().querySelector<HTMLInputElement>("input");
+
+  if (!input) {
+    throw new Error("owned guild world input was not found");
+  }
+
+  return input;
+}
+
+async function blurOwnedGuildWorldInput() {
+  await act(async () => {
+    getOwnedGuildWorldInput().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 function getGuildSelect() {
