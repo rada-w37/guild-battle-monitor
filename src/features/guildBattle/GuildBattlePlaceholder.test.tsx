@@ -719,16 +719,22 @@ describe("GuildBattlePlaceholder", () => {
     await clickSettingsButton();
 
     const notificationSettings = getSettingsDialog().querySelector<HTMLDetailsElement>(".notification-settings");
-    const ownedGuildSettings = notificationSettings?.previousElementSibling;
     expect(notificationSettings?.open).toBe(false);
     expect(notificationSettings?.querySelector("[data-testid='notification-slot']")).not.toBeNull();
-    expect(ownedGuildSettings?.classList.contains("owned-guild-settings")).toBe(true);
-    expect(ownedGuildSettings?.previousElementSibling?.querySelector(".auto-update-toggle")).not.toBeNull();
+    expect(notificationSettings?.previousElementSibling?.querySelector(".auto-update-toggle")).not.toBeNull();
     expect(notificationSettings?.nextElementSibling?.querySelector(".test-mode-settings")).not.toBeNull();
   });
 
-  it("renders owned guild settings for owner mode collapsed by default", async () => {
+  it("hides owned guild settings when owner profile persistence is unavailable", async () => {
     renderComponent();
+
+    await clickSettingsButton();
+
+    expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
+  });
+
+  it("renders owned guild settings for owner mode with persistence collapsed by default", async () => {
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/", createOwnedGuildPersistence());
 
     await clickSettingsButton();
 
@@ -744,7 +750,7 @@ describe("GuildBattlePlaceholder", () => {
   });
 
   it("holds owned guild selection and resets it when world changes", async () => {
-    renderComponent();
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/", createOwnedGuildPersistence());
     await loadWorld37();
     await clickSettingsButton();
 
@@ -1405,6 +1411,18 @@ function createSharedGuild(mode: "admin" | "guest"): SharedGuildContext {
     guildId: ownGuildId,
     world: 37,
     guildName: "Owner Guild"
+  };
+}
+
+function createOwnedGuildPersistence(
+  profile: OwnedGuildProfilePersistence["profile"] = null
+): OwnedGuildProfilePersistence {
+  return {
+    error: null,
+    isLoading: false,
+    isSignedIn: true,
+    profile,
+    onChange: vi.fn()
   };
 }
 
