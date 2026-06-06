@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAppModePermissions, resolveAppMode, resolveRoute } from "./appMode";
+import { getAppModePermissions, resolveAppMode, resolveRoute, stripGithubPagesBasePath } from "./appMode";
 
 describe("resolveAppMode", () => {
   it.each([
@@ -18,10 +18,16 @@ describe("resolveAppMode", () => {
 describe("resolveRoute", () => {
   it.each([
     ["/", { mode: "owner" }],
+    ["/guild-battle-monitor", { mode: "owner" }],
+    ["/guild-battle-monitor/", { mode: "owner" }],
     ["/123/a_abc", { mode: "admin", guildId: "123", accessKey: "a_abc" }],
     ["/123/g_abc", { mode: "guest", guildId: "123", accessKey: "g_abc" }],
+    ["/guild-battle-monitor/123/a_abc", { mode: "admin", guildId: "123", accessKey: "a_abc" }],
+    ["/guild-battle-monitor/123/g_abc", { mode: "guest", guildId: "123", accessKey: "g_abc" }],
     ["/app", null],
     ["/app/", null],
+    ["/guild-battle-monitor/app", null],
+    ["/guild-battle-monitor/app/", null],
     ["/invalid", null],
     ["/app/test", null],
     ["/123", null],
@@ -30,6 +36,19 @@ describe("resolveRoute", () => {
     ["/123/a_abc/extra", null]
   ] as const)("resolves %s", (pathname, expectedRoute) => {
     expect(resolveRoute(pathname)).toEqual(expectedRoute);
+  });
+});
+
+describe("stripGithubPagesBasePath", () => {
+  it.each([
+    ["/guild-battle-monitor", "/"],
+    ["/guild-battle-monitor/", "/"],
+    ["/guild-battle-monitor/123/a_abc", "/123/a_abc"],
+    ["/", "/"],
+    ["/123/a_abc", "/123/a_abc"],
+    ["/another-base/123/a_abc", "/another-base/123/a_abc"]
+  ] as const)("normalizes %s to %s", (pathname, expectedPathname) => {
+    expect(stripGithubPagesBasePath(pathname)).toBe(expectedPathname);
   });
 });
 

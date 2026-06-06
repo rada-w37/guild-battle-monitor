@@ -37,7 +37,10 @@ jobs:
         run: npm run test
 
       - name: Build
-        run: npm run build
+        run: VITE_BASE_PATH=/guild-battle-monitor/ npm run build
+
+      - name: Add SPA fallback
+        run: cp dist/index.html dist/404.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

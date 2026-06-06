@@ -21,6 +21,7 @@ export type AppRoute =
   | { readonly mode: "admin" | "guest"; readonly guildId: string; readonly accessKey: string };
 
 const AppRouteContext = createContext<AppRoute | null>(null);
+const GITHUB_PAGES_BASE_PATH = "/guild-battle-monitor";
 
 export function resolveAppMode(pathname: string): AppMode | null {
   return resolveRoute(pathname)?.mode ?? null;
@@ -48,11 +49,13 @@ export function getAppModePermissions(mode: AppMode): AppModePermissions {
 }
 
 export function resolveRoute(pathname: string): AppRoute | null {
-  if (pathname === "/") {
+  const routePathname = stripGithubPagesBasePath(pathname);
+
+  if (routePathname === "/") {
     return { mode: "owner" };
   }
 
-  const sharedRouteMatch = pathname.match(/^\/([^/]+)\/([^/]+)$/);
+  const sharedRouteMatch = routePathname.match(/^\/([^/]+)\/([^/]+)$/);
 
   if (sharedRouteMatch === null) {
     return null;
@@ -69,6 +72,18 @@ export function resolveRoute(pathname: string): AppRoute | null {
   }
 
   return null;
+}
+
+export function stripGithubPagesBasePath(pathname: string): string {
+  if (pathname === GITHUB_PAGES_BASE_PATH || pathname === `${GITHUB_PAGES_BASE_PATH}/`) {
+    return "/";
+  }
+
+  if (pathname.startsWith(`${GITHUB_PAGES_BASE_PATH}/`)) {
+    return pathname.slice(GITHUB_PAGES_BASE_PATH.length);
+  }
+
+  return pathname;
 }
 
 export function AppModeProvider({

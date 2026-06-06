@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { getAppModePermissions, useAppRoute, type AppMode, type AppModePermissions } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
@@ -99,8 +99,16 @@ interface GuildBattlePlaceholderProps {
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
   readonly permissionsOverride?: Partial<AppModePermissions>;
+  readonly settingsDraftExternal?: SettingsDraftExternal;
   readonly sharedGuild?: SharedGuildContext | null;
   readonly shareSettings?: ReactNode;
+}
+
+export interface SettingsDraftExternal {
+  readonly hasValidationError: boolean;
+  readonly isDirty: boolean;
+  readonly onCancel: () => void;
+  readonly onSave: () => Promise<boolean>;
 }
 
 export interface SharedGuildContext {
@@ -116,6 +124,7 @@ export interface OwnedGuildProfilePersistence {
   readonly isSignedIn: boolean;
   readonly profile: OwnedGuildProfile | null;
   readonly onChange: (profile: OwnedGuildProfile) => void;
+  readonly onSave?: (profile: OwnedGuildProfile) => Promise<boolean>;
 }
 
 interface GuildBattleRuntimeService {
@@ -135,6 +144,7 @@ export function GuildBattlePlaceholder({
   notificationSettings,
   ownedGuildProfilePersistence,
   permissionsOverride,
+  settingsDraftExternal,
   sharedGuild,
   shareSettings
 }: GuildBattlePlaceholderProps) {
@@ -174,6 +184,7 @@ export function GuildBattlePlaceholder({
   const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
+  const [ownedGuildWorldError, setOwnedGuildWorldError] = useState<string | null>(null);
   const [selectedOwnedGuildId, setSelectedOwnedGuildId] = useState<GvgGuildId | "">("");
   const [selectedOwnedGuildName, setSelectedOwnedGuildName] = useState<string | null>(null);
   const [ownedGuildCandidateLoadState, setOwnedGuildCandidateLoadState] = useState<
@@ -238,6 +249,7 @@ export function GuildBattlePlaceholder({
 
     const profile = ownedGuildProfilePersistence.profile;
     setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
+    setOwnedGuildWorldError(null);
     setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
     setSelectedOwnedGuildName(profile?.guildName ?? null);
     void loadOwnedGuildCandidatesForWorld(profile?.world ?? null);
@@ -296,20 +308,29 @@ export function GuildBattlePlaceholder({
     await loadSnapshotForWorldId(worldId);
   }
 
-  async function handleAutoUpdateToggle() {
+  async function handleViewSettingsSave(nextSettings: {
+    readonly autoUpdate?: boolean;
+    readonly sortMode?: GuildBattleCastleListSortMode;
+  }) {
     if (!modePermissions.canEditViewSettings) {
       return;
     }
 
-    const nextEnabled = !isAutoUpdateEnabled;
     const nextShared = {
       ...shared,
-      autoUpdate: nextEnabled
+      autoUpdate: nextSettings.autoUpdate ?? shared.autoUpdate,
+      sortMode: nextSettings.sortMode ?? shared.sortMode
     };
+    const isAutoUpdateChanged = nextShared.autoUpdate !== shared.autoUpdate;
+
     setShared(nextShared);
     saveViewSettings({ shared: nextShared });
 
-    if (!nextEnabled) {
+    if (!isAutoUpdateChanged) {
+      return;
+    }
+
+    if (!nextShared.autoUpdate) {
       stopRealtime("auto update disabled", { nextState: "idle" });
       stopGrandBattleRealtime("auto update disabled", { nextState: "idle" });
       return;
@@ -413,19 +434,6 @@ export function GuildBattlePlaceholder({
       saveGuildBattleAlertThresholds(validation.thresholds);
     }
     return true;
-  }
-
-  function handleAlertThresholdReset() {
-    if (!modePermissions.canEditAlertSettings) {
-      return;
-    }
-
-    const defaultThresholds = getDefaultEditableGuildBattleAlertThresholds();
-    setAlertThresholdError(null);
-    setEditableAlertThresholds(defaultThresholds);
-    if (modePermissions.canPersistViewSettings) {
-      saveGuildBattleAlertThresholds(defaultThresholds);
-    }
   }
 
   function handleWorldChange(nextWorld: string) {
@@ -703,15 +711,25 @@ export function GuildBattlePlaceholder({
   }
 
   function handleOwnedGuildWorldChange(nextWorldId: string) {
-    const nextWorldNumber = createWorldNumberFromWorldInput(nextWorldId);
     setSelectedOwnedGuildWorldId(nextWorldId);
     setSelectedOwnedGuildId("");
     setSelectedOwnedGuildName(null);
-    ownedGuildProfilePersistence?.onChange({
-      world: nextWorldNumber,
-      guildId: null,
-      guildName: null
-    });
+    setOwnedGuildCandidates([]);
+    setOwnedGuildCandidateLoadState({ status: "idle" });
+  }
+
+  function handleOwnedGuildWorldBlur() {
+    const validationError = validateOwnedGuildWorldInput(selectedOwnedGuildWorldId);
+
+    if (validationError !== null) {
+      setOwnedGuildWorldError(validationError);
+      setOwnedGuildCandidates([]);
+      setOwnedGuildCandidateLoadState({ status: "idle" });
+      return;
+    }
+
+    const nextWorldNumber = createWorldNumberFromWorldInput(selectedOwnedGuildWorldId);
+    setOwnedGuildWorldError(null);
     void loadOwnedGuildCandidatesForWorld(nextWorldNumber);
   }
 
@@ -719,24 +737,6 @@ export function GuildBattlePlaceholder({
     const nextGuildName = ownedGuildCandidates.find((candidate) => candidate.guildId === nextGuildId)?.guildName ?? null;
     setSelectedOwnedGuildId(nextGuildId);
     setSelectedOwnedGuildName(nextGuildName);
-    ownedGuildProfilePersistence?.onChange({
-      world: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
-      guildId: nextGuildId || null,
-      guildName: nextGuildName
-    });
-  }
-
-  function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
-    if (!modePermissions.canEditViewSettings) {
-      return;
-    }
-
-    const nextShared = {
-      ...shared,
-      sortMode: nextSortMode
-    };
-    setShared(nextShared);
-    saveViewSettings({ shared: nextShared });
   }
 
   function saveViewSettings(settings: {
@@ -815,6 +815,49 @@ export function GuildBattlePlaceholder({
     grandBattleCandidateSource !== null &&
     grandBattleParticipantLoadState.status === "success" &&
     !isSameGrandBattleSource(grandBattleCandidateSource, grandBattleAppliedSource);
+  const ownedGuildDraftProfile = {
+    world: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
+    guildId: selectedOwnedGuildId || null,
+    guildName: selectedOwnedGuildName
+  };
+  const ownedGuildDraftExternal: SettingsDraftExternal | undefined =
+    modePermissions.canManageGuildProfile && ownedGuildProfilePersistence !== undefined
+      ? {
+          hasValidationError: ownedGuildWorldError !== null,
+          isDirty: !isSameOwnedGuildProfile(ownedGuildDraftProfile, ownedGuildProfilePersistence.profile),
+          onCancel: () => {
+            const profile = ownedGuildProfilePersistence.profile;
+            setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
+            setOwnedGuildWorldError(null);
+            setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
+            setSelectedOwnedGuildName(profile?.guildName ?? null);
+            void loadOwnedGuildCandidatesForWorld(profile?.world ?? null);
+          },
+          onSave: () => {
+            if (ownedGuildProfilePersistence.onSave !== undefined) {
+              const validationError = validateOwnedGuildWorldInput(selectedOwnedGuildWorldId);
+
+              if (validationError !== null) {
+                setOwnedGuildWorldError(validationError);
+                return Promise.resolve(false);
+              }
+
+              return ownedGuildProfilePersistence.onSave(ownedGuildDraftProfile);
+            }
+
+            const validationError = validateOwnedGuildWorldInput(selectedOwnedGuildWorldId);
+
+            if (validationError !== null) {
+              setOwnedGuildWorldError(validationError);
+              return Promise.resolve(false);
+            }
+
+            ownedGuildProfilePersistence.onChange(ownedGuildDraftProfile);
+            return Promise.resolve(true);
+          }
+        }
+      : undefined;
+  const combinedSettingsDraftExternal = combineSettingsDraftExternals(settingsDraftExternal, ownedGuildDraftExternal);
 
   return (
     <main className="app-shell" data-mode={activeMode === "guildBattle" ? "guild-battle" : "grand-battle"}>
@@ -871,12 +914,13 @@ export function GuildBattlePlaceholder({
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
+            settingsDraftExternal={combinedSettingsDraftExternal}
             notificationSettings={modePermissions.canManageNotifications ? notificationSettings : undefined}
             ownedGuildSettings={
               modePermissions.canManageGuildProfile ? (
                 <OwnedGuildSettings
                   guildCandidates={ownedGuildCandidates}
-                  error={ownedGuildProfilePersistence?.error ?? null}
+                  error={ownedGuildWorldError ?? ownedGuildProfilePersistence?.error ?? null}
                   isLoading={
                     (ownedGuildProfilePersistence?.isLoading ?? false) ||
                     ownedGuildCandidateLoadState.status === "loading"
@@ -889,6 +933,7 @@ export function GuildBattlePlaceholder({
                     ownedGuildProfilePersistence !== undefined && !ownedGuildProfilePersistence.isSignedIn
                   }
                   onGuildChange={handleOwnedGuildChange}
+                  onWorldBlur={handleOwnedGuildWorldBlur}
                   onWorldChange={handleOwnedGuildWorldChange}
                 />
               ) : undefined
@@ -896,11 +941,9 @@ export function GuildBattlePlaceholder({
             showAlertSettings={modePermissions.showAlertSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
-            onAlertThresholdReset={handleAlertThresholdReset}
-            onAutoUpdateToggle={handleAutoUpdateToggle}
             onClose={() => setIsSettingsDialogOpen(false)}
-            onSortModeChange={handleSortModeChange}
             onTestModeChange={setIsTestModeEnabled}
+            onViewSettingsSave={handleViewSettingsSave}
           />
         ) : null}
 
@@ -1339,6 +1382,29 @@ function createWorldNumberFromWorldInput(world: string): number | null {
   return worldNumber;
 }
 
+function validateOwnedGuildWorldInput(world: string): string | null {
+  const trimmedWorld = world.trim();
+
+  if (trimmedWorld.length === 0) {
+    return null;
+  }
+
+  return createWorldNumberFromWorldInput(world) === null ? "ワールドは数字で入力してください。" : null;
+}
+
+export function confirmDiscardDraft(): boolean {
+  return window.confirm("未保存の変更があります。変更を破棄して閉じますか？");
+}
+
+function blurInputOnEnter(event: ReactKeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
 function TestModeSettings({
   checked,
   disabled,
@@ -1374,16 +1440,15 @@ function SettingsDialog({
   isAutoUpdateEnabled,
   isRealtimeActive,
   isTestModeEnabled,
+  settingsDraftExternal,
   notificationSettings,
   ownedGuildSettings,
   showAlertSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
-  onAlertThresholdReset,
-  onAutoUpdateToggle,
   onClose,
-  onSortModeChange,
-  onTestModeChange
+  onTestModeChange,
+  onViewSettingsSave
 }: {
   readonly alertThresholdError: string | null;
   readonly canEditAlertSettings: boolean;
@@ -1394,19 +1459,100 @@ function SettingsDialog({
   readonly isAutoUpdateEnabled: boolean;
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
+  readonly settingsDraftExternal?: SettingsDraftExternal;
   readonly notificationSettings?: ReactNode;
   readonly ownedGuildSettings?: ReactNode;
   readonly showAlertSettings: boolean;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
-  readonly onAlertThresholdReset: () => void;
-  readonly onAutoUpdateToggle: () => void;
   readonly onClose: () => void;
-  readonly onSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
   readonly onTestModeChange: (checked: boolean) => void;
+  readonly onViewSettingsSave: (settings: {
+    readonly autoUpdate?: boolean;
+    readonly sortMode?: GuildBattleCastleListSortMode;
+  }) => Promise<void>;
 }) {
+  const [draftAlertThresholds, setDraftAlertThresholds] = useState(editableAlertThresholds);
+  const [draftAlertThresholdError, setDraftAlertThresholdError] = useState(alertThresholdError);
+  const [draftSortMode, setDraftSortMode] = useState(castleSortMode);
+  const [draftAutoUpdate, setDraftAutoUpdate] = useState(isAutoUpdateEnabled);
+  const [draftTestMode, setDraftTestMode] = useState(isTestModeEnabled);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const isAlertDirty = !isSameEditableAlertThresholds(draftAlertThresholds, editableAlertThresholds);
+  const isSortDirty = draftSortMode !== castleSortMode;
+  const isAutoUpdateDirty = draftAutoUpdate !== isAutoUpdateEnabled;
+  const isTestModeDirty = draftTestMode !== isTestModeEnabled;
+  const isDirty =
+    isAlertDirty || isSortDirty || isAutoUpdateDirty || isTestModeDirty || (settingsDraftExternal?.isDirty ?? false);
+  const hasValidationError = draftAlertThresholdError !== null || (settingsDraftExternal?.hasValidationError ?? false);
+
+  function updateDraftAlertThresholds(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
+    const validation = validateGuildBattleAlertThresholds(nextThresholds);
+    setSaveError(null);
+
+    if (!validation.valid) {
+      setDraftAlertThresholdError(validation.error);
+      return false;
+    }
+
+    setDraftAlertThresholdError(null);
+    setDraftAlertThresholds(validation.thresholds);
+    return true;
+  }
+
+  function resetDraftAlertThresholds() {
+    setDraftAlertThresholds(getDefaultEditableGuildBattleAlertThresholds());
+    setDraftAlertThresholdError(null);
+    setSaveError(null);
+  }
+
+  async function handleSave() {
+    setSaveError(null);
+
+    if (!isDirty || hasValidationError) {
+      return;
+    }
+
+    if (showAlertSettings && isAlertDirty && !onAlertThresholdChange(draftAlertThresholds)) {
+      return;
+    }
+
+    if (canEditViewSettings && (isSortDirty || isAutoUpdateDirty)) {
+      await onViewSettingsSave({
+        autoUpdate: isAutoUpdateDirty ? draftAutoUpdate : undefined,
+        sortMode: showGuildBattleOnlySettings && isSortDirty ? draftSortMode : undefined
+      });
+    }
+
+    if (IS_DEV && showGuildBattleOnlySettings && canEditBattleState && isTestModeDirty) {
+      onTestModeChange(draftTestMode);
+    }
+
+    if (settingsDraftExternal?.isDirty && !(await settingsDraftExternal.onSave())) {
+      setSaveError("設定の保存に失敗しました");
+      return;
+    }
+
+    onClose();
+  }
+
+  function requestClose() {
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+
+    if (!confirmDiscardDraft()) {
+      return;
+    }
+
+    settingsDraftExternal?.onCancel();
+    onClose();
+  }
+
   return (
-    <div className="settings-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="settings-dialog-backdrop" role="presentation" onMouseDown={requestClose}>
       <section
         aria-labelledby="settings-dialog-title"
         aria-modal="true"
@@ -1416,7 +1562,7 @@ function SettingsDialog({
       >
         <div className="settings-dialog__header">
           <h2 id="settings-dialog-title">設定</h2>
-          <button className="settings-dialog__close" type="button" aria-label="設定を閉じる" onClick={onClose}>
+          <button className="settings-dialog__close" type="button" aria-label="設定を閉じる" onClick={requestClose}>
             ×
           </button>
         </div>
@@ -1424,10 +1570,10 @@ function SettingsDialog({
           {showAlertSettings ? (
             <AlertThresholdSettings
               canEdit={canEditAlertSettings}
-              error={alertThresholdError}
-              thresholds={editableAlertThresholds}
-              onChange={onAlertThresholdChange}
-              onReset={onAlertThresholdReset}
+              error={draftAlertThresholdError}
+              thresholds={draftAlertThresholds}
+              onChange={updateDraftAlertThresholds}
+              onReset={resetDraftAlertThresholds}
             />
           ) : null}
           {showGuildBattleOnlySettings ? (
@@ -1436,9 +1582,12 @@ function SettingsDialog({
             <label className="sort-toggle">
               <input
                 type="checkbox"
-                checked={castleSortMode === "alertLevel"}
+                checked={draftSortMode === "alertLevel"}
                 disabled={!canEditViewSettings}
-                onChange={(event) => onSortModeChange(event.target.checked ? "alertLevel" : "castleId")}
+                onChange={(event) => {
+                  setSaveError(null);
+                  setDraftSortMode(event.target.checked ? "alertLevel" : "castleId");
+                }}
               />
               <span>危険度順で表示</span>
             </label>
@@ -1448,12 +1597,15 @@ function SettingsDialog({
             <h3>自動更新</h3>
             <div className="auto-update-setting">
               <button
-                className={`auto-update-toggle ${isAutoUpdateEnabled ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
+                className={`auto-update-toggle ${draftAutoUpdate ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
                 disabled={!canEditViewSettings}
                 type="button"
-                onClick={onAutoUpdateToggle}
+                onClick={() => {
+                  setSaveError(null);
+                  setDraftAutoUpdate((current) => !current);
+                }}
               >
-                {isAutoUpdateEnabled ? "ON" : "OFF"}
+                {draftAutoUpdate ? "ON" : "OFF"}
               </button>
             </div>
           </section>
@@ -1472,16 +1624,76 @@ function SettingsDialog({
           {IS_DEV && showGuildBattleOnlySettings && canEditBattleState ? (
             <section className="settings-section">
               <TestModeSettings
-                checked={isTestModeEnabled}
+                checked={draftTestMode}
                 disabled={!canEditBattleState || isRealtimeActive}
-                onChange={onTestModeChange}
+                onChange={(checked) => {
+                  setSaveError(null);
+                  setDraftTestMode(checked);
+                }}
               />
             </section>
           ) : null}
+          <section className="settings-dialog__actions">
+            {saveError !== null ? <p className="firebase-message firebase-message--error">{saveError}</p> : null}
+            <button
+              className="load-form__button"
+              disabled={!isDirty || hasValidationError}
+              type="button"
+              onClick={() => void handleSave()}
+            >
+              保存
+            </button>
+          </section>
         </div>
       </section>
     </div>
   );
+}
+
+function isSameEditableAlertThresholds(
+  left: EditableGuildBattleAlertThresholds,
+  right: EditableGuildBattleAlertThresholds
+): boolean {
+  return (
+    left.warningDefenseCount === right.warningDefenseCount &&
+    left.dangerDefenseCount === right.dangerDefenseCount &&
+    left.criticalDefenseCount === right.criticalDefenseCount
+  );
+}
+
+function isSameOwnedGuildProfile(left: OwnedGuildProfile, right: OwnedGuildProfile | null): boolean {
+  return (
+    left.world === (right?.world ?? null) &&
+    left.guildId === (right?.guildId ?? null) &&
+    left.guildName === (right?.guildName ?? null)
+  );
+}
+
+function combineSettingsDraftExternals(
+  first: SettingsDraftExternal | undefined,
+  second: SettingsDraftExternal | undefined
+): SettingsDraftExternal | undefined {
+  if (first === undefined) {
+    return second;
+  }
+
+  if (second === undefined) {
+    return first;
+  }
+
+  return {
+    hasValidationError: first.hasValidationError || second.hasValidationError,
+    isDirty: first.isDirty || second.isDirty,
+    onCancel: () => {
+      first.onCancel();
+      second.onCancel();
+    },
+    onSave: async () => {
+      const firstResult = first.isDirty ? await first.onSave() : true;
+      const secondResult = second.isDirty ? await second.onSave() : true;
+      return firstResult && secondResult;
+    }
+  };
 }
 
 function OwnedGuildSettings({
@@ -1494,6 +1706,7 @@ function OwnedGuildSettings({
   shareSettings,
   showSignInMessage,
   onGuildChange,
+  onWorldBlur,
   onWorldChange
 }: {
   readonly error: string | null;
@@ -1505,6 +1718,7 @@ function OwnedGuildSettings({
   readonly shareSettings?: ReactNode;
   readonly showSignInMessage: boolean;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+  readonly onWorldBlur: () => void;
   readonly onWorldChange: (worldId: string) => void;
 }) {
   return (
@@ -1516,7 +1730,9 @@ function OwnedGuildSettings({
           disabled={isLoading}
           inputMode="numeric"
           value={selectedWorldId}
+          onBlur={onWorldBlur}
           onChange={(event) => onWorldChange(event.target.value)}
+          onKeyDown={blurInputOnEnter}
         />
       </label>
       <label className="field">
@@ -1645,16 +1861,7 @@ function ThresholdInput({
           value={draftValue}
           onBlur={commitDraftValue}
           onChange={(event) => setDraftValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitDraftValue();
-            }
-
-            if (event.key === "Tab") {
-              commitDraftValue();
-            }
-          }}
+          onKeyDown={blurInputOnEnter}
         />
       </span>
     </label>

@@ -8,6 +8,7 @@ import type { GuildShare, OwnedGuildProfile, PublicGuildShare } from "../guildBa
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSettingsStorage";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
+import type { NotificationDestination, NotificationDestinationInput } from "./types";
 import { FirebasePhase0App } from "./FirebasePhase0App";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -152,12 +153,15 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     await openOwnedGuildSettings();
 
     await changeWorld("38");
+    expect(saveProfile).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
     expect(saveProfile).toHaveBeenCalledTimes(1);
     expect(saveProfile).toHaveBeenLastCalledWith("owner-uid", {
       world: 38,
       guildId: null,
       guildName: null
     });
+    await openOwnedGuildSettings();
     expect(getOwnedGuildSelect().value).toBe("");
 
     await changeWorld("38");
@@ -171,6 +175,8 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     await renderApp("/", signedInState, loadProfile, saveProfile);
     await openOwnedGuildSettings();
     await changeGuild("");
+    expect(saveProfile).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
 
     expect(saveProfile).toHaveBeenCalledWith("owner-uid", {
       world: 37,
@@ -197,6 +203,8 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
       );
       await openOwnedGuildSettings();
       await changeWorld("37");
+      expect(saveProfile).not.toHaveBeenCalled();
+      await clickSettingsSaveButton();
 
       expect(saveProfile).toHaveBeenCalledWith("owner-uid", {
         world: 37,
@@ -271,11 +279,17 @@ describe("FirebasePhase0App guild share settings", () => {
     expect(getShareSettings()).not.toBeNull();
     expect(document.querySelector(".share-settings")).toBeNull();
 
+    expect(saveShare).not.toHaveBeenCalled();
+    expect(savePublicShare).not.toHaveBeenCalled();
+    expect(getShareSettings().textContent).toContain("設定を保存すると共有URLを生成");
+    await clickSettingsSaveButton();
+
     expect(saveShare).toHaveBeenCalledTimes(1);
     const savedShare = saveShare.mock.calls[0][1];
     expect(savedShare.guildId).toBe("saved-guild");
     expect(savedShare.adminAccessKey).toMatch(/^a_/);
     expect(savedShare.guestAccessKey).toMatch(/^g_/);
+    await openOwnedGuildSettings();
     expect(getShareUrlInputs().map((input) => input.value)).toEqual([
       `${window.location.origin}/saved-guild/${savedShare.adminAccessKey}`,
       `${window.location.origin}/saved-guild/${savedShare.guestAccessKey}`
@@ -304,6 +318,9 @@ describe("FirebasePhase0App guild share settings", () => {
     );
     await openOwnedGuildSettings();
 
+    expect(saveShare).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
+
     const nextShare = saveShare.mock.calls[0][1];
     expect(nextShare.guildId).toBe("saved-guild");
     expect(nextShare.adminAccessKey).not.toBe(previousShare.adminAccessKey);
@@ -325,6 +342,9 @@ describe("FirebasePhase0App guild share settings", () => {
       );
       await openOwnedGuildSettings();
 
+      expect(saveShare).not.toHaveBeenCalled();
+      await clickSettingsSaveButton();
+
       expect(saveShare).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(
         "Failed to save users/{uid}/guild/share.",
@@ -339,6 +359,7 @@ describe("FirebasePhase0App guild share settings", () => {
 
   it("shows an error when guildShares/{guildId} save fails", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const saveShare = createSaveShareMock();
     const savePublicShare = vi.fn(() => Promise.reject(new Error("public share write failed")));
 
     try {
@@ -347,18 +368,22 @@ describe("FirebasePhase0App guild share settings", () => {
         signedInState,
         vi.fn(() => Promise.resolve(createProfile())),
         vi.fn(),
-        vi.fn(() => Promise.resolve(createShare("saved-guild"))),
-        vi.fn(),
+        vi.fn(() => Promise.resolve(null)),
+        saveShare,
         undefined,
         savePublicShare
       );
       await openOwnedGuildSettings();
 
+      expect(savePublicShare).not.toHaveBeenCalled();
+      await clickSettingsSaveButton();
+
+      const savedShare = saveShare.mock.calls[0][1];
       expect(savePublicShare).toHaveBeenCalledWith("saved-guild", {
         world: 37,
         guildName: "Saved Guild",
-        adminAccessKey: "a_admin",
-        guestAccessKey: "g_guest"
+        adminAccessKey: savedShare.adminAccessKey,
+        guestAccessKey: savedShare.guestAccessKey
       });
       expect(consoleError).toHaveBeenCalledWith(
         "Failed to save guildShares/{guildId}.",
@@ -418,7 +443,7 @@ describe("FirebasePhase0App guild share settings", () => {
     await openOwnedGuildSettings();
 
     expect(getShareSettings().textContent).toContain("所属ギルドを設定してください");
-    expect(loadShare).not.toHaveBeenCalled();
+    expect(loadShare).toHaveBeenCalledWith("owner-uid");
     expect(saveShare).not.toHaveBeenCalled();
     expect(getShareUrlInputs()).toHaveLength(0);
   });
@@ -427,6 +452,73 @@ describe("FirebasePhase0App guild share settings", () => {
     await renderApp(pathname, signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
 
     expect(document.querySelector(".share-settings")).toBeNull();
+  });
+});
+
+describe("FirebasePhase0App notification settings draft", () => {
+  it("shows the webhook URL only for the owner notification settings", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    expect(getNotificationToggle()).not.toBeNull();
+    expect(getNotificationEndpointInput()).not.toBeNull();
+  });
+
+  it("hides the webhook URL but keeps notification toggle visible for admin", async () => {
+    await renderApp("/123/a_admin", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    expect(getNotificationToggle()).not.toBeNull();
+    expect(document.querySelector("#notification-endpoint")).toBeNull();
+  });
+
+  it("saves notification changes only from the common settings save button", async () => {
+    const saveDestination = vi.fn<
+      (uid: string, destinationId: string, input: NotificationDestinationInput) => Promise<void>
+    >(() => Promise.resolve());
+    const loadDestination = vi.fn(() =>
+      Promise.resolve(
+        createNotificationDestination({
+          enabled: true,
+          endpoint: "https://example.com/old"
+        })
+      )
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      loadDestination,
+      saveDestination
+    );
+    await openNotificationSettings();
+
+    await act(async () => {
+      const input = getNotificationEndpointInput();
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(input, "https://example.com/new");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveDestination).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
+
+    expect(saveDestination).toHaveBeenCalledWith(
+      "owner-uid",
+      "default",
+      expect.objectContaining({
+        enabled: true,
+        config: { endpoint: "https://example.com/new" }
+      })
+    );
   });
 });
 
@@ -439,7 +531,13 @@ async function renderApp(
   saveShare: (uid: string, share: GuildShare) => Promise<void> = vi.fn(() => Promise.resolve()),
   loadPublicShare: (guildId: string) => Promise<PublicGuildShare | null> = vi.fn(() => Promise.resolve(createPublicShare())),
   savePublicShare: (guildId: string, share: PublicGuildShare) => Promise<void> = vi.fn(() => Promise.resolve()),
-  loadSnapshot: typeof loadLocalGvgSnapshot = vi.fn(() => Promise.resolve(createGvgSnapshot()))
+  loadSnapshot: typeof loadLocalGvgSnapshot = vi.fn(() => Promise.resolve(createGvgSnapshot())),
+  loadDestination: (uid: string, destinationId: string) => Promise<NotificationDestination | null> = vi.fn(() =>
+    Promise.resolve(null)
+  ),
+  saveDestination: (uid: string, destinationId: string, input: NotificationDestinationInput) => Promise<void> = vi.fn(
+    () => Promise.resolve()
+  )
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -450,10 +548,12 @@ async function renderApp(
       <AppModeProvider pathname={pathname}>
         <FirebasePhase0App
           loadGuildShare={loadShare}
+          loadNotificationDestination={loadDestination}
           loadOwnedGuildProfile={loadProfile}
           loadPublicGuildShare={loadPublicShare}
           loadSnapshot={loadSnapshot}
           saveGuildShare={saveShare}
+          saveNotificationDestination={saveDestination}
           saveOwnedGuildProfile={saveProfile}
           savePublicGuildShare={savePublicShare}
           subscribeToAuthState={(onStateChanged) => {
@@ -473,6 +573,17 @@ async function openOwnedGuildSettings() {
 
   if (!settings) {
     throw new Error("owned guild settings were not found");
+  }
+
+  await openDetails(settings);
+}
+
+async function openNotificationSettings() {
+  await openSettings();
+  const settings = document.querySelector<HTMLDetailsElement>(".notification-settings");
+
+  if (!settings) {
+    throw new Error("notification settings were not found");
   }
 
   await openDetails(settings);
@@ -581,6 +692,39 @@ function getShareUrlInputs() {
   return Array.from(getShareSettings().querySelectorAll<HTMLInputElement>("input[type='url']"));
 }
 
+function getNotificationEndpointInput() {
+  const input = document.querySelector<HTMLInputElement>("#notification-endpoint");
+
+  if (!input) {
+    throw new Error("notification endpoint input was not found");
+  }
+
+  return input;
+}
+
+function getNotificationToggle() {
+  const input = document.querySelector<HTMLInputElement>(".notification-destination__toggle input[type='checkbox']");
+
+  if (!input) {
+    throw new Error("notification toggle was not found");
+  }
+
+  return input;
+}
+
+async function clickSettingsSaveButton() {
+  const button = document.querySelector<HTMLButtonElement>(".settings-dialog__actions button");
+
+  if (!button) {
+    throw new Error("settings save button was not found");
+  }
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+  });
+}
+
 async function openDetails(details: HTMLDetailsElement) {
   await act(async () => {
     details.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -601,6 +745,26 @@ function createShare(guildId: string): GuildShare {
     guildId,
     adminAccessKey: "a_admin",
     guestAccessKey: "g_guest"
+  };
+}
+
+function createNotificationDestination({
+  enabled,
+  endpoint
+}: {
+  readonly enabled: boolean;
+  readonly endpoint: string;
+}): NotificationDestination {
+  return {
+    id: "default",
+    name: "Discord",
+    provider: "discord",
+    type: "webhook",
+    enabled,
+    selectableMentions: ["@here", "@everyone"],
+    config: { endpoint },
+    createdAt: null,
+    updatedAt: null
   };
 }
 
