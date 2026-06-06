@@ -508,6 +508,7 @@ describe("GuildBattlePlaceholder", () => {
 
     await clickSettingsButton();
     await clickButton("OFF");
+    await clickSaveSettingsButton();
 
     expect(getStoredViewSettings().autoUpdate).toBe(true);
     expect(realtimeClient.subscriptions).toHaveLength(1);
@@ -527,6 +528,7 @@ describe("GuildBattlePlaceholder", () => {
 
     await clickSettingsButton();
     await clickButton("ON");
+    await clickSaveSettingsButton();
 
     expect(getStoredViewSettings().autoUpdate).toBe(false);
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
@@ -960,9 +962,13 @@ describe("GuildBattlePlaceholder", () => {
     expect(getAutoUpdateButton().textContent).toBe("ON");
     await clickButton("ON");
     expect(getAutoUpdateButton().textContent).toBe("OFF");
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+    await clickSaveSettingsButton();
     expect(getStoredViewSettings().autoUpdate).toBe(false);
     await clickButton("OFF");
     expect(getAutoUpdateButton().textContent).toBe("ON");
+    expect(getStoredViewSettings().autoUpdate).toBe(false);
+    await clickSaveSettingsButton();
     expect(getStoredViewSettings().autoUpdate).toBe(true);
   });
 
@@ -1022,6 +1028,8 @@ describe("GuildBattlePlaceholder", () => {
       getDangerSortCheckbox().click();
     });
 
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+    await clickSaveSettingsButton();
     expect(getStoredViewSettings().sortByAlert).toBe(true);
   });
 
@@ -1152,6 +1160,8 @@ describe("GuildBattlePlaceholder", () => {
     );
     await commitThresholdInputWithKey(0, "Enter");
 
+    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toBeNull();
+    await clickSaveSettingsButton();
     expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toContain(
       '"warningDefenseCount":40'
     );
@@ -1345,6 +1355,20 @@ async function clickAutoUpdateButton() {
 async function clickDangerSortCheckbox() {
   await act(async () => {
     getDangerSortCheckbox().click();
+    await Promise.resolve();
+  });
+}
+
+async function clickSaveSettingsButton() {
+  const button = getSettingsDialog().querySelector<HTMLButtonElement>(".settings-dialog__actions button");
+
+  if (!button) {
+    throw new Error("settings save button was not found");
+  }
+
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
     await Promise.resolve();
   });
 }

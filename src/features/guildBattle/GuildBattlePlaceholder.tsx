@@ -415,19 +415,6 @@ export function GuildBattlePlaceholder({
     return true;
   }
 
-  function handleAlertThresholdReset() {
-    if (!modePermissions.canEditAlertSettings) {
-      return;
-    }
-
-    const defaultThresholds = getDefaultEditableGuildBattleAlertThresholds();
-    setAlertThresholdError(null);
-    setEditableAlertThresholds(defaultThresholds);
-    if (modePermissions.canPersistViewSettings) {
-      saveGuildBattleAlertThresholds(defaultThresholds);
-    }
-  }
-
   function handleWorldChange(nextWorld: string) {
     if (!modePermissions.canEditViewSettings) {
       return;
@@ -896,7 +883,6 @@ export function GuildBattlePlaceholder({
             showAlertSettings={modePermissions.showAlertSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
-            onAlertThresholdReset={handleAlertThresholdReset}
             onAutoUpdateToggle={handleAutoUpdateToggle}
             onClose={() => setIsSettingsDialogOpen(false)}
             onSortModeChange={handleSortModeChange}
@@ -1379,7 +1365,6 @@ function SettingsDialog({
   showAlertSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
-  onAlertThresholdReset,
   onAutoUpdateToggle,
   onClose,
   onSortModeChange,
@@ -1399,12 +1384,75 @@ function SettingsDialog({
   readonly showAlertSettings: boolean;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
-  readonly onAlertThresholdReset: () => void;
-  readonly onAutoUpdateToggle: () => void;
+  readonly onAutoUpdateToggle: () => Promise<void>;
   readonly onClose: () => void;
   readonly onSortModeChange: (sortMode: GuildBattleCastleListSortMode) => void;
   readonly onTestModeChange: (checked: boolean) => void;
 }) {
+  const [draftAlertThresholds, setDraftAlertThresholds] = useState(editableAlertThresholds);
+  const [draftAlertThresholdError, setDraftAlertThresholdError] = useState(alertThresholdError);
+  const [draftSortMode, setDraftSortMode] = useState(castleSortMode);
+  const [draftAutoUpdate, setDraftAutoUpdate] = useState(isAutoUpdateEnabled);
+  const [draftTestMode, setDraftTestMode] = useState(isTestModeEnabled);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const isAlertDirty = !isSameEditableAlertThresholds(draftAlertThresholds, editableAlertThresholds);
+  const isSortDirty = draftSortMode !== castleSortMode;
+  const isAutoUpdateDirty = draftAutoUpdate !== isAutoUpdateEnabled;
+  const isTestModeDirty = draftTestMode !== isTestModeEnabled;
+  const isDirty = isAlertDirty || isSortDirty || isAutoUpdateDirty || isTestModeDirty;
+  const hasValidationError = draftAlertThresholdError !== null;
+
+  function updateDraftAlertThresholds(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
+    const validation = validateGuildBattleAlertThresholds(nextThresholds);
+    setSaveMessage(null);
+    setSaveError(null);
+
+    if (!validation.valid) {
+      setDraftAlertThresholdError(validation.error);
+      return false;
+    }
+
+    setDraftAlertThresholdError(null);
+    setDraftAlertThresholds(validation.thresholds);
+    return true;
+  }
+
+  function resetDraftAlertThresholds() {
+    setDraftAlertThresholds(getDefaultEditableGuildBattleAlertThresholds());
+    setDraftAlertThresholdError(null);
+    setSaveMessage(null);
+    setSaveError(null);
+  }
+
+  async function handleSave() {
+    setSaveMessage(null);
+    setSaveError(null);
+
+    if (!isDirty || hasValidationError) {
+      return;
+    }
+
+    if (showAlertSettings && isAlertDirty && !onAlertThresholdChange(draftAlertThresholds)) {
+      return;
+    }
+
+    if (showGuildBattleOnlySettings && canEditViewSettings && isSortDirty) {
+      onSortModeChange(draftSortMode);
+    }
+
+    if (canEditViewSettings && isAutoUpdateDirty) {
+      await onAutoUpdateToggle();
+    }
+
+    if (IS_DEV && showGuildBattleOnlySettings && canEditBattleState && isTestModeDirty) {
+      onTestModeChange(draftTestMode);
+    }
+
+    setSaveMessage("設定を保存しました");
+  }
+
   return (
     <div className="settings-dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -1424,10 +1472,10 @@ function SettingsDialog({
           {showAlertSettings ? (
             <AlertThresholdSettings
               canEdit={canEditAlertSettings}
-              error={alertThresholdError}
-              thresholds={editableAlertThresholds}
-              onChange={onAlertThresholdChange}
-              onReset={onAlertThresholdReset}
+              error={draftAlertThresholdError}
+              thresholds={draftAlertThresholds}
+              onChange={updateDraftAlertThresholds}
+              onReset={resetDraftAlertThresholds}
             />
           ) : null}
           {showGuildBattleOnlySettings ? (
@@ -1436,9 +1484,13 @@ function SettingsDialog({
             <label className="sort-toggle">
               <input
                 type="checkbox"
-                checked={castleSortMode === "alertLevel"}
+                checked={draftSortMode === "alertLevel"}
                 disabled={!canEditViewSettings}
-                onChange={(event) => onSortModeChange(event.target.checked ? "alertLevel" : "castleId")}
+                onChange={(event) => {
+                  setSaveMessage(null);
+                  setSaveError(null);
+                  setDraftSortMode(event.target.checked ? "alertLevel" : "castleId");
+                }}
               />
               <span>危険度順で表示</span>
             </label>
@@ -1448,12 +1500,16 @@ function SettingsDialog({
             <h3>自動更新</h3>
             <div className="auto-update-setting">
               <button
-                className={`auto-update-toggle ${isAutoUpdateEnabled ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
+                className={`auto-update-toggle ${draftAutoUpdate ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
                 disabled={!canEditViewSettings}
                 type="button"
-                onClick={onAutoUpdateToggle}
+                onClick={() => {
+                  setSaveMessage(null);
+                  setSaveError(null);
+                  setDraftAutoUpdate((current) => !current);
+                }}
               >
-                {isAutoUpdateEnabled ? "ON" : "OFF"}
+                {draftAutoUpdate ? "ON" : "OFF"}
               </button>
             </div>
           </section>
@@ -1472,15 +1528,46 @@ function SettingsDialog({
           {IS_DEV && showGuildBattleOnlySettings && canEditBattleState ? (
             <section className="settings-section">
               <TestModeSettings
-                checked={isTestModeEnabled}
+                checked={draftTestMode}
                 disabled={!canEditBattleState || isRealtimeActive}
-                onChange={onTestModeChange}
+                onChange={(checked) => {
+                  setSaveMessage(null);
+                  setSaveError(null);
+                  setDraftTestMode(checked);
+                }}
               />
             </section>
           ) : null}
+          <section className="settings-dialog__actions">
+            {isDirty ? <p className="firebase-message">未保存の変更があります</p> : null}
+            {saveMessage !== null ? <p className="firebase-message firebase-message--success">{saveMessage}</p> : null}
+            {saveError !== null ? <p className="firebase-message firebase-message--error">{saveError}</p> : null}
+            <button
+              className="load-form__button"
+              disabled={!isDirty || hasValidationError}
+              type="button"
+              onClick={() => void handleSave()}
+            >
+              保存
+            </button>
+            <button className="load-form__button load-form__button--secondary" type="button" onClick={onClose}>
+              キャンセル
+            </button>
+          </section>
         </div>
       </section>
     </div>
+  );
+}
+
+function isSameEditableAlertThresholds(
+  left: EditableGuildBattleAlertThresholds,
+  right: EditableGuildBattleAlertThresholds
+): boolean {
+  return (
+    left.warningDefenseCount === right.warningDefenseCount &&
+    left.dangerDefenseCount === right.dangerDefenseCount &&
+    left.criticalDefenseCount === right.criticalDefenseCount
   );
 }
 
