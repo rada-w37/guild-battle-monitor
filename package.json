@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:hosting": "vite --base /",
     "build": "tsc -b && vite build",
+    "build:hosting": "vite build --base /",
+    "preview:hosting": "vite preview --base /",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run"
   },

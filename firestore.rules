@@ -20,6 +20,16 @@ service cloud.firestore {
       match /notificationRules/{ruleId} {
         allow read, write: if isOwner(uid);
       }
+
+      match /guild/{documentId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    match /guildShares/{guildId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if false;
     }
   }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { getAppModePermissions, useAppRoute, type AppMode, type AppModePermissions } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
 import { BattleMonitorCastleList, BattleMonitorGuildSelect } from "../battleMonitor/components";
 import {
@@ -46,7 +47,8 @@ import type { TestModeGvgRealtimeClient } from "./testModeRealtimeClient";
 import type {
   GuildBattleAlertThresholds,
   GuildBattleCastleListSortMode,
-  GuildBattleGuildCandidateViewModel
+  GuildBattleGuildCandidateViewModel,
+  OwnedGuildProfile
 } from "./types";
 import {
   loadBattleMonitorViewSettings,
@@ -93,7 +95,27 @@ interface GuildBattlePlaceholderProps {
   readonly loadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
   readonly headerActions?: ReactNode;
+  readonly modeOverride?: AppMode;
   readonly notificationSettings?: ReactNode;
+  readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
+  readonly permissionsOverride?: Partial<AppModePermissions>;
+  readonly sharedGuild?: SharedGuildContext | null;
+  readonly shareSettings?: ReactNode;
+}
+
+export interface SharedGuildContext {
+  readonly mode: "admin" | "guest";
+  readonly guildId: string;
+  readonly world: number;
+  readonly guildName: string;
+}
+
+export interface OwnedGuildProfilePersistence {
+  readonly error?: string | null;
+  readonly isLoading: boolean;
+  readonly isSignedIn: boolean;
+  readonly profile: OwnedGuildProfile | null;
+  readonly onChange: (profile: OwnedGuildProfile) => void;
 }
 
 interface GuildBattleRuntimeService {
@@ -109,11 +131,27 @@ export function GuildBattlePlaceholder({
   loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
   createRealtimeClient = () => new BrowserGvgRealtimeClient(),
   headerActions,
-  notificationSettings
+  modeOverride,
+  notificationSettings,
+  ownedGuildProfilePersistence,
+  permissionsOverride,
+  sharedGuild,
+  shareSettings
 }: GuildBattlePlaceholderProps) {
+  const appRoute = useAppRoute();
+  const appMode = modeOverride ?? sharedGuild?.mode ?? appRoute?.mode ?? "owner";
+  const modePermissions = { ...getAppModePermissions(appMode), ...permissionsOverride };
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
-  const [shared, setShared] = useState<BattleMonitorSharedState>(initialViewSettings.shared);
+  const [shared, setShared] = useState<BattleMonitorSharedState>(() =>
+    sharedGuild === undefined || sharedGuild === null
+      ? initialViewSettings.shared
+      : {
+          ...initialViewSettings.shared,
+          worldInput: String(sharedGuild.world),
+          worldNumber: sharedGuild.world
+        }
+  );
   const [grandBattleDraftSource, setGrandBattleDraftSource] = useState<GrandBattleSource>(() =>
     createInitialGrandBattleSource(initialViewSettings.shared)
   );
@@ -135,6 +173,13 @@ export function GuildBattlePlaceholder({
   });
   const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
+  const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
+  const [selectedOwnedGuildId, setSelectedOwnedGuildId] = useState<GvgGuildId | "">("");
+  const [selectedOwnedGuildName, setSelectedOwnedGuildName] = useState<string | null>(null);
+  const [ownedGuildCandidateLoadState, setOwnedGuildCandidateLoadState] = useState<
+    AsyncLoadState<readonly GuildBattleGuildCandidateViewModel[]>
+  >({ status: "idle" });
+  const [ownedGuildCandidates, setOwnedGuildCandidates] = useState<readonly GuildBattleGuildCandidateViewModel[]>([]);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -148,6 +193,7 @@ export function GuildBattlePlaceholder({
   const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
   const grandBattleRuntimeRef = useRef<GrandBattleRealtimeSnapshotRuntime | null>(null);
   const removeGrandBattleRealtimeListenerRef = useRef<(() => void) | null>(null);
+  const ownedGuildCandidateRequestSeqRef = useRef(0);
   const grandBattleParticipantRequestSeqRef = useRef(0);
   const grandBattleSnapshotRequestSeqRef = useRef(0);
 
@@ -185,7 +231,38 @@ export function GuildBattlePlaceholder({
     };
   }, []);
 
-  async function loadSnapshotForWorldId(nextWorldId: GvgWorldId) {
+  useEffect(() => {
+    if (ownedGuildProfilePersistence === undefined || ownedGuildProfilePersistence.isLoading) {
+      return;
+    }
+
+    const profile = ownedGuildProfilePersistence.profile;
+    setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
+    setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
+    setSelectedOwnedGuildName(profile?.guildName ?? null);
+    void loadOwnedGuildCandidatesForWorld(profile?.world ?? null);
+  }, [ownedGuildProfilePersistence?.isLoading, ownedGuildProfilePersistence?.profile]);
+
+  useEffect(() => {
+    if (sharedGuild === undefined || sharedGuild === null) {
+      return;
+    }
+
+    const nextShared = {
+      ...shared,
+      worldInput: String(sharedGuild.world),
+      worldNumber: sharedGuild.world
+    };
+    setShared(nextShared);
+    void loadSnapshotForWorldId(createWorldIdFromWorldNumber(sharedGuild.world) as GvgWorldId, {
+      startRealtimeOnSuccess: false
+    });
+  }, [sharedGuild]);
+
+  async function loadSnapshotForWorldId(
+    nextWorldId: GvgWorldId,
+    options: { readonly startRealtimeOnSuccess: boolean } = { startRealtimeOnSuccess: true }
+  ) {
     stopRealtime("snapshot reload", { nextState: "idle" });
     setLoadState({ status: "loading" });
 
@@ -193,7 +270,7 @@ export function GuildBattlePlaceholder({
       const snapshot = await runtimeService.loadSnapshot(nextWorldId);
       setLoadState({ status: "success", data: snapshot });
 
-      if (isAutoUpdateEnabled) {
+      if (options.startRealtimeOnSuccess && isAutoUpdateEnabled) {
         await startRealtime(snapshot);
       }
     } catch (error) {
@@ -220,6 +297,10 @@ export function GuildBattlePlaceholder({
   }
 
   async function handleAutoUpdateToggle() {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     const nextEnabled = !isAutoUpdateEnabled;
     const nextShared = {
       ...shared,
@@ -315,6 +396,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleAlertThresholdChange(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
+    if (!modePermissions.canEditAlertSettings) {
+      return false;
+    }
+
     const validation = validateGuildBattleAlertThresholds(nextThresholds);
 
     if (!validation.valid) {
@@ -324,18 +409,34 @@ export function GuildBattlePlaceholder({
 
     setAlertThresholdError(null);
     setEditableAlertThresholds(validation.thresholds);
-    saveGuildBattleAlertThresholds(validation.thresholds);
+    if (modePermissions.canPersistViewSettings) {
+      saveGuildBattleAlertThresholds(validation.thresholds);
+    }
     return true;
   }
 
   function handleAlertThresholdReset() {
+    if (!modePermissions.canEditAlertSettings) {
+      return;
+    }
+
     const defaultThresholds = getDefaultEditableGuildBattleAlertThresholds();
     setAlertThresholdError(null);
     setEditableAlertThresholds(defaultThresholds);
-    saveGuildBattleAlertThresholds(defaultThresholds);
+    if (modePermissions.canPersistViewSettings) {
+      saveGuildBattleAlertThresholds(defaultThresholds);
+    }
   }
 
   function handleWorldChange(nextWorld: string) {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
+    if (sharedGuild !== undefined && sharedGuild !== null) {
+      return;
+    }
+
     const nextShared = {
       ...shared,
       worldInput: nextWorld,
@@ -346,6 +447,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGrandBattleWorldInputChange(nextWorld: string) {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     setGrandBattleDraftSource((currentSource) => ({
       ...currentSource,
       worldInput: nextWorld,
@@ -354,6 +459,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGrandBattleWorldCommit() {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     const nextWorldNumber = createWorldNumberFromWorldInput(grandBattleDraftSource.worldInput);
     const nextDraftSource = {
       ...grandBattleDraftSource,
@@ -553,11 +662,75 @@ export function GuildBattlePlaceholder({
   }
 
   function handleGuildChange(nextGuildId: string) {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     setSelectedGuildId(nextGuildId);
     saveViewSettings({ selectedGuildId: nextGuildId });
   }
 
+  async function loadOwnedGuildCandidatesForWorld(profileWorld: number | null) {
+    const nextGvgWorldId = createWorldIdFromWorldNumber(profileWorld);
+    const requestSeq = ownedGuildCandidateRequestSeqRef.current + 1;
+    ownedGuildCandidateRequestSeqRef.current = requestSeq;
+
+    if (nextGvgWorldId === null) {
+      setOwnedGuildCandidates([]);
+      setOwnedGuildCandidateLoadState({ status: "idle" });
+      return;
+    }
+
+    setOwnedGuildCandidateLoadState({ status: "loading" });
+
+    try {
+      const snapshot = await runtimeService.loadSnapshot(nextGvgWorldId);
+      const candidates = createGuildBattleGuildCandidates(snapshot);
+
+      if (ownedGuildCandidateRequestSeqRef.current === requestSeq) {
+        setOwnedGuildCandidates(candidates);
+        setOwnedGuildCandidateLoadState({ status: "success", data: candidates });
+      }
+    } catch (error) {
+      if (ownedGuildCandidateRequestSeqRef.current === requestSeq) {
+        setOwnedGuildCandidates([]);
+        setOwnedGuildCandidateLoadState({
+          status: "error",
+          error: error instanceof Error ? error : new Error("owned guild candidates load failed")
+        });
+      }
+    }
+  }
+
+  function handleOwnedGuildWorldChange(nextWorldId: string) {
+    const nextWorldNumber = createWorldNumberFromWorldInput(nextWorldId);
+    setSelectedOwnedGuildWorldId(nextWorldId);
+    setSelectedOwnedGuildId("");
+    setSelectedOwnedGuildName(null);
+    ownedGuildProfilePersistence?.onChange({
+      world: nextWorldNumber,
+      guildId: null,
+      guildName: null
+    });
+    void loadOwnedGuildCandidatesForWorld(nextWorldNumber);
+  }
+
+  function handleOwnedGuildChange(nextGuildId: GvgGuildId | "") {
+    const nextGuildName = ownedGuildCandidates.find((candidate) => candidate.guildId === nextGuildId)?.guildName ?? null;
+    setSelectedOwnedGuildId(nextGuildId);
+    setSelectedOwnedGuildName(nextGuildName);
+    ownedGuildProfilePersistence?.onChange({
+      world: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
+      guildId: nextGuildId || null,
+      guildName: nextGuildName
+    });
+  }
+
   function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
+    if (!modePermissions.canEditViewSettings) {
+      return;
+    }
+
     const nextShared = {
       ...shared,
       sortMode: nextSortMode
@@ -570,6 +743,10 @@ export function GuildBattlePlaceholder({
     readonly shared?: BattleMonitorSharedState;
     readonly selectedGuildId?: string;
   }) {
+    if (!modePermissions.canPersistViewSettings) {
+      return;
+    }
+
     saveBattleMonitorViewSettings({
       shared: settings.shared ?? shared,
       guildBattle: {
@@ -579,6 +756,10 @@ export function GuildBattlePlaceholder({
   }
 
   function handleModeChange(nextMode: BattleMonitorMode) {
+    if (!modePermissions.canEditBattleState) {
+      return;
+    }
+
     if (activeMode === nextMode) {
       return;
     }
@@ -661,6 +842,7 @@ export function GuildBattlePlaceholder({
         <div className="mode-tabs" aria-label="Battle Monitor mode">
           <button
             className={`mode-tabs__button${activeMode === "guildBattle" ? " mode-tabs__button--active" : ""}`}
+            disabled={!modePermissions.canEditBattleState}
             type="button"
             aria-pressed={activeMode === "guildBattle"}
             onClick={() => handleModeChange("guildBattle")}
@@ -669,6 +851,7 @@ export function GuildBattlePlaceholder({
           </button>
           <button
             className={`mode-tabs__button${activeMode === "grandBattle" ? " mode-tabs__button--active" : ""}`}
+            disabled={!modePermissions.canEditBattleState}
             type="button"
             aria-pressed={activeMode === "grandBattle"}
             onClick={() => handleModeChange("grandBattle")}
@@ -680,12 +863,37 @@ export function GuildBattlePlaceholder({
         {isSettingsDialogOpen ? (
           <SettingsDialog
             alertThresholdError={alertThresholdError}
+            canEditAlertSettings={modePermissions.canEditAlertSettings}
+            canEditBattleState={modePermissions.canEditBattleState}
+            canEditViewSettings={modePermissions.canEditViewSettings}
             castleSortMode={castleSortMode}
             editableAlertThresholds={editableAlertThresholds}
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
-            notificationSettings={notificationSettings}
+            notificationSettings={modePermissions.canManageNotifications ? notificationSettings : undefined}
+            ownedGuildSettings={
+              modePermissions.canManageGuildProfile ? (
+                <OwnedGuildSettings
+                  guildCandidates={ownedGuildCandidates}
+                  error={ownedGuildProfilePersistence?.error ?? null}
+                  isLoading={
+                    (ownedGuildProfilePersistence?.isLoading ?? false) ||
+                    ownedGuildCandidateLoadState.status === "loading"
+                  }
+                  selectedGuildId={selectedOwnedGuildId}
+                  selectedGuildName={selectedOwnedGuildName}
+                  selectedWorldId={selectedOwnedGuildWorldId}
+                  shareSettings={modePermissions.canManageShareUrls ? shareSettings : undefined}
+                  showSignInMessage={
+                    ownedGuildProfilePersistence !== undefined && !ownedGuildProfilePersistence.isSignedIn
+                  }
+                  onGuildChange={handleOwnedGuildChange}
+                  onWorldChange={handleOwnedGuildWorldChange}
+                />
+              ) : undefined
+            }
+            showAlertSettings={modePermissions.showAlertSettings}
             showGuildBattleOnlySettings={activeMode === "guildBattle"}
             onAlertThresholdChange={handleAlertThresholdChange}
             onAlertThresholdReset={handleAlertThresholdReset}
@@ -698,37 +906,40 @@ export function GuildBattlePlaceholder({
 
         {activeMode === "guildBattle" ? (
           <>
-        <form
-          className="startup-panel"
-          aria-label="起動"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleRefresh();
-          }}
-        >
-          <label className="field">
-            <span className="field__label">world</span>
-            <input
-              className="field__input field__input--world"
-              type="text"
-              value={world}
-              onChange={(event) => handleWorldChange(event.target.value)}
-              disabled={isLoading}
-              inputMode="numeric"
-            />
-          </label>
-          <button className="load-form__button" type="submit" disabled={isLoading || world.trim().length === 0}>
-            更新
-          </button>
-        </form>
+        {sharedGuild === undefined || sharedGuild === null ? (
+          <form
+            className="startup-panel"
+            aria-label="起動"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleRefresh();
+            }}
+          >
+            <label className="field">
+              <span className="field__label">world</span>
+              <input
+                className="field__input field__input--world"
+                type="text"
+                value={world}
+                onChange={(event) => handleWorldChange(event.target.value)}
+                disabled={isLoading}
+                inputMode="numeric"
+              />
+            </label>
+            <button className="load-form__button" type="submit" disabled={isLoading || world.trim().length === 0}>
+              更新
+            </button>
+          </form>
+        ) : null}
 
         <SnapshotStatus
           alertThresholds={alertThresholds}
+          canEdit={modePermissions.canEditViewSettings}
           castleSortMode={castleSortMode}
           guildCandidates={guildCandidates}
           guildSelectValue={guildSelectValue}
           isAutoUpdateEnabled={isAutoUpdateEnabled}
-          isTestModeEnabled={IS_DEV && isTestModeEnabled}
+          isTestModeEnabled={modePermissions.canEditBattleState && IS_DEV && isTestModeEnabled}
           loadState={loadState}
           realtimeState={realtimeState}
           selectedGuildId={guildSelectValue}
@@ -1155,12 +1366,17 @@ function TestModeSettings({
 
 function SettingsDialog({
   alertThresholdError,
+  canEditAlertSettings,
+  canEditBattleState,
+  canEditViewSettings,
   castleSortMode,
   editableAlertThresholds,
   isAutoUpdateEnabled,
   isRealtimeActive,
   isTestModeEnabled,
   notificationSettings,
+  ownedGuildSettings,
+  showAlertSettings,
   showGuildBattleOnlySettings,
   onAlertThresholdChange,
   onAlertThresholdReset,
@@ -1170,12 +1386,17 @@ function SettingsDialog({
   onTestModeChange
 }: {
   readonly alertThresholdError: string | null;
+  readonly canEditAlertSettings: boolean;
+  readonly canEditBattleState: boolean;
+  readonly canEditViewSettings: boolean;
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly editableAlertThresholds: EditableGuildBattleAlertThresholds;
   readonly isAutoUpdateEnabled: boolean;
   readonly isRealtimeActive: boolean;
   readonly isTestModeEnabled: boolean;
   readonly notificationSettings?: ReactNode;
+  readonly ownedGuildSettings?: ReactNode;
+  readonly showAlertSettings: boolean;
   readonly showGuildBattleOnlySettings: boolean;
   readonly onAlertThresholdChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
   readonly onAlertThresholdReset: () => void;
@@ -1200,12 +1421,15 @@ function SettingsDialog({
           </button>
         </div>
         <div className="settings-dialog__body">
-          <AlertThresholdSettings
-            error={alertThresholdError}
-            thresholds={editableAlertThresholds}
-            onChange={onAlertThresholdChange}
-            onReset={onAlertThresholdReset}
-          />
+          {showAlertSettings ? (
+            <AlertThresholdSettings
+              canEdit={canEditAlertSettings}
+              error={alertThresholdError}
+              thresholds={editableAlertThresholds}
+              onChange={onAlertThresholdChange}
+              onReset={onAlertThresholdReset}
+            />
+          ) : null}
           {showGuildBattleOnlySettings ? (
           <section className="settings-section">
             <h3>並び順</h3>
@@ -1213,6 +1437,7 @@ function SettingsDialog({
               <input
                 type="checkbox"
                 checked={castleSortMode === "alertLevel"}
+                disabled={!canEditViewSettings}
                 onChange={(event) => onSortModeChange(event.target.checked ? "alertLevel" : "castleId")}
               />
               <span>危険度順で表示</span>
@@ -1224,6 +1449,7 @@ function SettingsDialog({
             <div className="auto-update-setting">
               <button
                 className={`auto-update-toggle ${isAutoUpdateEnabled ? "auto-update-toggle--on" : "auto-update-toggle--off"}`}
+                disabled={!canEditViewSettings}
                 type="button"
                 onClick={onAutoUpdateToggle}
               >
@@ -1231,17 +1457,23 @@ function SettingsDialog({
               </button>
             </div>
           </section>
+          {ownedGuildSettings !== undefined ? (
+            <details className="settings-section owned-guild-settings">
+              <summary>所属ギルド設定</summary>
+              {ownedGuildSettings}
+            </details>
+          ) : null}
           {notificationSettings !== undefined ? (
             <details className="settings-section notification-settings">
               <summary>通知設定</summary>
               {notificationSettings}
             </details>
           ) : null}
-          {IS_DEV && showGuildBattleOnlySettings ? (
+          {IS_DEV && showGuildBattleOnlySettings && canEditBattleState ? (
             <section className="settings-section">
               <TestModeSettings
                 checked={isTestModeEnabled}
-                disabled={isRealtimeActive}
+                disabled={!canEditBattleState || isRealtimeActive}
                 onChange={onTestModeChange}
               />
             </section>
@@ -1252,12 +1484,75 @@ function SettingsDialog({
   );
 }
 
+function OwnedGuildSettings({
+  error,
+  guildCandidates,
+  isLoading,
+  selectedGuildId,
+  selectedGuildName,
+  selectedWorldId,
+  shareSettings,
+  showSignInMessage,
+  onGuildChange,
+  onWorldChange
+}: {
+  readonly error: string | null;
+  readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
+  readonly isLoading: boolean;
+  readonly selectedGuildId: GvgGuildId | "";
+  readonly selectedGuildName: string | null;
+  readonly selectedWorldId: string;
+  readonly shareSettings?: ReactNode;
+  readonly showSignInMessage: boolean;
+  readonly onGuildChange: (guildId: GvgGuildId | "") => void;
+  readonly onWorldChange: (worldId: string) => void;
+}) {
+  return (
+    <div className="owned-guild-settings__fields">
+      <label className="field">
+        <span className="field__label">ワールド</span>
+        <input
+          className="field__input"
+          disabled={isLoading}
+          inputMode="numeric"
+          value={selectedWorldId}
+          onChange={(event) => onWorldChange(event.target.value)}
+        />
+      </label>
+      <label className="field">
+        <span className="field__label">所属ギルド</span>
+        <select
+          className="field__input field__input--wide"
+          disabled={isLoading}
+          value={selectedGuildId}
+          onChange={(event) => onGuildChange(event.target.value as GvgGuildId | "")}
+        >
+          <option value="">所属ギルドを選択してください</option>
+          {selectedGuildId !== "" && !guildCandidates.some((candidate) => candidate.guildId === selectedGuildId) ? (
+            <option value={selectedGuildId}>{selectedGuildName ?? selectedGuildId}</option>
+          ) : null}
+          {guildCandidates.map((candidate) => (
+            <option key={candidate.guildId} value={candidate.guildId}>
+              {candidate.guildName}
+            </option>
+          ))}
+        </select>
+      </label>
+      {shareSettings !== undefined ? <div className="owned-guild-settings__share">{shareSettings}</div> : null}
+      {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
+      {showSignInMessage ? <p className="firebase-message">ログインすると保存されます</p> : null}
+    </div>
+  );
+}
+
 function AlertThresholdSettings({
+  canEdit,
   error,
   thresholds,
   onChange,
   onReset
 }: {
+  readonly canEdit: boolean;
   readonly error: string | null;
   readonly thresholds: EditableGuildBattleAlertThresholds;
   readonly onChange: (thresholds: EditableGuildBattleAlertThresholds) => boolean;
@@ -1269,21 +1564,29 @@ function AlertThresholdSettings({
       <p className="alert-settings__help">防衛数が設定値未満になると色が変わります。</p>
       <div className="alert-settings__fields">
         <ThresholdInput
+          disabled={!canEdit}
           label="注意"
           value={thresholds.warningDefenseCount}
           onCommit={(warningDefenseCount) => onChange({ ...thresholds, warningDefenseCount })}
         />
         <ThresholdInput
+          disabled={!canEdit}
           label="危険"
           value={thresholds.dangerDefenseCount}
           onCommit={(dangerDefenseCount) => onChange({ ...thresholds, dangerDefenseCount })}
         />
         <ThresholdInput
+          disabled={!canEdit}
           label="最優先"
           value={thresholds.criticalDefenseCount}
           onCommit={(criticalDefenseCount) => onChange({ ...thresholds, criticalDefenseCount })}
         />
-        <button className="load-form__button load-form__button--secondary" type="button" onClick={onReset}>
+        <button
+          className="load-form__button load-form__button--secondary"
+          disabled={!canEdit}
+          type="button"
+          onClick={onReset}
+        >
           デフォルト
         </button>
       </div>
@@ -1297,10 +1600,12 @@ function AlertThresholdSettings({
 }
 
 function ThresholdInput({
+  disabled,
   label,
   value,
   onCommit
 }: {
+  readonly disabled: boolean;
   readonly label: string;
   readonly value: number;
   readonly onCommit: (value: number) => boolean;
@@ -1334,6 +1639,7 @@ function ThresholdInput({
       <span className="threshold-field__control">
         <input
           className="field__input field__input--narrow"
+          disabled={disabled}
           min="0"
           type="number"
           value={draftValue}
@@ -1357,6 +1663,7 @@ function ThresholdInput({
 
 function SnapshotStatus({
   alertThresholds,
+  canEdit,
   castleSortMode,
   guildCandidates,
   guildSelectValue,
@@ -1373,6 +1680,7 @@ function SnapshotStatus({
   onTestModeRevive
 }: {
   readonly alertThresholds: GuildBattleAlertThresholds;
+  readonly canEdit: boolean;
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
   readonly guildSelectValue: string;
@@ -1411,6 +1719,7 @@ function SnapshotStatus({
   return (
     <SnapshotSummary
       alertThresholds={alertThresholds}
+      canEdit={canEdit}
       castleSortMode={castleSortMode}
       guildCandidates={guildCandidates}
       guildSelectValue={guildSelectValue}
@@ -1431,6 +1740,7 @@ function SnapshotStatus({
 
 function SnapshotSummary({
   alertThresholds,
+  canEdit,
   castleSortMode,
   guildCandidates,
   guildSelectValue,
@@ -1447,6 +1757,7 @@ function SnapshotSummary({
   onTestModeRevive
 }: {
   readonly alertThresholds: GuildBattleAlertThresholds;
+  readonly canEdit: boolean;
   readonly castleSortMode: GuildBattleCastleListSortMode;
   readonly guildCandidates: readonly GuildBattleGuildCandidateViewModel[];
   readonly guildSelectValue: string;
@@ -1491,7 +1802,7 @@ function SnapshotSummary({
       </div>
       <BattleMonitorGuildSelect
         candidates={guildCandidates}
-        disabled={false}
+        disabled={!canEdit}
         value={guildSelectValue}
         onChange={onGuildChange}
       />

@@ -162,6 +162,41 @@ select {
   font-weight: 700;
 }
 
+.owned-guild-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.owned-guild-settings__fields {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.share-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.share-settings__urls,
+.share-settings__url {
+  display: grid;
+  gap: 8px;
+}
+
+.share-settings__urls {
+  padding-top: 4px;
+}
+
+.share-settings__url-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-settings__url-row .field__input {
+  min-width: 0;
+}
+
 .notification-destination__toggle {
   display: flex;
   gap: 8px;

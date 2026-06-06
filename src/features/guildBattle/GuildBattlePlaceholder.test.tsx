@@ -2,6 +2,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AppModeProvider } from "../../app/appMode";
 import type {
   loadGrandBattleParticipantGuilds,
   loadGrandBattleSnapshot
@@ -13,7 +14,11 @@ import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
 import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY } from "./alertThresholdStorage";
-import { GuildBattlePlaceholder } from "./GuildBattlePlaceholder";
+import {
+  GuildBattlePlaceholder,
+  type OwnedGuildProfilePersistence,
+  type SharedGuildContext
+} from "./GuildBattlePlaceholder";
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "./viewSettingsStorage";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -712,10 +717,240 @@ describe("GuildBattlePlaceholder", () => {
     await clickSettingsButton();
 
     const notificationSettings = getSettingsDialog().querySelector<HTMLDetailsElement>(".notification-settings");
+    const ownedGuildSettings = notificationSettings?.previousElementSibling;
     expect(notificationSettings?.open).toBe(false);
     expect(notificationSettings?.querySelector("[data-testid='notification-slot']")).not.toBeNull();
-    expect(notificationSettings?.previousElementSibling?.querySelector(".auto-update-toggle")).not.toBeNull();
+    expect(ownedGuildSettings?.classList.contains("owned-guild-settings")).toBe(true);
+    expect(ownedGuildSettings?.previousElementSibling?.querySelector(".auto-update-toggle")).not.toBeNull();
     expect(notificationSettings?.nextElementSibling?.querySelector(".test-mode-settings")).not.toBeNull();
+  });
+
+  it("renders owned guild settings for owner mode collapsed by default", async () => {
+    renderComponent();
+
+    await clickSettingsButton();
+
+    expect(getOwnedGuildSettings().open).toBe(false);
+  });
+
+  it.each(["/123/a_abc", "/123/g_abc"])("hides owned guild settings for shared route %s", async (pathname) => {
+    renderComponent(undefined, undefined, undefined, undefined, undefined, pathname);
+
+    await clickSettingsButton();
+
+    expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
+  });
+
+  it("holds owned guild selection and resets it when world changes", async () => {
+    renderComponent();
+    await loadWorld37();
+    await clickSettingsButton();
+
+    const ownedGuildSettings = getOwnedGuildSettings();
+    const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
+    const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
+
+    if (!worldInput || !guildSelect) {
+      throw new Error("owned guild settings fields were not found");
+    }
+
+    await act(async () => {
+      updateInput(worldInput, "37");
+      await flushPromises();
+    });
+
+    act(() => {
+      updateSelect(guildSelect, ownGuildId);
+    });
+    expect(guildSelect.value).toBe(ownGuildId);
+
+    await act(async () => {
+      updateInput(worldInput, "38");
+      await flushPromises();
+    });
+    expect(guildSelect.value).toBe("");
+  });
+
+  it("keeps admin controls editable with the shared guild world fixed", async () => {
+    window.localStorage.setItem(
+      GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        world: "38",
+        selectedGuildId: otherGuildId,
+        sortByAlert: false,
+        autoUpdate: true
+      })
+    );
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      <div>notification</div>,
+      `/${ownGuildId}/a_admin`,
+      undefined,
+      createSharedGuild("admin")
+    );
+    await flushPromises();
+    await flushPromises();
+    await clickSettingsButton();
+
+    expect(document.querySelector(".startup-panel")).toBeNull();
+    expect(getModeButton("Grand Battle").disabled).toBe(false);
+    expect(getDangerSortCheckbox().disabled).toBe(false);
+    expect(getAutoUpdateButton().disabled).toBe(false);
+    expect(getSettingsDialog().querySelector(".alert-settings")).not.toBeNull();
+    expect(getSettingsDialog().querySelector(".notification-settings")).not.toBeNull();
+    expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".share-settings")).toBeNull();
+    expect(getGuildSelect().value).toBe(otherGuildId);
+    expect(getGuildSelect().disabled).toBe(false);
+
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
+    expect(getGuildSelect().value).toBe(ownGuildId);
+  });
+
+  it("keeps guest battle state read-only while allowing personal settings", async () => {
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      <div>notification</div>,
+      `/${ownGuildId}/g_guest`,
+      undefined,
+      createSharedGuild("guest")
+    );
+    await flushPromises();
+    await flushPromises();
+    await clickSettingsButton();
+
+    expect(document.querySelector(".startup-panel")).toBeNull();
+    expect(getModeButton("Guild Battle").disabled).toBe(true);
+    expect(getModeButton("Grand Battle").disabled).toBe(true);
+    expect(getGuildSelect().disabled).toBe(false);
+    expect(getSettingsDialog().querySelector(".alert-settings")).not.toBeNull();
+    expect(getThresholdInputs().every((input) => !input.disabled)).toBe(true);
+    expect(getDangerSortCheckbox().disabled).toBe(false);
+    expect(getAutoUpdateButton().disabled).toBe(false);
+    expect(getSettingsDialog().querySelector(".notification-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".share-settings")).toBeNull();
+    expect(getSettingsDialog().querySelector(".test-mode-settings")).toBeNull();
+
+    await clickDangerSortCheckbox();
+    expect(getDangerSortCheckbox().checked).toBe(true);
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+
+    const initialAutoUpdate = getAutoUpdateButton().textContent === "ON";
+    await clickAutoUpdateButton();
+    expect(getAutoUpdateButton().textContent === "ON").toBe(!initialAutoUpdate);
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+
+    act(() => {
+      updateInput(getThresholdInputs()[0], "40");
+    });
+    await commitThresholdInputWithKey(0, "Enter");
+    expect(getThresholdInputs()[0].value).toBe("40");
+    expect(window.localStorage.getItem(GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY)).toBeNull();
+
+    await act(async () => {
+      updateSelect(getGuildSelect(), ownGuildId);
+    });
+    expect(getGuildSelect().value).toBe(ownGuildId);
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+  });
+
+  it("reports the selected owned guild id and name for persistence", async () => {
+    const onChange = vi.fn();
+    const persistence = {
+      isLoading: false,
+      isSignedIn: true,
+      profile: null,
+      onChange
+    } satisfies OwnedGuildProfilePersistence;
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/", persistence);
+    await loadWorld37();
+    await clickSettingsButton();
+
+    const ownedGuildSettings = getOwnedGuildSettings();
+    const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
+    const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
+
+    if (!worldInput || !guildSelect) {
+      throw new Error("owned guild settings fields were not found");
+    }
+
+    await act(async () => {
+      updateInput(worldInput, "37");
+      await flushPromises();
+    });
+    const displayGuildSelect = getGuildSelect();
+    onChange.mockClear();
+    act(() => {
+      updateSelect(guildSelect, ownGuildId);
+    });
+
+    expect(getWorldInput().value).toBe("37");
+    expect(displayGuildSelect.value).toBe("");
+    expect(onChange).toHaveBeenCalledWith({
+      world: 37,
+      guildId: ownGuildId,
+      guildName: "Owner Guild"
+    });
+  });
+
+  it("loads guild candidates from the owned guild world setting and saves the selected guild", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    const onChange = vi.fn();
+    const persistence = {
+      isLoading: false,
+      isSignedIn: true,
+      profile: null,
+      onChange
+    } satisfies OwnedGuildProfilePersistence;
+    renderComponent(loadSnapshot, undefined, undefined, undefined, undefined, "/", persistence);
+    await clickSettingsButton();
+
+    const ownedGuildSettings = getOwnedGuildSettings();
+    const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
+    const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
+    const monitorWorldInput = getWorldInput();
+
+    if (!worldInput || !guildSelect) {
+      throw new Error("owned guild settings fields were not found");
+    }
+
+    expect(monitorWorldInput.value).toBe("");
+
+    await act(async () => {
+      updateInput(worldInput, "37");
+      await flushPromises();
+    });
+
+    expect(loadSnapshot).toHaveBeenCalledWith("1037");
+    expect(monitorWorldInput.value).toBe("");
+    expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
+    expect(Array.from(guildSelect.options).map((option) => option.textContent ?? "")).toContain("Owner Guild");
+    expect(onChange).toHaveBeenLastCalledWith({
+      world: 37,
+      guildId: null,
+      guildName: null
+    });
+
+    onChange.mockClear();
+    await act(async () => {
+      updateSelect(guildSelect, ownGuildId);
+      await flushPromises();
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      world: 37,
+      guildId: ownGuildId,
+      guildName: "Owner Guild"
+    });
   });
 
   it("toggles auto update inside the settings dialog", async () => {
@@ -935,7 +1170,10 @@ function renderComponent(
   loadGrandBattleLatestSnapshot: typeof loadGrandBattleSnapshot = vi.fn(() =>
     Promise.resolve(grandBattleSnapshot)
   ),
-  notificationSettings?: ReactNode
+  notificationSettings?: ReactNode,
+  pathname: string = "/",
+  ownedGuildProfilePersistence?: OwnedGuildProfilePersistence,
+  sharedGuild?: SharedGuildContext | null
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -943,15 +1181,28 @@ function renderComponent(
 
   act(() => {
     root?.render(
-      <GuildBattlePlaceholder
-        loadSnapshot={loadSnapshot}
-        loadGrandBattleParticipants={loadGrandBattleParticipants}
-        loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
-        createRealtimeClient={createRealtimeClient}
-        notificationSettings={notificationSettings}
-      />
+      <AppModeProvider pathname={pathname}>
+        <GuildBattlePlaceholder
+          loadSnapshot={loadSnapshot}
+          loadGrandBattleParticipants={loadGrandBattleParticipants}
+          loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
+          createRealtimeClient={createRealtimeClient}
+          notificationSettings={notificationSettings}
+          ownedGuildProfilePersistence={ownedGuildProfilePersistence}
+          sharedGuild={sharedGuild}
+        />
+      </AppModeProvider>
     );
   });
+}
+
+function createSharedGuild(mode: "admin" | "guest"): SharedGuildContext {
+  return {
+    mode,
+    guildId: ownGuildId,
+    world: 37,
+    guildName: "Owner Guild"
+  };
 }
 
 async function loadWorld37() {
@@ -1083,6 +1334,21 @@ async function clickButton(label: string) {
   });
 }
 
+async function clickAutoUpdateButton() {
+  await act(async () => {
+    getAutoUpdateButton().click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function clickDangerSortCheckbox() {
+  await act(async () => {
+    getDangerSortCheckbox().click();
+    await Promise.resolve();
+  });
+}
+
 async function flushPromises() {
   await act(async () => {
     await Promise.resolve();
@@ -1131,6 +1397,16 @@ function getSettingsDialog() {
   }
 
   return dialog;
+}
+
+function getOwnedGuildSettings() {
+  const settings = getSettingsDialog().querySelector<HTMLDetailsElement>(".owned-guild-settings");
+
+  if (!settings) {
+    throw new Error("owned guild settings were not found");
+  }
+
+  return settings;
 }
 
 function getGuildSelect() {
