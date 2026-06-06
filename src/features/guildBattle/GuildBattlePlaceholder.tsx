@@ -124,6 +124,7 @@ export interface OwnedGuildProfilePersistence {
   readonly isSignedIn: boolean;
   readonly profile: OwnedGuildProfile | null;
   readonly onChange: (profile: OwnedGuildProfile) => void;
+  readonly onSave?: (profile: OwnedGuildProfile) => Promise<boolean>;
 }
 
 interface GuildBattleRuntimeService {
@@ -703,11 +704,6 @@ export function GuildBattlePlaceholder({
     setSelectedOwnedGuildWorldId(nextWorldId);
     setSelectedOwnedGuildId("");
     setSelectedOwnedGuildName(null);
-    ownedGuildProfilePersistence?.onChange({
-      world: nextWorldNumber,
-      guildId: null,
-      guildName: null
-    });
     void loadOwnedGuildCandidatesForWorld(nextWorldNumber);
   }
 
@@ -715,11 +711,6 @@ export function GuildBattlePlaceholder({
     const nextGuildName = ownedGuildCandidates.find((candidate) => candidate.guildId === nextGuildId)?.guildName ?? null;
     setSelectedOwnedGuildId(nextGuildId);
     setSelectedOwnedGuildName(nextGuildName);
-    ownedGuildProfilePersistence?.onChange({
-      world: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
-      guildId: nextGuildId || null,
-      guildName: nextGuildName
-    });
   }
 
   function handleSortModeChange(nextSortMode: GuildBattleCastleListSortMode) {
@@ -811,6 +802,34 @@ export function GuildBattlePlaceholder({
     grandBattleCandidateSource !== null &&
     grandBattleParticipantLoadState.status === "success" &&
     !isSameGrandBattleSource(grandBattleCandidateSource, grandBattleAppliedSource);
+  const ownedGuildDraftProfile = {
+    world: createWorldNumberFromWorldInput(selectedOwnedGuildWorldId),
+    guildId: selectedOwnedGuildId || null,
+    guildName: selectedOwnedGuildName
+  };
+  const ownedGuildDraftExternal: SettingsDraftExternal | undefined =
+    modePermissions.canManageGuildProfile && ownedGuildProfilePersistence !== undefined
+      ? {
+          hasValidationError: false,
+          isDirty: !isSameOwnedGuildProfile(ownedGuildDraftProfile, ownedGuildProfilePersistence.profile),
+          onCancel: () => {
+            const profile = ownedGuildProfilePersistence.profile;
+            setSelectedOwnedGuildWorldId(profile?.world === null || profile === null ? "" : String(profile.world));
+            setSelectedOwnedGuildId((profile?.guildId ?? "") as GvgGuildId | "");
+            setSelectedOwnedGuildName(profile?.guildName ?? null);
+            void loadOwnedGuildCandidatesForWorld(profile?.world ?? null);
+          },
+          onSave: () => {
+            if (ownedGuildProfilePersistence.onSave !== undefined) {
+              return ownedGuildProfilePersistence.onSave(ownedGuildDraftProfile);
+            }
+
+            ownedGuildProfilePersistence.onChange(ownedGuildDraftProfile);
+            return Promise.resolve(true);
+          }
+        }
+      : undefined;
+  const combinedSettingsDraftExternal = combineSettingsDraftExternals(settingsDraftExternal, ownedGuildDraftExternal);
 
   return (
     <main className="app-shell" data-mode={activeMode === "guildBattle" ? "guild-battle" : "grand-battle"}>
@@ -867,7 +886,7 @@ export function GuildBattlePlaceholder({
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             isRealtimeActive={activeMode === "guildBattle" ? isRealtimeActive : isGrandBattleRealtimeActive}
             isTestModeEnabled={isTestModeEnabled}
-            settingsDraftExternal={settingsDraftExternal}
+            settingsDraftExternal={combinedSettingsDraftExternal}
             notificationSettings={modePermissions.canManageNotifications ? notificationSettings : undefined}
             ownedGuildSettings={
               modePermissions.canManageGuildProfile ? (
@@ -1592,6 +1611,41 @@ function isSameEditableAlertThresholds(
     left.dangerDefenseCount === right.dangerDefenseCount &&
     left.criticalDefenseCount === right.criticalDefenseCount
   );
+}
+
+function isSameOwnedGuildProfile(left: OwnedGuildProfile, right: OwnedGuildProfile | null): boolean {
+  return (
+    left.world === (right?.world ?? null) &&
+    left.guildId === (right?.guildId ?? null) &&
+    left.guildName === (right?.guildName ?? null)
+  );
+}
+
+function combineSettingsDraftExternals(
+  first: SettingsDraftExternal | undefined,
+  second: SettingsDraftExternal | undefined
+): SettingsDraftExternal | undefined {
+  if (first === undefined) {
+    return second;
+  }
+
+  if (second === undefined) {
+    return first;
+  }
+
+  return {
+    hasValidationError: first.hasValidationError || second.hasValidationError,
+    isDirty: first.isDirty || second.isDirty,
+    onCancel: () => {
+      first.onCancel();
+      second.onCancel();
+    },
+    onSave: async () => {
+      const firstResult = first.isDirty ? await first.onSave() : true;
+      const secondResult = second.isDirty ? await second.onSave() : true;
+      return firstResult && secondResult;
+    }
+  };
 }
 
 function OwnedGuildSettings({

@@ -33,6 +33,7 @@ const SHARE_GENERATION_ERROR_MESSAGE =
 
 interface GuildShareState {
   readonly error: string | null;
+  readonly ensureShare: (profile: OwnedGuildProfile) => Promise<GuildShare | null>;
   readonly isLoading: boolean;
   readonly share: GuildShare | null;
 }
@@ -40,6 +41,7 @@ interface GuildShareState {
 interface PublicGuildShareCacheState {
   readonly error: string | null;
   readonly isSaving: boolean;
+  readonly saveForProfile: (profile: OwnedGuildProfile, share: GuildShare) => Promise<boolean>;
 }
 
 interface FirebasePhase0AppProps {
@@ -93,7 +95,6 @@ export function FirebasePhase0App({
   );
   const guildShare = useGuildShare(
     appMode === "owner" ? notificationSettingsUid : null,
-    appMode === "owner" ? ownedGuildProfilePersistence.profile : null,
     loadShare,
     saveShare
   );
@@ -104,11 +105,47 @@ export function FirebasePhase0App({
     saveDestination
   );
 
-  const publicGuildShareCache = usePublicGuildShareCache(
-    appMode === "owner" ? ownedGuildProfilePersistence.profile : null,
-    appMode === "owner" ? guildShare.share : null,
-    savePublicShare
+  const publicGuildShareCache = usePublicGuildShareCache(savePublicShare);
+  const shareDraftExternal: SettingsDraftExternal | undefined =
+    appMode === "owner" && isCompleteOwnedGuildProfile(ownedGuildProfilePersistence.profile)
+      ? {
+          hasValidationError: false,
+          isDirty: guildShare.share?.guildId !== ownedGuildProfilePersistence.profile.guildId,
+          onCancel: () => {},
+          onSave: async () => {
+            if (!isCompleteOwnedGuildProfile(ownedGuildProfilePersistence.profile)) {
+              return true;
+            }
+
+            const ensuredShare = await guildShare.ensureShare(ownedGuildProfilePersistence.profile);
+            return ensuredShare === null
+              ? false
+              : publicGuildShareCache.saveForProfile(ownedGuildProfilePersistence.profile, ensuredShare);
+          }
+        }
+      : undefined;
+  const settingsDraftExternal = combineSettingsDraftExternals(
+    notificationDestinationDraft.external,
+    shareDraftExternal
   );
+  const ownedGuildProfilePersistenceWithShare = {
+    ...ownedGuildProfilePersistence,
+    onSave: async (profile: OwnedGuildProfile) => {
+      ownedGuildProfilePersistence.onChange(profile);
+
+      if (!isCompleteOwnedGuildProfile(profile)) {
+        return true;
+      }
+
+      const ensuredShare = await guildShare.ensureShare(profile);
+
+      if (ensuredShare === null) {
+        return false;
+      }
+
+      return publicGuildShareCache.saveForProfile(profile, ensuredShare);
+    }
+  } satisfies OwnedGuildProfilePersistence;
 
   useEffect(() => subscribeAuthState(setAuthState), [subscribeAuthState]);
 
@@ -147,7 +184,7 @@ export function FirebasePhase0App({
       loadSnapshot={loadSnapshot}
       modeOverride={sharedGuild.status === "fallback" ? "guest" : undefined}
       permissionsOverride={permissionsOverride}
-      settingsDraftExternal={notificationDestinationDraft.external}
+      settingsDraftExternal={settingsDraftExternal}
       headerActions={
         <AuthControl
           authState={authState}
@@ -158,7 +195,7 @@ export function FirebasePhase0App({
         />
       }
       notificationSettings={<NotificationDestinationPanel draft={notificationDestinationDraft} />}
-      ownedGuildProfilePersistence={ownedGuildProfilePersistence}
+      ownedGuildProfilePersistence={ownedGuildProfilePersistenceWithShare}
       sharedGuild={effectiveSharedGuild}
       shareSettings={
         <GuildSharePanel
@@ -180,14 +217,10 @@ export function FirebasePhase0App({
   );
 }
 
-function useGuildShare(
-  uid: string | null,
-  profile: OwnedGuildProfile | null,
-  loadShare: typeof loadGuildShare,
-  saveShare: typeof saveGuildShare
-): GuildShareState {
+function useGuildShare(uid: string | null, loadShare: typeof loadGuildShare, saveShare: typeof saveGuildShare): GuildShareState {
   const [state, setState] = useState<GuildShareState>({
     error: null,
+    ensureShare,
     isLoading: false,
     share: null
   });
@@ -195,47 +228,52 @@ function useGuildShare(
   useEffect(() => {
     let isDisposed = false;
 
-    if (uid === null || !isCompleteOwnedGuildProfile(profile)) {
-      setState({ error: null, isLoading: false, share: null });
+    if (uid === null) {
+      setState({ error: null, ensureShare, isLoading: false, share: null });
       return;
     }
 
-    const guildId = profile.guildId;
-    setState({ error: null, isLoading: true, share: null });
+    setState({ error: null, ensureShare, isLoading: true, share: null });
     void loadShare(uid)
-      .then(async (loadedShare) => {
-        if (isDisposed) {
-          return;
-        }
-
-        if (loadedShare?.guildId === guildId) {
-          setState({ error: null, isLoading: false, share: loadedShare });
-          return;
-        }
-
-        const nextShare = createGuildShare(guildId);
-        try {
-          await saveShare(uid, nextShare);
-        } catch (error) {
-          console.error("Failed to save users/{uid}/guild/share.", error);
-          throw error;
-        }
-
+      .then((loadedShare) => {
         if (!isDisposed) {
-          setState({ error: null, isLoading: false, share: nextShare });
+          setState({ error: null, ensureShare, isLoading: false, share: loadedShare });
         }
       })
       .catch((error) => {
-        console.error("Failed to load or generate users/{uid}/guild/share.", error);
+        console.error("Failed to load users/{uid}/guild/share.", error);
         if (!isDisposed) {
-          setState({ error: SHARE_GENERATION_ERROR_MESSAGE, isLoading: false, share: null });
+          setState({ error: SHARE_GENERATION_ERROR_MESSAGE, ensureShare, isLoading: false, share: null });
         }
       });
 
     return () => {
       isDisposed = true;
     };
-  }, [loadShare, profile, saveShare, uid]);
+  }, [loadShare, uid]);
+
+  async function ensureShare(profile: OwnedGuildProfile): Promise<GuildShare | null> {
+    if (uid === null || !isCompleteOwnedGuildProfile(profile)) {
+      return null;
+    }
+
+    if (state.share?.guildId === profile.guildId) {
+      return state.share;
+    }
+
+    const nextShare = createGuildShare(profile.guildId);
+    setState((currentState) => ({ ...currentState, error: null, isLoading: true }));
+
+    try {
+      await saveShare(uid, nextShare);
+      setState({ error: null, ensureShare, isLoading: false, share: nextShare });
+      return nextShare;
+    } catch (error) {
+      console.error("Failed to save users/{uid}/guild/share.", error);
+      setState({ error: SHARE_GENERATION_ERROR_MESSAGE, ensureShare, isLoading: false, share: null });
+      return null;
+    }
+  }
 
   return state;
 }
@@ -326,26 +364,47 @@ function isCompleteOwnedGuildProfile(
   );
 }
 
-function usePublicGuildShareCache(
-  profile: OwnedGuildProfile | null,
-  share: GuildShare | null,
-  savePublicShare: typeof savePublicGuildShare
-): PublicGuildShareCacheState {
-  const savedKeyRef = useRef<string | null>(null);
+function combineSettingsDraftExternals(
+  first: SettingsDraftExternal | undefined,
+  second: SettingsDraftExternal | undefined
+): SettingsDraftExternal | undefined {
+  if (first === undefined) {
+    return second;
+  }
+
+  if (second === undefined) {
+    return first;
+  }
+
+  return {
+    hasValidationError: first.hasValidationError || second.hasValidationError,
+    isDirty: first.isDirty || second.isDirty,
+    onCancel: () => {
+      first.onCancel();
+      second.onCancel();
+    },
+    onSave: async () => {
+      const firstSaved = first.isDirty ? await first.onSave() : true;
+      const secondSaved = second.isDirty ? await second.onSave() : true;
+      return firstSaved && secondSaved;
+    }
+  };
+}
+
+function usePublicGuildShareCache(savePublicShare: typeof savePublicGuildShare): PublicGuildShareCacheState {
   const [state, setState] = useState<PublicGuildShareCacheState>({
     error: null,
-    isSaving: false
+    isSaving: false,
+    saveForProfile
   });
 
-  useEffect(() => {
+  async function saveForProfile(profile: OwnedGuildProfile, share: GuildShare): Promise<boolean> {
     if (
       !isCompleteOwnedGuildProfile(profile) ||
       share === null ||
       share.guildId !== profile.guildId
     ) {
-      savedKeyRef.current = null;
-      setState({ error: null, isSaving: false });
-      return;
+      return false;
     }
 
     const publicShare = {
@@ -354,27 +413,19 @@ function usePublicGuildShareCache(
       adminAccessKey: share.adminAccessKey,
       guestAccessKey: share.guestAccessKey
     };
-    const nextKey = JSON.stringify({ guildId: profile.guildId, ...publicShare });
 
-    if (savedKeyRef.current === nextKey) {
-      setState({ error: null, isSaving: false });
-      return;
+    setState({ error: null, isSaving: true, saveForProfile });
+
+    try {
+      await savePublicShare(profile.guildId, publicShare);
+      setState({ error: null, isSaving: false, saveForProfile });
+      return true;
+    } catch (error) {
+      console.error("Failed to save guildShares/{guildId}.", error);
+      setState({ error: SHARE_GENERATION_ERROR_MESSAGE, isSaving: false, saveForProfile });
+      return false;
     }
-
-    savedKeyRef.current = nextKey;
-    setState({ error: null, isSaving: true });
-    void savePublicShare(profile.guildId, publicShare)
-      .then(() => {
-        setState({ error: null, isSaving: false });
-      })
-      .catch((error) => {
-        console.error("Failed to save guildShares/{guildId}.", error);
-        if (savedKeyRef.current === nextKey) {
-          savedKeyRef.current = null;
-        }
-        setState({ error: SHARE_GENERATION_ERROR_MESSAGE, isSaving: false });
-      });
-  }, [profile, savePublicShare, share]);
+  }
 
   return state;
 }
@@ -404,8 +455,12 @@ function GuildSharePanel({
     return <p className="firebase-message firebase-message--error">{share.error ?? publicCache.error}</p>;
   }
 
-  if (share.isLoading || publicCache.isSaving || share.share === null || share.share.guildId !== profile.guildId) {
+  if (share.isLoading || publicCache.isSaving) {
     return <p className="firebase-message">共有URLを生成中です</p>;
+  }
+
+  if (share.share === null || share.share.guildId !== profile.guildId) {
+    return <p className="firebase-message">設定を保存すると共有URLを生成します。</p>;
   }
 
   const adminUrl = createGuildShareUrl(window.location.origin, share.share.guildId, share.share.adminAccessKey);

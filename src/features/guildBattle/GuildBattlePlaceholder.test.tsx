@@ -897,6 +897,8 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(getWorldInput().value).toBe("37");
     expect(displayGuildSelect.value).toBe("");
+    expect(onChange).not.toHaveBeenCalled();
+    await clickSaveSettingsButton();
     expect(onChange).toHaveBeenCalledWith({
       world: 37,
       guildId: ownGuildId,
@@ -936,11 +938,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(monitorWorldInput.value).toBe("");
     expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
     expect(Array.from(guildSelect.options).map((option) => option.textContent ?? "")).toContain("Owner Guild");
-    expect(onChange).toHaveBeenLastCalledWith({
-      world: 37,
-      guildId: null,
-      guildName: null
-    });
+    expect(onChange).not.toHaveBeenCalled();
 
     onChange.mockClear();
     await act(async () => {
@@ -948,6 +946,8 @@ describe("GuildBattlePlaceholder", () => {
       await flushPromises();
     });
 
+    expect(onChange).not.toHaveBeenCalled();
+    await clickSaveSettingsButton();
     expect(onChange).toHaveBeenCalledWith({
       world: 37,
       guildId: ownGuildId,

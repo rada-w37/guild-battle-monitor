@@ -153,6 +153,8 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     await openOwnedGuildSettings();
 
     await changeWorld("38");
+    expect(saveProfile).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
     expect(saveProfile).toHaveBeenCalledTimes(1);
     expect(saveProfile).toHaveBeenLastCalledWith("owner-uid", {
       world: 38,
@@ -172,6 +174,8 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     await renderApp("/", signedInState, loadProfile, saveProfile);
     await openOwnedGuildSettings();
     await changeGuild("");
+    expect(saveProfile).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
 
     expect(saveProfile).toHaveBeenCalledWith("owner-uid", {
       world: 37,
@@ -198,6 +202,8 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
       );
       await openOwnedGuildSettings();
       await changeWorld("37");
+      expect(saveProfile).not.toHaveBeenCalled();
+      await clickSettingsSaveButton();
 
       expect(saveProfile).toHaveBeenCalledWith("owner-uid", {
         world: 37,
@@ -272,6 +278,11 @@ describe("FirebasePhase0App guild share settings", () => {
     expect(getShareSettings()).not.toBeNull();
     expect(document.querySelector(".share-settings")).toBeNull();
 
+    expect(saveShare).not.toHaveBeenCalled();
+    expect(savePublicShare).not.toHaveBeenCalled();
+    expect(getShareSettings().textContent).toContain("設定を保存すると共有URLを生成");
+    await clickSettingsSaveButton();
+
     expect(saveShare).toHaveBeenCalledTimes(1);
     const savedShare = saveShare.mock.calls[0][1];
     expect(savedShare.guildId).toBe("saved-guild");
@@ -305,6 +316,9 @@ describe("FirebasePhase0App guild share settings", () => {
     );
     await openOwnedGuildSettings();
 
+    expect(saveShare).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
+
     const nextShare = saveShare.mock.calls[0][1];
     expect(nextShare.guildId).toBe("saved-guild");
     expect(nextShare.adminAccessKey).not.toBe(previousShare.adminAccessKey);
@@ -326,6 +340,9 @@ describe("FirebasePhase0App guild share settings", () => {
       );
       await openOwnedGuildSettings();
 
+      expect(saveShare).not.toHaveBeenCalled();
+      await clickSettingsSaveButton();
+
       expect(saveShare).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(
         "Failed to save users/{uid}/guild/share.",
@@ -340,6 +357,7 @@ describe("FirebasePhase0App guild share settings", () => {
 
   it("shows an error when guildShares/{guildId} save fails", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const saveShare = createSaveShareMock();
     const savePublicShare = vi.fn(() => Promise.reject(new Error("public share write failed")));
 
     try {
@@ -348,18 +366,22 @@ describe("FirebasePhase0App guild share settings", () => {
         signedInState,
         vi.fn(() => Promise.resolve(createProfile())),
         vi.fn(),
-        vi.fn(() => Promise.resolve(createShare("saved-guild"))),
-        vi.fn(),
+        vi.fn(() => Promise.resolve(null)),
+        saveShare,
         undefined,
         savePublicShare
       );
       await openOwnedGuildSettings();
 
+      expect(savePublicShare).not.toHaveBeenCalled();
+      await clickSettingsSaveButton();
+
+      const savedShare = saveShare.mock.calls[0][1];
       expect(savePublicShare).toHaveBeenCalledWith("saved-guild", {
         world: 37,
         guildName: "Saved Guild",
-        adminAccessKey: "a_admin",
-        guestAccessKey: "g_guest"
+        adminAccessKey: savedShare.adminAccessKey,
+        guestAccessKey: savedShare.guestAccessKey
       });
       expect(consoleError).toHaveBeenCalledWith(
         "Failed to save guildShares/{guildId}.",
@@ -419,7 +441,7 @@ describe("FirebasePhase0App guild share settings", () => {
     await openOwnedGuildSettings();
 
     expect(getShareSettings().textContent).toContain("所属ギルドを設定してください");
-    expect(loadShare).not.toHaveBeenCalled();
+    expect(loadShare).toHaveBeenCalledWith("owner-uid");
     expect(saveShare).not.toHaveBeenCalled();
     expect(getShareUrlInputs()).toHaveLength(0);
   });
