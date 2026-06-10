@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createAppCapabilities } from "../../app/appCapabilities";
 import { useAppRoute, type AppModePermissions, type AppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
@@ -88,6 +89,14 @@ export function FirebasePhase0App({
           showShareSettings: false
         }
       : undefined;
+  const appCapabilities = createAppCapabilities({
+    firebaseEnabled: true,
+    hasNotificationSettings: true,
+    hasOwnedGuildProfilePersistence: true,
+    hasShareSettings: true,
+    isSignedInOwner,
+    mode: appMode
+  });
   const ownedGuildProfilePersistence = useOwnedGuildProfilePersistence(
     appMode === "owner" ? notificationSettingsUid : null,
     loadProfile,
@@ -103,7 +112,7 @@ export function FirebasePhase0App({
     notificationSettingsUid,
     loadDestination,
     saveDestination,
-    appMode === "owner"
+    appCapabilities.notifications.webhookUrlVisible
   );
 
   const publicGuildShareCache = usePublicGuildShareCache(savePublicShare);
@@ -202,7 +211,10 @@ export function FirebasePhase0App({
         />
       }
       notificationSettings={
-        <NotificationDestinationPanel draft={notificationDestinationDraft} showWebhookUrl={appMode === "owner"} />
+        <NotificationDestinationPanel
+          draft={notificationDestinationDraft}
+          showWebhookUrl={appCapabilities.notifications.webhookUrlVisible}
+        />
       }
       ownedGuildProfilePersistence={ownedGuildProfilePersistenceWithShare}
       sharedGuild={effectiveSharedGuild}
