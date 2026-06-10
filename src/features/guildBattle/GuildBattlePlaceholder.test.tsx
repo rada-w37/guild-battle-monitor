@@ -474,6 +474,36 @@ describe("GuildBattlePlaceholder", () => {
     );
   });
 
+  it("shows the KO victim summary below the GuildBattle update button and refreshes it on update", async () => {
+    const loadKoGuildKoTotals = vi.fn(() => Promise.resolve(koGuildKoTotals));
+    renderComponent(
+      vi.fn(() => Promise.resolve(snapshot)),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      undefined,
+      createKoMonitorProps({ loadKoGuildKoTotals })
+    );
+
+    await flushPromises();
+    expect(loadKoGuildKoTotals).toHaveBeenCalledTimes(1);
+
+    await loadWorld37();
+    await flushPromises();
+
+    const summary = getKoVictimSummary();
+    expect(summary.textContent).toContain("KO");
+    expect(getKoVictimRows().map((row) => row.textContent)).toEqual(["ギルドA12", "ギルドB0"]);
+    expect(loadKoGuildKoTotals).toHaveBeenCalledTimes(2);
+    expect(getGuildBattleUpdateButton().compareDocumentPosition(summary)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(summary.compareDocumentPosition(document.querySelector(".snapshot-summary") as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
   it("hides the KO victim summary without Firebase KO monitor wiring or configured guild context", async () => {
     renderComponent();
 
@@ -1730,6 +1760,16 @@ function getGrandBattleUpdateButton() {
 
   if (!button) {
     throw new Error("GrandBattle update button was not found");
+  }
+
+  return button;
+}
+
+function getGuildBattleUpdateButton() {
+  const button = document.querySelector<HTMLButtonElement>(".startup-panel .load-form__button");
+
+  if (!button) {
+    throw new Error("GuildBattle update button was not found");
   }
 
   return button;

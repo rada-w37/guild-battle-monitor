@@ -286,7 +286,7 @@ export function GuildBattlePlaceholder({
   const isGrandBattleRealtimeActive =
     grandBattleRealtimeState.status === "connecting" || grandBattleRealtimeState.status === "connected";
   const koMonitorState = useKoMonitorLoadState({
-    enabled: activeMode === "grandBattle" && appCapabilities.koMonitor.visible,
+    enabled: appCapabilities.koMonitor.visible,
     loadKoObserverRunMeta,
     loadKoGuildKoTotals,
     now: koMonitorNow,
@@ -364,6 +364,7 @@ export function GuildBattlePlaceholder({
       return;
     }
 
+    setKoMonitorRefreshKey((currentKey) => currentKey + 1);
     await loadSnapshotForWorldId(worldId);
   }
 
@@ -1033,6 +1034,7 @@ export function GuildBattlePlaceholder({
           </form>
         ) : null}
 
+        <KoVictimSummaryPanel state={koMonitorState} />
         <SnapshotStatus
           alertThresholds={alertThresholds}
           canEdit={appCapabilities.localSettings.editable}
