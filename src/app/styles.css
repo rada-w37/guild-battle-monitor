@@ -351,6 +351,64 @@ select {
   width: min(100%, 500px);
 }
 
+.ko-victim-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.ko-victim-summary__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.ko-victim-summary__message {
+  margin: 0;
+}
+
+.ko-victim-summary__table {
+  display: grid;
+  gap: 4px;
+  width: min(100%, 500px);
+}
+
+.ko-victim-summary__header,
+.ko-victim-summary__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  align-items: center;
+}
+
+.ko-victim-summary__header {
+  padding: 6px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-strong);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.ko-victim-summary__row {
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-row-bg);
+}
+
+.ko-victim-summary__guild {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.ko-victim-summary__count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .startup-panel,
 .load-form {
   display: flex;

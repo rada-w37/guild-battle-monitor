@@ -13,6 +13,7 @@ import { MockGvgRealtimeClient } from "../gvg/mockRealtimeClient";
 import type { GvgRealtimeClient } from "../gvg/realtimeClientTypes";
 import { buildGvgStreamId } from "../gvg/streamId";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
+import type { KoGuildKoTotal, KoGuildKoTotalsSubscriber, KoObserverRunMeta } from "../koMonitor/types";
 import { GUILD_BATTLE_ALERT_THRESHOLDS_STORAGE_KEY } from "./alertThresholdStorage";
 import {
   GuildBattlePlaceholder,
@@ -75,6 +76,28 @@ const grandBattleSnapshot = {
     }
   ]
 } satisfies GrandBattleSnapshot;
+
+const koGuildKoTotals = [
+  {
+    guildId: grandBattleParticipants[0].guildId,
+    guildName: "ギルドA",
+    totalVictimKoCount: 12,
+    updatedAt: new Date("2026-05-27T11:46:00.000Z")
+  },
+  {
+    guildId: grandBattleParticipants[1].guildId,
+    guildName: "ギルドB",
+    totalVictimKoCount: 0,
+    updatedAt: new Date("2026-05-27T11:46:00.000Z")
+  }
+] satisfies readonly KoGuildKoTotal[];
+
+interface KoMonitorTestProps {
+  readonly loadKoObserverRunMeta?: () => Promise<KoObserverRunMeta | null>;
+  readonly loadKoGuildKoTotals?: () => Promise<readonly KoGuildKoTotal[]>;
+  readonly subscribeKoGuildKoTotals?: KoGuildKoTotalsSubscriber;
+  readonly koMonitorNow?: () => Date;
+}
 
 const snapshot = {
   worldId: "1037" as GvgWorldId,
@@ -139,6 +162,13 @@ afterEach(() => {
   root = null;
   container = null;
 });
+
+function unmountRenderedComponent() {
+  act(() => root?.unmount());
+  container?.remove();
+  root = null;
+  container = null;
+}
 
 describe("GuildBattlePlaceholder", () => {
   it("starts with empty world input and no placeholder", () => {
@@ -411,6 +441,171 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(document.querySelector(".castle-list--with-owner")).toBeNull();
     expect(getRenderedCastleLabels()).toEqual(["アイン"]);
+  });
+
+  it("shows the KO victim summary below the GrandBattle update button and above the monitor list", async () => {
+    const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
+    const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
+    renderComponent(
+      undefined,
+      undefined,
+      loadGrandBattleParticipants,
+      loadGrandBattleLatestSnapshot,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      undefined,
+      createKoMonitorProps()
+    );
+
+    await clickButton("Grand Battle");
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+
+    const summary = getKoVictimSummary();
+    expect(summary.textContent).toContain("被KO（推定）");
+    expect(getKoVictimRows().map((row) => row.textContent)).toEqual(["ギルドA12", "ギルドB0"]);
+    expect(getGrandBattleUpdateButton().compareDocumentPosition(summary)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(summary.compareDocumentPosition(document.querySelector(".castle-list") as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
+  it("hides the KO victim summary without Firebase KO monitor wiring or configured guild context", async () => {
+    renderComponent();
+
+    await clickButton("Grand Battle");
+    expect(document.querySelector(".ko-victim-summary")).toBeNull();
+
+    unmountRenderedComponent();
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence(null),
+      undefined,
+      createKoMonitorProps()
+    );
+    await clickButton("Grand Battle");
+    await flushPromises();
+
+    expect(document.querySelector(".ko-victim-summary")).toBeNull();
+  });
+
+  it("shows the KO victim summary for shared admin mode", async () => {
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      `/${ownGuildId}/a_key`,
+      undefined,
+      createSharedGuild("admin"),
+      createKoMonitorProps()
+    );
+
+    await clickButton("Grand Battle");
+    await flushPromises();
+
+    expect(getKoVictimSummary().textContent).toContain("ギルドA");
+  });
+
+  it("shows KO monitor loading, not-started, empty, and error states", async () => {
+    const deferredMeta = createDeferred<KoObserverRunMeta | null>();
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      undefined,
+      createKoMonitorProps({
+        loadKoObserverRunMeta: vi.fn(() => deferredMeta.promise)
+      })
+    );
+
+    await clickButton("Grand Battle");
+    expect(getKoVictimSummary().textContent).toContain("被KOデータを取得中です。");
+    await act(async () => {
+      deferredMeta.resolve({ lastStartedAt: new Date(2026, 4, 27, 20, 0, 0) });
+      await flushPromises();
+    });
+    expect(getKoVictimSummary().textContent).toContain("KO監視ツールが未起動のため集計できません。");
+    expect(getKoVictimRows()[0].querySelector(".ko-victim-summary__count")?.textContent).toBe("-");
+
+    unmountRenderedComponent();
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      undefined,
+      createKoMonitorProps({
+        loadKoGuildKoTotals: vi.fn(() => Promise.resolve([]))
+      })
+    );
+    await clickButton("Grand Battle");
+    await flushPromises();
+    expect(getKoVictimSummary().textContent).toContain("被KOデータがありません。");
+
+    unmountRenderedComponent();
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      undefined,
+      createKoMonitorProps({
+        loadKoGuildKoTotals: vi.fn(() => Promise.reject(new Error("read failed")))
+      })
+    );
+    await clickButton("Grand Battle");
+    await flushPromises();
+    expect(getKoVictimSummary().textContent).toContain("KO集計データを取得できませんでした。");
+  });
+
+  it("uses realtime subscription for KO monitor during the battle window", async () => {
+    const loadKoGuildKoTotals = vi.fn(() => Promise.resolve(koGuildKoTotals));
+    const subscribeKoGuildKoTotals = vi.fn((onRows: (rows: readonly KoGuildKoTotal[]) => void) => {
+      onRows(koGuildKoTotals);
+      return () => {};
+    });
+    renderComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      undefined,
+      createKoMonitorProps({
+        loadKoGuildKoTotals,
+        subscribeKoGuildKoTotals,
+        koMonitorNow: () => new Date(2026, 4, 27, 20, 45, 0)
+      })
+    );
+
+    await clickButton("Grand Battle");
+    await flushPromises();
+
+    expect(subscribeKoGuildKoTotals).toHaveBeenCalled();
+    expect(loadKoGuildKoTotals).not.toHaveBeenCalled();
   });
 
   it("updates the GrandBattle snapshot list from realtime payloads", async () => {
@@ -1382,7 +1577,8 @@ function renderComponent(
   notificationSettings?: ReactNode,
   pathname: string = "/",
   ownedGuildProfilePersistence?: OwnedGuildProfilePersistence,
-  sharedGuild?: SharedGuildContext | null
+  sharedGuild?: SharedGuildContext | null,
+  koMonitor?: KoMonitorTestProps
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -1395,6 +1591,10 @@ function renderComponent(
           loadSnapshot={loadSnapshot}
           loadGrandBattleParticipants={loadGrandBattleParticipants}
           loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
+          loadKoObserverRunMeta={koMonitor?.loadKoObserverRunMeta}
+          loadKoGuildKoTotals={koMonitor?.loadKoGuildKoTotals}
+          subscribeKoGuildKoTotals={koMonitor?.subscribeKoGuildKoTotals}
+          koMonitorNow={koMonitor?.koMonitorNow}
           createRealtimeClient={createRealtimeClient}
           notificationSettings={notificationSettings}
           ownedGuildProfilePersistence={ownedGuildProfilePersistence}
@@ -1423,6 +1623,23 @@ function createOwnedGuildPersistence(
     isSignedIn: true,
     profile,
     onChange: vi.fn()
+  };
+}
+
+function createKoMonitorProps(
+  overrides: Partial<KoMonitorTestProps> = {}
+): Required<KoMonitorTestProps> {
+  return {
+    loadKoObserverRunMeta: vi.fn(() =>
+      Promise.resolve({ lastStartedAt: new Date(2026, 4, 27, 20, 40, 0) })
+    ),
+    loadKoGuildKoTotals: vi.fn(() => Promise.resolve(koGuildKoTotals)),
+    subscribeKoGuildKoTotals: vi.fn((onRows) => {
+      onRows(koGuildKoTotals);
+      return () => {};
+    }),
+    koMonitorNow: () => new Date(2026, 4, 27, 20, 44, 0),
+    ...overrides
   };
 }
 
@@ -1517,6 +1734,20 @@ function getGrandBattleParticipantNames() {
   return Array.from(document.querySelectorAll<HTMLElement>(".grand-battle-participants__guild")).map(
     (candidate) => candidate.textContent ?? ""
   );
+}
+
+function getKoVictimSummary() {
+  const summary = document.querySelector<HTMLElement>(".ko-victim-summary");
+
+  if (!summary) {
+    throw new Error("KO victim summary was not found");
+  }
+
+  return summary;
+}
+
+function getKoVictimRows() {
+  return Array.from(document.querySelectorAll<HTMLElement>(".ko-victim-summary__row"));
 }
 
 function getSelectOptions(select: HTMLSelectElement) {

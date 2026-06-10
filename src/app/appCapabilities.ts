@@ -27,6 +27,8 @@ export interface AppCapabilities {
 
 export interface CreateAppCapabilitiesInput {
   readonly firebaseEnabled: boolean;
+  readonly hasConfiguredGuildContext?: boolean;
+  readonly hasKoMonitorView?: boolean;
   readonly hasNotificationSettings: boolean;
   readonly hasOwnedGuildProfilePersistence: boolean;
   readonly hasShareSettings: boolean;
@@ -37,6 +39,8 @@ export interface CreateAppCapabilitiesInput {
 
 export function createAppCapabilities({
   firebaseEnabled,
+  hasConfiguredGuildContext = false,
+  hasKoMonitorView = false,
   hasNotificationSettings,
   hasOwnedGuildProfilePersistence,
   hasShareSettings,
@@ -73,7 +77,7 @@ export function createAppCapabilities({
       editable: shareUrlsVisible
     },
     koMonitor: {
-      visible: false
+      visible: firebaseEnabled && hasKoMonitorView && hasConfiguredGuildContext
     }
   };
 }

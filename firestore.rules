@@ -31,5 +31,19 @@ service cloud.firestore {
       allow create, update: if isSignedIn();
       allow delete: if false;
     }
+
+    match /koObserverRuns/{documentId} {
+      allow read: if documentId == "meta";
+      allow write: if false;
+    }
+
+    match /koObserverViews/{viewId} {
+      allow read, write: if false;
+
+      match /guildKoTotals/{guildId} {
+        allow read: if viewId == "guildKoTotals";
+        allow write: if false;
+      }
+    }
   }
 }
