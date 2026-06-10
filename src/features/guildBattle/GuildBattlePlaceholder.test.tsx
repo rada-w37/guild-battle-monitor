@@ -539,8 +539,13 @@ describe("GuildBattlePlaceholder", () => {
       deferredMeta.resolve({ lastStartedAt: new Date(2026, 4, 27, 20, 0, 0) });
       await flushPromises();
     });
-    expect(getKoVictimSummary().textContent).toContain("KO監視ツールが未起動のため集計できません。");
-    expect(getKoVictimRows()[0].querySelector(".ko-victim-summary__count")?.textContent).toBe("-");
+    expect(getKoVictimSummary().textContent).toContain(
+      "KO監視ツールは未起動です。前回集計データを表示しています。"
+    );
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual([
+      "12",
+      "0"
+    ]);
 
     unmountRenderedComponent();
     renderComponent(

@@ -6,8 +6,7 @@ export function KoVictimSummaryPanel({ state }: { readonly state: KoMonitorLoadS
   }
 
   const rows = state.status === "success" || state.status === "error" ? state.rows : [];
-  const shouldMaskValues =
-    state.status === "error" || (state.status === "success" && !state.isObserverStarted);
+  const shouldMaskValues = state.status === "error";
 
   return (
     <section className="ko-victim-summary" aria-labelledby="ko-victim-summary-title">
@@ -26,7 +25,7 @@ export function KoVictimSummaryPanel({ state }: { readonly state: KoMonitorLoadS
       ) : null}
       {state.status === "success" && !state.isObserverStarted ? (
         <p className="status-message ko-victim-summary__message">
-          KO監視ツールが未起動のため集計できません。
+          KO監視ツールは未起動です。前回集計データを表示しています。
         </p>
       ) : null}
       {state.status === "success" && state.isObserverStarted && rows.length === 0 ? (
