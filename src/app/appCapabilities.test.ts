@@ -71,4 +71,34 @@ describe("createAppCapabilities", () => {
     expect(capabilities.ownedGuildProfile.visible).toBe(false);
     expect(capabilities.shareUrls.visible).toBe(false);
   });
+
+  it("shows KO monitor only when Firebase, the view, and guild context are available", () => {
+    const capabilities = createAppCapabilities({
+      firebaseEnabled: true,
+      hasConfiguredGuildContext: true,
+      hasKoMonitorView: true,
+      hasNotificationSettings: true,
+      hasOwnedGuildProfilePersistence: true,
+      hasShareSettings: true,
+      isSignedInOwner: false,
+      mode: "guest"
+    });
+
+    expect(capabilities.koMonitor.visible).toBe(true);
+  });
+
+  it("hides KO monitor without a configured guild context", () => {
+    const capabilities = createAppCapabilities({
+      firebaseEnabled: true,
+      hasConfiguredGuildContext: false,
+      hasKoMonitorView: true,
+      hasNotificationSettings: true,
+      hasOwnedGuildProfilePersistence: true,
+      hasShareSettings: true,
+      isSignedInOwner: true,
+      mode: "owner"
+    });
+
+    expect(capabilities.koMonitor.visible).toBe(false);
+  });
 });

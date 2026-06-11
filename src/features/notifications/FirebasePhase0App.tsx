@@ -18,6 +18,12 @@ import {
   type SharedGuildContext
 } from "../guildBattle/GuildBattlePlaceholder";
 import {
+  loadKoGuildKoTotals,
+  loadKoObserverRunMeta,
+  subscribeKoGuildKoTotals
+} from "../koMonitor/koObserverRepository";
+import type { KoGuildKoTotal, KoGuildKoTotalsSubscriber, KoObserverRunMeta } from "../koMonitor/types";
+import {
   loadOwnedGuildProfile,
   saveOwnedGuildProfile
 } from "../guildBattle/ownedGuildProfileRepository";
@@ -50,6 +56,9 @@ interface FirebasePhase0AppProps {
   readonly loadGuildShare?: typeof loadGuildShare;
   readonly loadPublicGuildShare?: typeof loadPublicGuildShare;
   readonly loadNotificationDestination?: typeof loadNotificationDestination;
+  readonly loadKoObserverRunMeta?: () => Promise<KoObserverRunMeta | null>;
+  readonly loadKoGuildKoTotals?: () => Promise<readonly KoGuildKoTotal[]>;
+  readonly subscribeKoGuildKoTotals?: KoGuildKoTotalsSubscriber;
   readonly saveOwnedGuildProfile?: typeof saveOwnedGuildProfile;
   readonly saveGuildShare?: typeof saveGuildShare;
   readonly savePublicGuildShare?: typeof savePublicGuildShare;
@@ -63,6 +72,9 @@ export function FirebasePhase0App({
   loadGuildShare: loadShare = loadGuildShare,
   loadPublicGuildShare: loadPublicShare = loadPublicGuildShare,
   loadNotificationDestination: loadDestination = loadNotificationDestination,
+  loadKoObserverRunMeta: loadKoMeta = loadKoObserverRunMeta,
+  loadKoGuildKoTotals: loadKoTotals = loadKoGuildKoTotals,
+  subscribeKoGuildKoTotals: subscribeKoTotals = subscribeKoGuildKoTotals,
   saveOwnedGuildProfile: saveProfile = saveOwnedGuildProfile,
   saveGuildShare: saveShare = saveGuildShare,
   savePublicGuildShare: savePublicShare = savePublicGuildShare,
@@ -198,6 +210,9 @@ export function FirebasePhase0App({
   return (
     <GuildBattlePlaceholder
       loadSnapshot={loadSnapshot}
+      loadKoObserverRunMeta={loadKoMeta}
+      loadKoGuildKoTotals={loadKoTotals}
+      subscribeKoGuildKoTotals={subscribeKoTotals}
       modeOverride={sharedGuild.status === "fallback" ? "guest" : undefined}
       permissionsOverride={permissionsOverride}
       settingsDraftExternal={settingsDraftExternal}

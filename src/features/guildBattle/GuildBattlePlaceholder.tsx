@@ -31,6 +31,18 @@ import {
 } from "../gvg/realtimeClientTypes";
 import { GvgRealtimeSnapshotRuntime } from "../gvg/realtimeSnapshotRuntime";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
+import { KoVictimSummaryPanel } from "../koMonitor/KoVictimSummaryPanel";
+import {
+  getNextKoObserverReadBoundary,
+  isKoObserverStartedForToday,
+  shouldUseKoObserverRealtime
+} from "../koMonitor/koObserverTime";
+import type {
+  KoGuildKoTotal,
+  KoGuildKoTotalsSubscriber,
+  KoMonitorLoadState,
+  KoObserverRunMeta
+} from "../koMonitor/types";
 import {
   createGuildBattleAlertThresholds,
   getDefaultEditableGuildBattleAlertThresholds,
@@ -84,6 +96,11 @@ const GRAND_BATTLE_BLOCK_OPTIONS: readonly {
   { value: 3, label: "D" }
 ];
 const CURRENT_TIME_REFRESH_INTERVAL_MS = 1000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+function getCurrentDate() {
+  return new Date();
+}
 
 type BattleMonitorMode = "guildBattle" | "grandBattle";
 
@@ -94,6 +111,10 @@ interface GuildBattlePlaceholderProps {
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly loadGrandBattleParticipants?: typeof loadGrandBattleParticipantGuilds;
   readonly loadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
+  readonly loadKoObserverRunMeta?: () => Promise<KoObserverRunMeta | null>;
+  readonly loadKoGuildKoTotals?: () => Promise<readonly KoGuildKoTotal[]>;
+  readonly subscribeKoGuildKoTotals?: KoGuildKoTotalsSubscriber;
+  readonly koMonitorNow?: () => Date;
   readonly createRealtimeClient?: () => GvgRealtimeClient;
   readonly headerActions?: ReactNode;
   readonly modeOverride?: AppMode;
@@ -139,6 +160,10 @@ export function GuildBattlePlaceholder({
   loadSnapshot = loadLocalGvgSnapshot,
   loadGrandBattleParticipants = loadGrandBattleParticipantGuilds,
   loadGrandBattleLatestSnapshot = loadGrandBattleSnapshot,
+  loadKoObserverRunMeta,
+  loadKoGuildKoTotals,
+  subscribeKoGuildKoTotals,
+  koMonitorNow = getCurrentDate,
   createRealtimeClient = () => new BrowserGvgRealtimeClient(),
   headerActions,
   modeOverride,
@@ -152,12 +177,23 @@ export function GuildBattlePlaceholder({
   const appRoute = useAppRoute();
   const appMode = modeOverride ?? sharedGuild?.mode ?? appRoute?.mode ?? "owner";
   const modePermissions = { ...getAppModePermissions(appMode), ...permissionsOverride };
+  const hasConfiguredGuildContext =
+    sharedGuild !== undefined && sharedGuild !== null
+      ? true
+      : isCompleteOwnedGuildProfile(ownedGuildProfilePersistence?.profile ?? null);
+  const hasKoMonitorView =
+    loadKoObserverRunMeta !== undefined &&
+    loadKoGuildKoTotals !== undefined &&
+    subscribeKoGuildKoTotals !== undefined;
   const appCapabilities = createAppCapabilities({
     firebaseEnabled:
       ownedGuildProfilePersistence !== undefined ||
       notificationSettings !== undefined ||
       settingsDraftExternal !== undefined ||
-      shareSettings !== undefined,
+      shareSettings !== undefined ||
+      hasKoMonitorView,
+    hasConfiguredGuildContext,
+    hasKoMonitorView,
     hasNotificationSettings: notificationSettings !== undefined,
     hasOwnedGuildProfilePersistence: ownedGuildProfilePersistence !== undefined,
     hasShareSettings: shareSettings !== undefined,
@@ -209,6 +245,7 @@ export function GuildBattlePlaceholder({
   const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isTestModeEnabled, setIsTestModeEnabled] = useState(false);
+  const [koMonitorRefreshKey, setKoMonitorRefreshKey] = useState(0);
   const [editableAlertThresholds, setEditableAlertThresholds] = useState<EditableGuildBattleAlertThresholds>(() =>
     loadGuildBattleAlertThresholds()
   );
@@ -248,6 +285,14 @@ export function GuildBattlePlaceholder({
   const isRealtimeActive = realtimeState.status === "connecting" || realtimeState.status === "connected";
   const isGrandBattleRealtimeActive =
     grandBattleRealtimeState.status === "connecting" || grandBattleRealtimeState.status === "connected";
+  const koMonitorState = useKoMonitorLoadState({
+    enabled: appCapabilities.koMonitor.visible,
+    loadKoObserverRunMeta,
+    loadKoGuildKoTotals,
+    now: koMonitorNow,
+    refreshKey: koMonitorRefreshKey,
+    subscribeKoGuildKoTotals
+  });
 
   useEffect(() => {
     return () => {
@@ -319,6 +364,7 @@ export function GuildBattlePlaceholder({
       return;
     }
 
+    setKoMonitorRefreshKey((currentKey) => currentKey + 1);
     await loadSnapshotForWorldId(worldId);
   }
 
@@ -600,6 +646,7 @@ export function GuildBattlePlaceholder({
     if (grandBattleCandidateSource !== null && grandBattleParticipantLoadState.status === "success") {
       setGrandBattleAppliedSource(grandBattleCandidateSource);
       setSelectedGrandBattleGuildId("");
+      setKoMonitorRefreshKey((currentKey) => currentKey + 1);
       void loadGrandBattleSnapshotForSource(grandBattleCandidateSource);
     }
   }
@@ -987,6 +1034,7 @@ export function GuildBattlePlaceholder({
           </form>
         ) : null}
 
+        <KoVictimSummaryPanel state={koMonitorState} />
         <SnapshotStatus
           alertThresholds={alertThresholds}
           canEdit={appCapabilities.localSettings.editable}
@@ -1014,6 +1062,7 @@ export function GuildBattlePlaceholder({
             participantLoadState={grandBattleParticipantLoadState}
             selectedGuildId={selectedGrandBattleGuildId}
             snapshotLoadState={grandBattleSnapshotLoadState}
+            koMonitorState={koMonitorState}
             alertThresholds={alertThresholds}
             isAutoUpdateEnabled={isAutoUpdateEnabled}
             realtimeState={grandBattleRealtimeState}
@@ -1030,6 +1079,126 @@ export function GuildBattlePlaceholder({
       </section>
     </main>
   );
+}
+
+function useKoMonitorLoadState({
+  enabled,
+  loadKoObserverRunMeta,
+  loadKoGuildKoTotals,
+  now,
+  refreshKey,
+  subscribeKoGuildKoTotals
+}: {
+  readonly enabled: boolean;
+  readonly loadKoObserverRunMeta?: () => Promise<KoObserverRunMeta | null>;
+  readonly loadKoGuildKoTotals?: () => Promise<readonly KoGuildKoTotal[]>;
+  readonly now: () => Date;
+  readonly refreshKey: number;
+  readonly subscribeKoGuildKoTotals?: KoGuildKoTotalsSubscriber;
+}): KoMonitorLoadState {
+  const [state, setState] = useState<KoMonitorLoadState>({ status: "idle" });
+  const [boundaryRefreshKey, setBoundaryRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const currentTime = now();
+    const boundary = getNextKoObserverReadBoundary(currentTime);
+
+    if (boundary === null) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(
+      () => setBoundaryRefreshKey((currentKey) => currentKey + 1),
+      Math.min(Math.max(0, boundary.getTime() - currentTime.getTime()), MAX_TIMEOUT_MS)
+    );
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [boundaryRefreshKey, enabled, now]);
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      loadKoObserverRunMeta === undefined ||
+      loadKoGuildKoTotals === undefined ||
+      subscribeKoGuildKoTotals === undefined
+    ) {
+      setState({ status: "idle" });
+      return;
+    }
+
+    const loadMeta = loadKoObserverRunMeta;
+    const loadTotals = loadKoGuildKoTotals;
+    const subscribeTotals = subscribeKoGuildKoTotals;
+    let isDisposed = false;
+    let unsubscribe: (() => void) | null = null;
+    setState({ status: "loading" });
+
+    async function load() {
+      const currentTime = now();
+      const meta = await loadMeta();
+      const isObserverStarted = isKoObserverStartedForToday(meta?.lastStartedAt ?? null, currentTime);
+
+      if (shouldUseKoObserverRealtime(currentTime)) {
+        unsubscribe = subscribeTotals(
+          (rows) => {
+            if (!isDisposed) {
+              setState({ status: "success", isObserverStarted, rows });
+            }
+          },
+          (error) => {
+            if (!isDisposed) {
+              setState((currentState) => ({
+                status: "error",
+                error,
+                rows:
+                  currentState.status === "success" || currentState.status === "error"
+                    ? currentState.rows
+                    : []
+              }));
+            }
+          }
+        );
+        return;
+      }
+
+      const rows = await loadTotals();
+
+      if (!isDisposed) {
+        setState({ status: "success", isObserverStarted, rows });
+      }
+    }
+
+    void load().catch((error) => {
+      if (!isDisposed) {
+        setState({
+          status: "error",
+          error: error instanceof Error ? error : new Error("KO集計データを取得できませんでした。"),
+          rows: []
+        });
+      }
+    });
+
+    return () => {
+      isDisposed = true;
+      unsubscribe?.();
+    };
+  }, [
+    boundaryRefreshKey,
+    enabled,
+    loadKoGuildKoTotals,
+    loadKoObserverRunMeta,
+    now,
+    refreshKey,
+    subscribeKoGuildKoTotals
+  ]);
+
+  return state;
 }
 
 function createInitialGrandBattleSource(shared: BattleMonitorSharedState): GrandBattleSource {
@@ -1077,6 +1246,7 @@ function GrandBattleSetupPanel({
   canApplySource,
   draftSource,
   isAutoUpdateEnabled,
+  koMonitorState,
   participantCandidates,
   participantLoadState,
   realtimeState,
@@ -1095,6 +1265,7 @@ function GrandBattleSetupPanel({
   readonly canApplySource: boolean;
   readonly draftSource: GrandBattleSource;
   readonly isAutoUpdateEnabled: boolean;
+  readonly koMonitorState: KoMonitorLoadState;
   readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
   readonly participantLoadState: AsyncLoadState<readonly GrandBattleParticipantGuildCandidate[]>;
   readonly realtimeState: GvgRealtimeConnectionState;
@@ -1188,6 +1359,8 @@ function GrandBattleSetupPanel({
       >
         更新
       </button>
+
+      <KoVictimSummaryPanel state={koMonitorState} />
 
       <GrandBattleSnapshotStatus
         alertThresholds={alertThresholds}
@@ -1678,6 +1851,17 @@ function isSameOwnedGuildProfile(left: OwnedGuildProfile, right: OwnedGuildProfi
     left.world === (right?.world ?? null) &&
     left.guildId === (right?.guildId ?? null) &&
     left.guildName === (right?.guildName ?? null)
+  );
+}
+
+function isCompleteOwnedGuildProfile(
+  profile: OwnedGuildProfile | null
+): profile is { readonly world: number; readonly guildId: string; readonly guildName: string } {
+  return (
+    profile !== null &&
+    profile.world !== null &&
+    profile.guildId !== null &&
+    profile.guildName !== null
   );
 }
 
