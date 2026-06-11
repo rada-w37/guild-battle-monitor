@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModeProvider } from "../../app/appMode";
 import type { AuthState } from "../auth/types";
 import type { GuildShare, OwnedGuildProfile, PublicGuildShare } from "../guildBattle/types";
@@ -9,7 +9,194 @@ import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSetti
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import type { NotificationDestination, NotificationDestinationInput } from "./types";
-import { FirebasePhase0App } from "./FirebasePhase0App";
+
+vi.mock("../auth/authService", () => ({
+  signInWithGoogle: () => Promise.resolve(),
+  signOutCurrentUser: () => Promise.resolve(),
+  subscribeToAuthState: () => () => {}
+}));
+
+vi.mock("../guildBattle/guildShareRepository", () => ({
+  loadGuildShare: () => Promise.resolve(null),
+  loadPublicGuildShare: () => Promise.resolve(null),
+  saveGuildShare: () => Promise.resolve(),
+  savePublicGuildShare: () => Promise.resolve()
+}));
+
+vi.mock("../guildBattle/ownedGuildProfileRepository", () => ({
+  loadOwnedGuildProfile: () => Promise.resolve(null),
+  saveOwnedGuildProfile: () => Promise.resolve()
+}));
+
+vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
+  const React = await import("react");
+
+  return {
+    GuildBattlePlaceholder: ({
+      headerActions,
+      modeOverride,
+      notificationSettings,
+      ownedGuildProfilePersistence,
+      permissionsOverride,
+      settingsDraftExternal,
+      shareSettings,
+      sharedGuild
+    }: {
+      readonly headerActions?: React.ReactNode;
+      readonly modeOverride?: "guest";
+      readonly notificationSettings?: React.ReactNode;
+      readonly ownedGuildProfilePersistence?: {
+        readonly error: string | null;
+        readonly profile: OwnedGuildProfile | null;
+        readonly onSave?: (profile: OwnedGuildProfile) => Promise<boolean>;
+      };
+      readonly permissionsOverride?: {
+        readonly showNotificationSettings?: boolean;
+        readonly showOwnedGuildSettings?: boolean;
+        readonly showShareSettings?: boolean;
+      };
+      readonly settingsDraftExternal?: {
+        readonly onSave: () => Promise<boolean>;
+      };
+      readonly shareSettings?: React.ReactNode;
+      readonly sharedGuild?: { readonly mode: "admin" | "guest" } | null;
+    }) => {
+      const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+      const [monitorGuildId, setMonitorGuildId] = React.useState("");
+      const [draftProfile, setDraftProfile] = React.useState<OwnedGuildProfile>({
+        world: ownedGuildProfilePersistence?.profile?.world ?? null,
+        guildId: ownedGuildProfilePersistence?.profile?.guildId ?? null,
+        guildName: ownedGuildProfilePersistence?.profile?.guildName ?? null
+      });
+      const ownerSettingsVisible =
+        modeOverride !== "guest" &&
+        permissionsOverride?.showOwnedGuildSettings !== false &&
+        sharedGuild === null;
+      const notificationSettingsVisible =
+        modeOverride !== "guest" &&
+        permissionsOverride?.showNotificationSettings !== false &&
+        (sharedGuild === null || sharedGuild?.mode === "admin");
+
+      React.useEffect(() => {
+        setDraftProfile({
+          world: ownedGuildProfilePersistence?.profile?.world ?? null,
+          guildId: ownedGuildProfilePersistence?.profile?.guildId ?? null,
+          guildName: ownedGuildProfilePersistence?.profile?.guildName ?? null
+        });
+      }, [ownedGuildProfilePersistence?.profile]);
+
+      async function handleSave() {
+        const persistedProfile = ownedGuildProfilePersistence?.profile ?? null;
+        const hasProfileChange =
+          draftProfile.world !== (persistedProfile?.world ?? null) ||
+          draftProfile.guildId !== (persistedProfile?.guildId ?? null) ||
+          draftProfile.guildName !== (persistedProfile?.guildName ?? null);
+
+        if (hasProfileChange) {
+          await ownedGuildProfilePersistence?.onSave?.(draftProfile);
+          return;
+        }
+
+        await settingsDraftExternal?.onSave();
+      }
+
+      return (
+        <main>
+          <header>
+            <h1>Guild Battle Monitor</h1>
+            {headerActions}
+            <button className="settings-button" type="button" onClick={() => setIsSettingsOpen(true)}>
+              Settings
+            </button>
+          </header>
+          <form className="startup-panel">
+            <input className="field__input--world" />
+          </form>
+          <label className="guild-select-field">
+            <select
+              value={monitorGuildId}
+              onChange={(event) => setMonitorGuildId(event.currentTarget.value)}
+            >
+              <option value="">Select guild</option>
+              <option value="guild-a">Guild A</option>
+              <option value="guild-b">Guild B</option>
+            </select>
+          </label>
+          {isSettingsOpen ? (
+            <section className="settings-dialog">
+              <div className="alert-settings" />
+              {ownerSettingsVisible ? (
+                <details className="settings-section owned-guild-settings">
+                  <summary>Owned guild</summary>
+                  <input
+                    value={draftProfile.world ?? ""}
+                    onInput={(event) =>
+                      setDraftProfile({
+                        world: Number(event.currentTarget.value),
+                        guildId: null,
+                        guildName: null
+                      })
+                    }
+                  />
+                  <select
+                    value={draftProfile.guildId ?? ""}
+                    onChange={(event) =>
+                      setDraftProfile({
+                        world: draftProfile.world,
+                        guildId: event.currentTarget.value || null,
+                        guildName: event.currentTarget.value === "saved-guild" ? "Saved Guild" : null
+                      })
+                    }
+                  >
+                    <option value="">No guild</option>
+                    <option value="saved-guild">Saved Guild</option>
+                  </select>
+                  {ownedGuildProfilePersistence?.error !== null &&
+                  ownedGuildProfilePersistence?.error !== undefined ? (
+                    <p className="firebase-message firebase-message--error">
+                      {ownedGuildProfilePersistence.error}
+                    </p>
+                  ) : null}
+                  {shareSettings !== undefined ? (
+                    <div className="owned-guild-settings__share">{shareSettings}</div>
+                  ) : null}
+                </details>
+              ) : null}
+              {notificationSettingsVisible ? (
+                <details className="settings-section notification-settings">
+                  <summary>Notifications</summary>
+                  {notificationSettings}
+                </details>
+              ) : null}
+              <div className="settings-dialog__actions">
+                <button type="button" onClick={() => void handleSave()}>
+                  Save
+                </button>
+              </div>
+            </section>
+          ) : null}
+        </main>
+      );
+    }
+  };
+});
+
+vi.mock("../koMonitor/koObserverRepository", () => ({
+  loadKoGuildKoTotals: () => Promise.resolve([]),
+  loadKoObserverRunMeta: () => Promise.resolve(null),
+  subscribeKoGuildKoTotals: () => () => {}
+}));
+
+vi.mock("../koMonitor/koObserverTime", () => ({
+  getNextKoObserverReadBoundary: () => null,
+  isKoObserverStartedForToday: () => false,
+  shouldUseKoObserverRealtime: () => false
+}));
+
+vi.mock("./notificationDestinationRepository", () => ({
+  loadNotificationDestination: () => Promise.resolve(null),
+  saveNotificationDestination: () => Promise.resolve()
+}));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -26,8 +213,18 @@ const signedInState = {
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
+beforeEach(() => {
+  vi.stubGlobal("setInterval", vi.fn(() => 1));
+  vi.stubGlobal("clearInterval", vi.fn());
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.reject(new Error("Unexpected network request in FirebasePhase0App.test.tsx")))
+  );
+});
+
 afterEach(() => {
   act(() => root?.unmount());
+  vi.unstubAllGlobals();
   window.localStorage.clear();
   container?.remove();
   container = null;
@@ -539,6 +736,7 @@ async function renderApp(
     () => Promise.resolve()
   )
 ) {
+  const { FirebasePhase0App } = await import("./FirebasePhase0App");
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -548,6 +746,8 @@ async function renderApp(
       <AppModeProvider pathname={pathname}>
         <FirebasePhase0App
           loadGuildShare={loadShare}
+          loadKoGuildKoTotals={() => Promise.resolve([])}
+          loadKoObserverRunMeta={() => Promise.resolve(null)}
           loadNotificationDestination={loadDestination}
           loadOwnedGuildProfile={loadProfile}
           loadPublicGuildShare={loadPublicShare}
@@ -556,6 +756,7 @@ async function renderApp(
           saveNotificationDestination={saveDestination}
           saveOwnedGuildProfile={saveProfile}
           savePublicGuildShare={savePublicShare}
+          subscribeKoGuildKoTotals={() => () => {}}
           subscribeToAuthState={(onStateChanged) => {
             onStateChanged(authState);
             return () => {};
@@ -565,6 +766,23 @@ async function renderApp(
     );
     await flushPromises();
   });
+
+  await waitForAppReady(pathname, authState);
+}
+
+async function waitForAppReady(pathname: string, authState: AuthState) {
+  if (pathname === "/" && authState.status === "signed-in") {
+    await vi.waitFor(() => {
+      expect(document.querySelector(".firebase-auth-user")).not.toBeNull();
+    });
+    return;
+  }
+
+  if (pathname !== "/") {
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("Guild Battle Monitor");
+    });
+  }
 }
 
 async function openOwnedGuildSettings() {
@@ -837,4 +1055,5 @@ async function flushPromises() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
