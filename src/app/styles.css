@@ -1099,6 +1099,18 @@ select {
   background: #fff0f7;
 }
 
+.app-shell[data-mode="grand-battle"] .castle-list__row--warning {
+  background: rgba(210, 170, 55, 0.18);
+}
+
+.app-shell[data-mode="grand-battle"] .castle-list__row--danger {
+  background: rgba(230, 120, 45, 0.18);
+}
+
+.app-shell[data-mode="grand-battle"] .castle-list__row--critical {
+  background: rgba(235, 75, 65, 0.2);
+}
+
 .castle-list__castle,
 .castle-list__guild {
   overflow: hidden;
