@@ -543,6 +543,7 @@ describe("GuildBattlePlaceholder", () => {
       classId: 3,
       blockId: 1
     });
+    expect(document.body.textContent).not.toContain("監視条件");
     expect(document.querySelector(".grand-battle-setup__form")).toBeNull();
     expect(document.querySelector(".grand-battle-participants")).toBeNull();
     expect(document.querySelector(".grand-battle-setup__apply")).toBeNull();
@@ -592,6 +593,7 @@ describe("GuildBattlePlaceholder", () => {
 
     const summary = getKoVictimSummary();
     expect(document.querySelector(".startup-panel")).toBeNull();
+    expect(document.body.textContent).not.toContain("監視条件");
     expect(summary.textContent).toContain("KO");
     expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual(["12", "0"]);
     expect(summary.compareDocumentPosition(document.querySelector(".snapshot-summary") as Node)).toBe(

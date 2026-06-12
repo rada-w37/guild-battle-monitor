@@ -1535,11 +1535,7 @@ function GrandBattleSetupPanel({
 }) {
   if (hideManualSourceControls) {
     return (
-      <section className="grand-battle-setup" aria-labelledby="grand-battle-setup-title">
-        <h2 className="grand-battle-setup__title" id="grand-battle-setup-title">
-          監視条件
-        </h2>
-
+      <section className="grand-battle-setup">
         <KoVictimSummaryPanel state={koMonitorState} />
 
         <GrandBattleSnapshotStatus
