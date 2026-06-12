@@ -1100,15 +1100,33 @@ select {
 }
 
 .app-shell[data-mode="grand-battle"] .castle-list__row--warning {
+  color: var(--app-text);
   background: rgba(210, 170, 55, 0.18);
 }
 
 .app-shell[data-mode="grand-battle"] .castle-list__row--danger {
+  color: var(--app-text);
   background: rgba(230, 120, 45, 0.18);
 }
 
 .app-shell[data-mode="grand-battle"] .castle-list__row--critical {
+  color: var(--app-text);
   background: rgba(235, 75, 65, 0.2);
+}
+
+.app-shell[data-mode="grand-battle"] .castle-list__row--warning .castle-list__count::before,
+.app-shell[data-mode="grand-battle"] .castle-list__row--warning .castle-list__ko::before,
+.app-shell[data-mode="grand-battle"] .castle-list__row--danger .castle-list__count::before,
+.app-shell[data-mode="grand-battle"] .castle-list__row--danger .castle-list__ko::before,
+.app-shell[data-mode="grand-battle"] .castle-list__row--critical .castle-list__count::before,
+.app-shell[data-mode="grand-battle"] .castle-list__row--critical .castle-list__ko::before {
+  color: var(--app-text-muted);
+}
+
+.app-shell[data-mode="grand-battle"] .castle-list__row--warning .ko-value,
+.app-shell[data-mode="grand-battle"] .castle-list__row--danger .ko-value,
+.app-shell[data-mode="grand-battle"] .castle-list__row--critical .ko-value {
+  color: var(--app-text);
 }
 
 .castle-list__castle,
