@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -110,7 +110,7 @@ const snapshot = {
     {
       castleId: "1" as GvgCastleId,
       worldId: "1037" as GvgWorldId,
-      state: "idle",
+      state: "inBattle",
       status: "underAttack",
       ownerGuildId: ownGuildId,
       attackerGuildId: attackGuildId,
@@ -136,7 +136,7 @@ const snapshot = {
     {
       castleId: "3" as GvgCastleId,
       worldId: "1037" as GvgWorldId,
-      state: "idle",
+      state: "inBattle",
       status: "underAttack",
       ownerGuildId: otherGuildId,
       attackerGuildId: attackGuildId,
@@ -147,6 +147,11 @@ const snapshot = {
       updatedAt: "2026-05-27T11:15:36.000Z"
     }
   ]
+} satisfies GvgSnapshot;
+
+const grandBattleDetectionSnapshot = {
+  ...snapshot,
+  castles: snapshot.castles.map((castle) => ({ ...castle, state: "idle" as const, status: "normal" as const }))
 } satisfies GvgSnapshot;
 
 let root: Root | null = null;
@@ -179,25 +184,95 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).toContain("Guild Battle Monitor");
   });
 
-  it("shows mode tabs and starts in GuildBattle mode", () => {
+  it("starts in GuildBattle mode when the detection snapshot is in battle", () => {
     renderComponent();
 
     expect(getAppShell().dataset.mode).toBe("guild-battle");
-    expect(getModeButton("Guild Battle").getAttribute("aria-pressed")).toBe("true");
-    expect(getModeButton("Grand Battle").getAttribute("aria-pressed")).toBe("false");
     expect(getWorldInput()).not.toBeNull();
     expect(document.body.textContent).not.toContain("GrandBattleMonitor（準備中）");
     expect(getSettingsButton().disabled).toBe(false);
   });
 
-  it("shows the GrandBattle setup UI and disables settings in GrandBattle mode", async () => {
+  it("does not render a manual mode switch UI", () => {
     renderComponent();
 
-    await clickButton("Grand Battle");
+    expect(document.querySelector(".mode-tabs")).toBeNull();
+    expect(document.querySelector(".mode-tabs__button")).toBeNull();
+    expect(Array.from(document.querySelectorAll("button")).map((button) => button.textContent)).not.toContain(
+      "Grand Battle"
+    );
+  });
+
+  it("uses worldId 1001 for Pages battle detection without writing it into the world input", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    renderComponent(loadSnapshot);
+
+    expect(document.body.textContent).toContain("戦場情報を確認中...");
+    await flushPromises();
+
+    expect(loadSnapshot).toHaveBeenCalledWith("1001");
+    expect(getWorldInput().value).toBe("");
+  });
+
+  it("does not restart Pages battle detection after local UI rerenders", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    renderComponentWithDefaultRealtimeClient(loadSnapshot);
+    await flushPromises();
+    loadSnapshot.mockClear();
+
+    await clickSettingsButton();
+    await flushPromises();
+
+    expect(loadSnapshot).not.toHaveBeenCalled();
+    expect(getSettingsDialog()).not.toBeNull();
+  });
+
+  it("shows the battle detection failure message for REST failure, empty castles, and unknown states", async () => {
+    const loadSnapshot = vi.fn(() => Promise.reject(new Error("failed")));
+    renderComponent(loadSnapshot);
+    await flushPromises();
+
+    expect(document.body.textContent).toContain(
+      "戦場情報を取得できませんでした。時間をおいて再読み込みしてください。"
+    );
+    expect(getWorldInput()).not.toBeNull();
+
+    unmountRenderedComponent();
+    renderComponent(vi.fn(() => Promise.resolve({ ...snapshot, castles: [] })));
+    await flushPromises();
+    expect(document.body.textContent).toContain(
+      "戦場情報を取得できませんでした。時間をおいて再読み込みしてください。"
+    );
+    expect(getWorldInput()).not.toBeNull();
+
+    unmountRenderedComponent();
+    const unknownStateSnapshot = {
+      ...snapshot,
+      castles: [{ ...snapshot.castles[0], state: "unknown" as const, status: "unknown" as const }]
+    } satisfies GvgSnapshot;
+    renderComponent(
+      vi.fn(() => Promise.resolve(unknownStateSnapshot))
+    );
+    await flushPromises();
+    expect(document.body.textContent).toContain(
+      "戦場情報を取得できませんでした。時間をおいて再読み込みしてください。"
+    );
+    expect(getWorldInput()).not.toBeNull();
+  });
+
+  it("shows the owner guild setup message when Firebase owner context is missing", async () => {
+    renderComponent(undefined, undefined, undefined, undefined, undefined, "/", createOwnedGuildPersistence(null));
+    await flushPromises();
+
+    expect(document.body.textContent).toContain("所属ギルド設定を確認してください");
+    expect(document.querySelector(".startup-panel")).toBeNull();
+  });
+
+  it("shows the GrandBattle setup UI and disables settings in GrandBattle mode", async () => {
+    renderGrandBattleComponent();
+    await flushPromises();
 
     expect(getAppShell().dataset.mode).toBe("grand-battle");
-    expect(getModeButton("Guild Battle").getAttribute("aria-pressed")).toBe("false");
-    expect(getModeButton("Grand Battle").getAttribute("aria-pressed")).toBe("true");
     expect(document.body.textContent).toContain("Grand Battle Monitor");
     expect(document.body.textContent).not.toContain("GrandBattleMonitor（準備中）");
     expect(document.body.textContent).toContain("監視条件");
@@ -228,9 +303,8 @@ describe("GuildBattlePlaceholder", () => {
         autoUpdate: true
       })
     );
-    renderComponent(undefined, undefined, loadGrandBattleParticipants);
-
-    await clickButton("Grand Battle");
+    renderGrandBattleComponent(undefined, loadGrandBattleParticipants);
+    await flushPromises();
 
     expect(getGrandBattleWorldInput().value).toBe("50");
     expect(loadGrandBattleParticipants).toHaveBeenCalledWith({
@@ -247,9 +321,8 @@ describe("GuildBattlePlaceholder", () => {
   });
 
   it("shows all GrandBattle class options", async () => {
-    renderComponent();
-
-    await clickButton("Grand Battle");
+    renderGrandBattleComponent();
+    await flushPromises();
 
     expect(getSelectOptions(getGrandBattleSelect("クラス"))).toEqual([
       "グランドマスター",
@@ -263,26 +336,11 @@ describe("GuildBattlePlaceholder", () => {
     ]);
   });
 
-  it("returns to GuildBattle mode with the existing UI and settings enabled", async () => {
-    renderComponent();
-
-    await clickButton("Grand Battle");
-    await clickButton("Guild Battle");
-
-    expect(getAppShell().dataset.mode).toBe("guild-battle");
-    expect(getModeButton("Guild Battle").getAttribute("aria-pressed")).toBe("true");
-    expect(getWorldInput()).not.toBeNull();
-    expect(getSettingsButton().disabled).toBe(false);
-
-    await clickSettingsButton();
-    expect(getSettingsDialog()).not.toBeNull();
-  });
-
   it("loads GrandBattle participant guilds when world is committed and applies the candidate source", async () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
-    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+    renderGrandBattleComponent(undefined, loadGrandBattleParticipants);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -309,9 +367,9 @@ describe("GuildBattlePlaceholder", () => {
 
   it("loads GrandBattle participant guilds on select changes after world is committed", async () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
-    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+    renderGrandBattleComponent(undefined, loadGrandBattleParticipants);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -347,9 +405,9 @@ describe("GuildBattlePlaceholder", () => {
       .fn<typeof loadGrandBattleParticipantGuilds>()
       .mockResolvedValueOnce(grandBattleParticipants)
       .mockReturnValueOnce(deferredParticipants.promise);
-    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+    renderGrandBattleComponent(undefined, loadGrandBattleParticipants);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -380,9 +438,9 @@ describe("GuildBattlePlaceholder", () => {
       .fn<typeof loadGrandBattleParticipantGuilds>()
       .mockRejectedValueOnce(new Error("参加ギルド候補の取得に失敗しました。"))
       .mockResolvedValueOnce(grandBattleParticipants.slice(0, 2));
-    renderComponent(undefined, undefined, loadGrandBattleParticipants);
+    renderGrandBattleComponent(undefined, loadGrandBattleParticipants);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -402,9 +460,9 @@ describe("GuildBattlePlaceholder", () => {
   it("loads and renders the GrandBattle snapshot after applying the source", async () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
     const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
-    renderComponent(undefined, undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
+    renderGrandBattleComponent(undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -443,38 +501,80 @@ describe("GuildBattlePlaceholder", () => {
     expect(getRenderedCastleLabels()).toEqual(["アイン"]);
   });
 
+  it("auto-resolves Firebase GrandBattle source by searching class and block for the configured guild", async () => {
+    const unmatchedGrandBattleSnapshot = {
+      ...grandBattleSnapshot,
+      guildNames: {
+        [otherGuildId]: "Other Guild"
+      }
+    } satisfies GrandBattleSnapshot;
+    const loadGrandBattleLatestSnapshot = vi
+      .fn<typeof loadGrandBattleSnapshot>()
+      .mockResolvedValueOnce(unmatchedGrandBattleSnapshot)
+      .mockResolvedValueOnce(grandBattleSnapshot);
+
+    renderComponent(
+      vi.fn(() => Promise.resolve(grandBattleDetectionSnapshot)),
+      undefined,
+      undefined,
+      loadGrandBattleLatestSnapshot,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({
+        world: 50,
+        guildId: grandBattleParticipants[0].guildId,
+        guildName: "ギルドA"
+      })
+    );
+    await flushPromises();
+
+    expect(getAppShell().dataset.mode).toBe("grand-battle");
+    expect(loadGrandBattleLatestSnapshot).toHaveBeenNthCalledWith(1, {
+      serverId: "japan",
+      worldInput: "50",
+      worldNumber: 50,
+      classId: 3,
+      blockId: 0
+    });
+    expect(loadGrandBattleLatestSnapshot).toHaveBeenNthCalledWith(2, {
+      serverId: "japan",
+      worldInput: "50",
+      worldNumber: 50,
+      classId: 3,
+      blockId: 1
+    });
+    expect(document.body.textContent).not.toContain("監視条件");
+    expect(document.querySelector(".grand-battle-setup__form")).toBeNull();
+    expect(document.querySelector(".grand-battle-participants")).toBeNull();
+    expect(document.querySelector(".grand-battle-setup__apply")).toBeNull();
+    expect(document.querySelector(".castle-list")).not.toBeNull();
+  });
+
   it("shows the KO victim summary below the GrandBattle update button and above the monitor list", async () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
     const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
-    renderComponent(
-      undefined,
+    renderGrandBattleComponent(
       undefined,
       loadGrandBattleParticipants,
       loadGrandBattleLatestSnapshot,
       undefined,
       "/",
-      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      createOwnedGuildPersistence({ world: 37, guildId: grandBattleParticipants[0].guildId, guildName: "ギルドA" }),
       undefined,
       createKoMonitorProps()
     );
-
-    await clickButton("Grand Battle");
-    act(() => {
-      updateInput(getGrandBattleWorldInput(), "50");
-    });
-    await commitGrandBattleWorldWithKey("Enter");
-    await clickGrandBattleUpdateButton();
+    await flushPromises();
 
     const summary = getKoVictimSummary();
     expect(summary.textContent).toContain("被KO（推定）");
-    expect(getKoVictimRows().map((row) => row.textContent)).toEqual(["ギルドA12", "ギルドB0"]);
-    expect(getGrandBattleUpdateButton().compareDocumentPosition(summary)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual(["12", "0"]);
+    expect(document.querySelector(".grand-battle-setup__form")).toBeNull();
     expect(summary.compareDocumentPosition(document.querySelector(".castle-list") as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
   });
 
-  it("shows the KO victim summary below the GuildBattle update button and refreshes it on update", async () => {
+  it("shows the KO victim summary in Firebase GuildBattle auto-resolved mode", async () => {
     const loadKoGuildKoTotals = vi.fn(() => Promise.resolve(koGuildKoTotals));
     renderComponent(
       vi.fn(() => Promise.resolve(snapshot)),
@@ -483,7 +583,7 @@ describe("GuildBattlePlaceholder", () => {
       undefined,
       undefined,
       "/",
-      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      createOwnedGuildPersistence({ world: 37, guildId: ownGuildId, guildName: "Owner Guild" }),
       undefined,
       createKoMonitorProps({ loadKoGuildKoTotals })
     );
@@ -491,23 +591,20 @@ describe("GuildBattlePlaceholder", () => {
     await flushPromises();
     expect(loadKoGuildKoTotals).toHaveBeenCalledTimes(1);
 
-    await loadWorld37();
-    await flushPromises();
-
     const summary = getKoVictimSummary();
+    expect(document.querySelector(".startup-panel")).toBeNull();
+    expect(document.body.textContent).not.toContain("監視条件");
     expect(summary.textContent).toContain("KO");
-    expect(getKoVictimRows().map((row) => row.textContent)).toEqual(["ギルドA12", "ギルドB0"]);
-    expect(loadKoGuildKoTotals).toHaveBeenCalledTimes(2);
-    expect(getGuildBattleUpdateButton().compareDocumentPosition(summary)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual(["12", "0"]);
     expect(summary.compareDocumentPosition(document.querySelector(".snapshot-summary") as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
   });
 
   it("hides the KO victim summary without Firebase KO monitor wiring or configured guild context", async () => {
-    renderComponent();
+    renderGrandBattleComponent();
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     expect(document.querySelector(".ko-victim-summary")).toBeNull();
 
     unmountRenderedComponent();
@@ -522,26 +619,27 @@ describe("GuildBattlePlaceholder", () => {
       undefined,
       createKoMonitorProps()
     );
-    await clickButton("Grand Battle");
     await flushPromises();
 
     expect(document.querySelector(".ko-victim-summary")).toBeNull();
   });
 
   it("shows the KO victim summary for shared admin mode", async () => {
-    renderComponent(
-      undefined,
+    renderGrandBattleComponent(
       undefined,
       undefined,
       undefined,
       undefined,
       `/${ownGuildId}/a_key`,
       undefined,
-      createSharedGuild("admin"),
+      {
+        ...createSharedGuild("admin"),
+        guildId: grandBattleParticipants[0].guildId,
+        guildName: "ギルドA"
+      },
       createKoMonitorProps()
     );
 
-    await clickButton("Grand Battle");
     await flushPromises();
 
     expect(getKoVictimSummary().textContent).toContain("ギルドA");
@@ -549,21 +647,19 @@ describe("GuildBattlePlaceholder", () => {
 
   it("shows KO monitor loading, not-started, empty, and error states", async () => {
     const deferredMeta = createDeferred<KoObserverRunMeta | null>();
-    renderComponent(
-      undefined,
+    renderGrandBattleComponent(
       undefined,
       undefined,
       undefined,
       undefined,
       "/",
-      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      createOwnedGuildPersistence({ world: 37, guildId: grandBattleParticipants[0].guildId, guildName: "ギルドA" }),
       undefined,
       createKoMonitorProps({
         loadKoObserverRunMeta: vi.fn(() => deferredMeta.promise)
       })
     );
 
-    await clickButton("Grand Battle");
     expect(getKoVictimSummary().textContent).toContain("被KOデータを取得中です。");
     await act(async () => {
       deferredMeta.resolve({ lastStartedAt: new Date(2026, 4, 27, 20, 0, 0) });
@@ -578,38 +674,34 @@ describe("GuildBattlePlaceholder", () => {
     ]);
 
     unmountRenderedComponent();
-    renderComponent(
-      undefined,
+    renderGrandBattleComponent(
       undefined,
       undefined,
       undefined,
       undefined,
       "/",
-      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      createOwnedGuildPersistence({ world: 37, guildId: grandBattleParticipants[0].guildId, guildName: "ギルドA" }),
       undefined,
       createKoMonitorProps({
         loadKoGuildKoTotals: vi.fn(() => Promise.resolve([]))
       })
     );
-    await clickButton("Grand Battle");
     await flushPromises();
     expect(getKoVictimSummary().textContent).toContain("被KOデータがありません。");
 
     unmountRenderedComponent();
-    renderComponent(
-      undefined,
+    renderGrandBattleComponent(
       undefined,
       undefined,
       undefined,
       undefined,
       "/",
-      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      createOwnedGuildPersistence({ world: 37, guildId: grandBattleParticipants[0].guildId, guildName: "ギルドA" }),
       undefined,
       createKoMonitorProps({
         loadKoGuildKoTotals: vi.fn(() => Promise.reject(new Error("read failed")))
       })
     );
-    await clickButton("Grand Battle");
     await flushPromises();
     expect(getKoVictimSummary().textContent).toContain("KO集計データを取得できませんでした。");
   });
@@ -620,14 +712,13 @@ describe("GuildBattlePlaceholder", () => {
       onRows(koGuildKoTotals);
       return () => {};
     });
-    renderComponent(
-      undefined,
+    renderGrandBattleComponent(
       undefined,
       undefined,
       undefined,
       undefined,
       "/",
-      createOwnedGuildPersistence({ world: 37, guildId: "saved-guild", guildName: "Saved Guild" }),
+      createOwnedGuildPersistence({ world: 37, guildId: grandBattleParticipants[0].guildId, guildName: "ギルドA" }),
       undefined,
       createKoMonitorProps({
         loadKoGuildKoTotals,
@@ -636,25 +727,78 @@ describe("GuildBattlePlaceholder", () => {
       })
     );
 
-    await clickButton("Grand Battle");
     await flushPromises();
 
     expect(subscribeKoGuildKoTotals).toHaveBeenCalled();
     expect(loadKoGuildKoTotals).not.toHaveBeenCalled();
   });
 
+  it("keeps previous KO rows when the boundary refresh fails after realtime", async () => {
+    vi.useFakeTimers();
+    let currentTime = new Date(2026, 4, 27, 21, 29, 59);
+    const unsubscribeKoGuildKoTotals = vi.fn();
+    const loadKoGuildKoTotals = vi.fn(() => Promise.reject(new Error("read failed")));
+    const subscribeKoGuildKoTotals = vi.fn((onRows: (rows: readonly KoGuildKoTotal[]) => void) => {
+      onRows(koGuildKoTotals);
+      return unsubscribeKoGuildKoTotals;
+    });
+    renderGrandBattleComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: grandBattleParticipants[0].guildId, guildName: "ギルドA" }),
+      undefined,
+      createKoMonitorProps({
+        loadKoGuildKoTotals,
+        subscribeKoGuildKoTotals,
+        koMonitorNow: () => currentTime
+      })
+    );
+
+    await flushPromises();
+    const initialSubscriptionCount = subscribeKoGuildKoTotals.mock.calls.length;
+    const initialUnsubscriptionCount = unsubscribeKoGuildKoTotals.mock.calls.length;
+    expect(initialSubscriptionCount).toBeGreaterThan(0);
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual([
+      "12",
+      "0"
+    ]);
+
+    currentTime = new Date(2026, 4, 27, 21, 30, 0);
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(unsubscribeKoGuildKoTotals).toHaveBeenCalledTimes(initialUnsubscriptionCount + 1);
+    expect(subscribeKoGuildKoTotals).toHaveBeenCalledTimes(initialSubscriptionCount);
+    expect(loadKoGuildKoTotals).toHaveBeenCalledTimes(1);
+    expect(getKoVictimSummary().textContent).toContain("KO集計データを取得できませんでした。");
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__guild")?.textContent)).toEqual([
+      "ギルドA",
+      "ギルドB"
+    ]);
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual([
+      "-",
+      "-"
+    ]);
+  });
+
   it("updates the GrandBattle snapshot list from realtime payloads", async () => {
     const realtimeClient = new MockGvgRealtimeClient();
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
     const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
-    renderComponent(
-      undefined,
+    renderGrandBattleComponent(
       () => realtimeClient,
       loadGrandBattleParticipants,
       loadGrandBattleLatestSnapshot
     );
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -710,9 +854,9 @@ describe("GuildBattlePlaceholder", () => {
         autoUpdate: false
       })
     );
-    renderComponent(undefined, () => realtimeClient);
+    renderGrandBattleComponent(() => realtimeClient);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     await clickGrandBattleUpdateButton();
 
     expect(realtimeClient.subscriptions).toHaveLength(0);
@@ -730,9 +874,9 @@ describe("GuildBattlePlaceholder", () => {
         autoUpdate: false
       })
     );
-    renderComponent(undefined, () => realtimeClient);
+    renderGrandBattleComponent(() => realtimeClient);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     await clickGrandBattleUpdateButton();
     expect(realtimeClient.subscriptions).toHaveLength(0);
 
@@ -746,9 +890,9 @@ describe("GuildBattlePlaceholder", () => {
 
   it("stops GrandBattle realtime when auto update is turned off", async () => {
     const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(undefined, () => realtimeClient);
+    renderGrandBattleComponent(() => realtimeClient);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -770,9 +914,9 @@ describe("GuildBattlePlaceholder", () => {
     const loadGrandBattleLatestSnapshot = vi
       .fn<typeof loadGrandBattleSnapshot>()
       .mockRejectedValue(new Error("GrandBattle snapshotの取得に失敗しました。"));
-    renderComponent(undefined, undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
+    renderGrandBattleComponent(undefined, loadGrandBattleParticipants, loadGrandBattleLatestSnapshot);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -804,9 +948,9 @@ describe("GuildBattlePlaceholder", () => {
       .fn<typeof loadGrandBattleSnapshot>()
       .mockResolvedValueOnce(grandBattleSnapshot)
       .mockReturnValueOnce(deferredSnapshot.promise);
-    renderComponent(undefined, undefined, undefined, loadGrandBattleLatestSnapshot);
+    renderGrandBattleComponent(undefined, undefined, loadGrandBattleLatestSnapshot);
 
-    await clickButton("Grand Battle");
+    await flushPromises();
     act(() => {
       updateInput(getGrandBattleWorldInput(), "50");
     });
@@ -832,58 +976,6 @@ describe("GuildBattlePlaceholder", () => {
 
     expect(getRenderedCastleLabels()).toEqual(["アイン"]);
     expect(getCastleRows()[0].querySelector("[data-label='防']")?.textContent).toBe("55");
-  });
-
-  it("stops GuildBattle realtime when switching to GrandBattle", async () => {
-    const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(vi.fn(() => Promise.resolve(snapshot)), () => realtimeClient);
-
-    await loadWorld37();
-    expect(realtimeClient.subscriptions).toHaveLength(1);
-
-    await clickButton("Grand Battle");
-
-    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
-    expect(realtimeClient.state).toEqual({ status: "disconnected", reason: "mode changed to grand battle" });
-  });
-
-  it("disposes GrandBattle realtime when switching to GuildBattle", async () => {
-    const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(undefined, () => realtimeClient);
-
-    await clickButton("Grand Battle");
-    act(() => {
-      updateInput(getGrandBattleWorldInput(), "50");
-    });
-    await commitGrandBattleWorldWithKey("Enter");
-    await clickGrandBattleUpdateButton();
-    expect(realtimeClient.subscriptions).toHaveLength(1);
-
-    await clickButton("Guild Battle");
-
-    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
-    expect(realtimeClient.state).toEqual({ status: "disconnected", reason: "mode changed to guild battle" });
-  });
-
-  it("restarts GrandBattle realtime on mode return when auto update is on and a snapshot exists", async () => {
-    const realtimeClient = new MockGvgRealtimeClient();
-    renderComponent(undefined, () => realtimeClient);
-
-    await clickButton("Grand Battle");
-    act(() => {
-      updateInput(getGrandBattleWorldInput(), "50");
-    });
-    await commitGrandBattleWorldWithKey("Enter");
-    await clickGrandBattleUpdateButton();
-    expect(realtimeClient.subscriptions).toHaveLength(1);
-
-    await clickButton("Guild Battle");
-    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
-
-    await clickButton("Grand Battle");
-
-    expect(realtimeClient.subscriptions).toHaveLength(2);
-    expect(realtimeClient.state).toEqual({ status: "connected" });
   });
 
   it("restores world, sort, auto update, and selected guild from localStorage", async () => {
@@ -981,7 +1073,6 @@ describe("GuildBattlePlaceholder", () => {
 
   it("holds owned guild selection and resets it when world changes", async () => {
     renderComponent(undefined, undefined, undefined, undefined, undefined, "/", createOwnedGuildPersistence());
-    await loadWorld37();
     await clickSettingsButton();
 
     const ownedGuildSettings = getOwnedGuildSettings();
@@ -1035,14 +1126,14 @@ describe("GuildBattlePlaceholder", () => {
     await clickSettingsButton();
 
     expect(document.querySelector(".startup-panel")).toBeNull();
-    expect(getModeButton("Grand Battle").disabled).toBe(false);
+    expect(document.querySelector(".mode-tabs__button")).toBeNull();
     expect(getDangerSortCheckbox().disabled).toBe(false);
     expect(getAutoUpdateButton().disabled).toBe(false);
     expect(getSettingsDialog().querySelector(".alert-settings")).not.toBeNull();
     expect(getSettingsDialog().querySelector(".notification-settings")).not.toBeNull();
     expect(getSettingsDialog().querySelector(".owned-guild-settings")).toBeNull();
     expect(getSettingsDialog().querySelector(".share-settings")).toBeNull();
-    expect(getGuildSelect().value).toBe(otherGuildId);
+    expect(getGuildSelect().value).toBe(ownGuildId);
     expect(getGuildSelect().disabled).toBe(false);
 
     await act(async () => {
@@ -1067,8 +1158,7 @@ describe("GuildBattlePlaceholder", () => {
     await clickSettingsButton();
 
     expect(document.querySelector(".startup-panel")).toBeNull();
-    expect(getModeButton("Guild Battle").disabled).toBe(true);
-    expect(getModeButton("Grand Battle").disabled).toBe(true);
+    expect(document.querySelector(".mode-tabs__button")).toBeNull();
     expect(getGuildSelect().disabled).toBe(false);
     expect(getSettingsDialog().querySelector(".alert-settings")).not.toBeNull();
     expect(getThresholdInputs().every((input) => !input.disabled)).toBe(true);
@@ -1111,7 +1201,6 @@ describe("GuildBattlePlaceholder", () => {
       onChange
     } satisfies OwnedGuildProfilePersistence;
     renderComponent(undefined, undefined, undefined, undefined, undefined, "/", persistence);
-    await loadWorld37();
     await clickSettingsButton();
 
     const ownedGuildSettings = getOwnedGuildSettings();
@@ -1127,14 +1216,12 @@ describe("GuildBattlePlaceholder", () => {
       await flushPromises();
     });
     await blurOwnedGuildWorldInput();
-    const displayGuildSelect = getGuildSelect();
     onChange.mockClear();
     act(() => {
       updateSelect(guildSelect, ownGuildId);
     });
 
-    expect(getWorldInput().value).toBe("37");
-    expect(displayGuildSelect.value).toBe("");
+    expect(document.querySelector(".startup-panel")).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
     await clickSaveSettingsButton();
     expect(onChange).toHaveBeenCalledWith({
@@ -1159,13 +1246,12 @@ describe("GuildBattlePlaceholder", () => {
     const ownedGuildSettings = getOwnedGuildSettings();
     const worldInput = ownedGuildSettings.querySelector<HTMLInputElement>("input");
     const guildSelect = ownedGuildSettings.querySelector<HTMLSelectElement>("select");
-    const monitorWorldInput = getWorldInput();
 
     if (!worldInput || !guildSelect) {
       throw new Error("owned guild settings fields were not found");
     }
 
-    expect(monitorWorldInput.value).toBe("");
+    expect(document.querySelector(".startup-panel")).toBeNull();
 
     await act(async () => {
       updateInput(worldInput, "37");
@@ -1175,7 +1261,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(loadSnapshot).not.toHaveBeenCalled();
     await blurOwnedGuildWorldInput();
     expect(loadSnapshot).toHaveBeenCalledWith("1037");
-    expect(monitorWorldInput.value).toBe("");
+    expect(document.querySelector(".startup-panel")).toBeNull();
     expect(window.localStorage.getItem(GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY)).toBeNull();
     expect(Array.from(guildSelect.options).map((option) => option.textContent ?? "")).toContain("Owner Guild");
     expect(onChange).not.toHaveBeenCalled();
@@ -1404,6 +1490,9 @@ describe("GuildBattlePlaceholder", () => {
   it("does not load while typing world and loads with the update button", async () => {
     const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
     renderComponent(loadSnapshot);
+    await flushPromises();
+    expect(loadSnapshot).toHaveBeenCalledWith("1001");
+    loadSnapshot.mockClear();
 
     act(() => {
       updateInput(getWorldInput(), "37");
@@ -1640,6 +1729,47 @@ function renderComponent(
   });
 }
 
+function renderComponentWithDefaultRealtimeClient(loadSnapshot: typeof loadLocalGvgSnapshot) {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  act(() => {
+    root?.render(
+      <AppModeProvider pathname="/">
+        <GuildBattlePlaceholder loadSnapshot={loadSnapshot} />
+      </AppModeProvider>
+    );
+  });
+}
+
+function renderGrandBattleComponent(
+  createRealtimeClient: () => GvgRealtimeClient = () => new MockGvgRealtimeClient(),
+  loadGrandBattleParticipants: typeof loadGrandBattleParticipantGuilds = vi.fn(() =>
+    Promise.resolve(grandBattleParticipants)
+  ),
+  loadGrandBattleLatestSnapshot: typeof loadGrandBattleSnapshot = vi.fn(() =>
+    Promise.resolve(grandBattleSnapshot)
+  ),
+  notificationSettings?: ReactNode,
+  pathname: string = "/",
+  ownedGuildProfilePersistence?: OwnedGuildProfilePersistence,
+  sharedGuild?: SharedGuildContext | null,
+  koMonitor?: KoMonitorTestProps
+) {
+  renderComponent(
+    vi.fn(() => Promise.resolve(grandBattleDetectionSnapshot)),
+    createRealtimeClient,
+    loadGrandBattleParticipants,
+    loadGrandBattleLatestSnapshot,
+    notificationSettings,
+    pathname,
+    ownedGuildProfilePersistence,
+    sharedGuild,
+    koMonitor
+  );
+}
+
 function createSharedGuild(mode: "admin" | "guest"): SharedGuildContext {
   return {
     mode,
@@ -1702,18 +1832,6 @@ function getSettingsButton() {
 
   if (!button) {
     throw new Error("settings button was not found");
-  }
-
-  return button;
-}
-
-function getModeButton(label: "Guild Battle" | "Grand Battle") {
-  const button = Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-tabs__button")).find(
-    (candidate) => candidate.textContent === label
-  );
-
-  if (!button) {
-    throw new Error(`mode button was not found: ${label}`);
   }
 
   return button;

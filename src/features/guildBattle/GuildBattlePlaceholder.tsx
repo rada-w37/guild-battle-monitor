@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode
+} from "react";
 import { createAppCapabilities } from "../../app/appCapabilities";
 import { getAppModePermissions, useAppRoute, type AppMode, type AppModePermissions } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
@@ -97,12 +105,27 @@ const GRAND_BATTLE_BLOCK_OPTIONS: readonly {
 ];
 const CURRENT_TIME_REFRESH_INTERVAL_MS = 1000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
+const PAGES_BATTLE_DETECTION_WORLD_ID = "1001" as GvgWorldId;
+const BATTLE_DETECTION_LOADING_MESSAGE = "戦場情報を確認中...";
+const BATTLE_DETECTION_LOAD_ERROR_MESSAGE = "戦場情報を取得できませんでした。時間をおいて再読み込みしてください。";
+const FIREBASE_OWNER_PROFILE_REQUIRED_MESSAGE = "所属ギルド設定を確認してください";
+const FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE = "監視条件を解決できませんでした";
+const GRAND_BATTLE_AUTO_CLASS_ORDER: readonly GrandBattleClassId[] = [3, 2, 1];
+const GRAND_BATTLE_AUTO_BLOCK_ORDER: readonly GrandBattleBlockId[] = [0, 1, 2, 3];
 
 function getCurrentDate() {
   return new Date();
 }
 
+function createDefaultRealtimeClient() {
+  return new BrowserGvgRealtimeClient();
+}
+
 type BattleMonitorMode = "guildBattle" | "grandBattle";
+type BattleDetectionStatus =
+  | { readonly status: "loading" }
+  | { readonly status: "error"; readonly message: string }
+  | { readonly status: "resolved" };
 
 type BattleMonitorSharedState = BattleMonitorSharedViewSettings;
 
@@ -155,6 +178,89 @@ interface GuildBattleRuntimeService {
   readonly createSubscription: (snapshot: GvgSnapshot) => GvgRealtimeSubscription;
 }
 
+interface ConfiguredGuildContext {
+  readonly world: number;
+  readonly guildId: GvgGuildId;
+}
+
+function isSameBattleDetectionStatus(currentState: BattleDetectionStatus, nextState: BattleDetectionStatus): boolean {
+  if (currentState.status !== nextState.status) {
+    return false;
+  }
+
+  if (currentState.status === "error" && nextState.status === "error") {
+    return currentState.message === nextState.message;
+  }
+
+  return true;
+}
+
+function isSameBattleMonitorSharedState(
+  currentState: BattleMonitorSharedState,
+  nextState: BattleMonitorSharedState
+): boolean {
+  return (
+    currentState.worldInput === nextState.worldInput &&
+    currentState.worldNumber === nextState.worldNumber &&
+    currentState.autoUpdate === nextState.autoUpdate &&
+    currentState.sortMode === nextState.sortMode
+  );
+}
+
+function isSameKoGuildKoTotals(
+  currentRows: readonly KoGuildKoTotal[],
+  nextRows: readonly KoGuildKoTotal[]
+): boolean {
+  if (currentRows.length !== nextRows.length) {
+    return false;
+  }
+
+  return currentRows.every((currentRow, index) => {
+    const nextRow = nextRows[index];
+
+    return (
+      currentRow.guildId === nextRow.guildId &&
+      currentRow.guildName === nextRow.guildName &&
+      currentRow.totalVictimKoCount === nextRow.totalVictimKoCount &&
+      (currentRow.updatedAt?.getTime() ?? null) === (nextRow.updatedAt?.getTime() ?? null)
+    );
+  });
+}
+
+function getKoMonitorRows(state: KoMonitorLoadState): readonly KoGuildKoTotal[] {
+  return state.status === "success" || state.status === "error" ? state.rows : [];
+}
+
+function isSameKoMonitorLoadState(currentState: KoMonitorLoadState, nextState: KoMonitorLoadState): boolean {
+  if (currentState.status !== nextState.status) {
+    return false;
+  }
+
+  if (currentState.status === "success" && nextState.status === "success") {
+    return (
+      currentState.isObserverStarted === nextState.isObserverStarted &&
+      isSameKoGuildKoTotals(currentState.rows, nextState.rows)
+    );
+  }
+
+  if (currentState.status === "error" && nextState.status === "error") {
+    return (
+      currentState.error.name === nextState.error.name &&
+      currentState.error.message === nextState.error.message &&
+      isSameKoGuildKoTotals(currentState.rows, nextState.rows)
+    );
+  }
+
+  return true;
+}
+
+function getNextKoMonitorLoadState(
+  currentState: KoMonitorLoadState,
+  nextState: KoMonitorLoadState
+): KoMonitorLoadState {
+  return isSameKoMonitorLoadState(currentState, nextState) ? currentState : nextState;
+}
+
 export function GuildBattlePlaceholder({
   afterHeader,
   loadSnapshot = loadLocalGvgSnapshot,
@@ -164,7 +270,7 @@ export function GuildBattlePlaceholder({
   loadKoGuildKoTotals,
   subscribeKoGuildKoTotals,
   koMonitorNow = getCurrentDate,
-  createRealtimeClient = () => new BrowserGvgRealtimeClient(),
+  createRealtimeClient = createDefaultRealtimeClient,
   headerActions,
   modeOverride,
   notificationSettings,
@@ -177,6 +283,14 @@ export function GuildBattlePlaceholder({
   const appRoute = useAppRoute();
   const appMode = modeOverride ?? sharedGuild?.mode ?? appRoute?.mode ?? "owner";
   const modePermissions = { ...getAppModePermissions(appMode), ...permissionsOverride };
+  const isFirebaseVersion =
+    ownedGuildProfilePersistence !== undefined ||
+    notificationSettings !== undefined ||
+    settingsDraftExternal !== undefined ||
+    shareSettings !== undefined ||
+    loadKoObserverRunMeta !== undefined ||
+    loadKoGuildKoTotals !== undefined ||
+    subscribeKoGuildKoTotals !== undefined;
   const hasConfiguredGuildContext =
     sharedGuild !== undefined && sharedGuild !== null
       ? true
@@ -186,12 +300,7 @@ export function GuildBattlePlaceholder({
     loadKoGuildKoTotals !== undefined &&
     subscribeKoGuildKoTotals !== undefined;
   const appCapabilities = createAppCapabilities({
-    firebaseEnabled:
-      ownedGuildProfilePersistence !== undefined ||
-      notificationSettings !== undefined ||
-      settingsDraftExternal !== undefined ||
-      shareSettings !== undefined ||
-      hasKoMonitorView,
+    firebaseEnabled: isFirebaseVersion,
     hasConfiguredGuildContext,
     hasKoMonitorView,
     hasNotificationSettings: notificationSettings !== undefined,
@@ -203,6 +312,9 @@ export function GuildBattlePlaceholder({
   });
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
+  const [battleDetectionState, setBattleDetectionState] = useState<BattleDetectionStatus>({
+    status: "loading"
+  });
   const [shared, setShared] = useState<BattleMonitorSharedState>(() =>
     sharedGuild === undefined || sharedGuild === null
       ? initialViewSettings.shared
@@ -269,6 +381,17 @@ export function GuildBattlePlaceholder({
   );
   const world = shared.worldInput;
   const worldId = useMemo(() => createWorldIdFromWorldNumber(shared.worldNumber), [shared.worldNumber]);
+  const configuredGuildContext = useMemo(
+    () =>
+      getConfiguredGuildContext({
+        ownedGuildProfile: ownedGuildProfilePersistence?.profile ?? null,
+        sharedGuild
+      }),
+    [ownedGuildProfilePersistence?.profile, sharedGuild]
+  );
+  const shouldHideManualGuildBattleSource = isFirebaseVersion && configuredGuildContext !== null;
+  const shouldHideManualGrandBattleSource = isFirebaseVersion && configuredGuildContext !== null;
+  const shouldBlockMonitorRendering = isFirebaseVersion && battleDetectionState.status === "error";
   const castleSortMode = shared.sortMode;
   const isAutoUpdateEnabled = shared.autoUpdate;
   const isLoading = loadState.status === "loading";
@@ -293,6 +416,11 @@ export function GuildBattlePlaceholder({
     refreshKey: koMonitorRefreshKey,
     subscribeKoGuildKoTotals
   });
+  const updateBattleDetectionState = useCallback((nextState: BattleDetectionStatus) => {
+    setBattleDetectionState((currentState) =>
+      isSameBattleDetectionStatus(currentState, nextState) ? currentState : nextState
+    );
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -319,16 +447,133 @@ export function GuildBattlePlaceholder({
       return;
     }
 
-    const nextShared = {
-      ...shared,
-      worldInput: String(sharedGuild.world),
-      worldNumber: sharedGuild.world
-    };
-    setShared(nextShared);
-    void loadSnapshotForWorldId(createWorldIdFromWorldNumber(sharedGuild.world) as GvgWorldId, {
-      startRealtimeOnSuccess: false
+    setShared((currentShared) => {
+      const nextShared = {
+        ...currentShared,
+        worldInput: String(sharedGuild.world),
+        worldNumber: sharedGuild.world
+      };
+
+      return isSameBattleMonitorSharedState(currentShared, nextShared) ? currentShared : nextShared;
     });
   }, [sharedGuild]);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    async function resolveInitialBattleMode() {
+      if (isFirebaseVersion && ownedGuildProfilePersistence?.isLoading) {
+        updateBattleDetectionState({ status: "loading" });
+        return;
+      }
+
+      if (isFirebaseVersion && configuredGuildContext === null) {
+        updateBattleDetectionState({
+          status: "error",
+          message:
+            appMode === "owner"
+              ? FIREBASE_OWNER_PROFILE_REQUIRED_MESSAGE
+              : FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
+        });
+        return;
+      }
+
+      updateBattleDetectionState({ status: "loading" });
+
+      const detectionWorldId =
+        configuredGuildContext === null
+          ? PAGES_BATTLE_DETECTION_WORLD_ID
+          : createWorldIdFromWorldNumber(configuredGuildContext.world);
+
+      if (detectionWorldId === null) {
+        updateBattleDetectionState({
+          status: "error",
+          message: FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
+        });
+        return;
+      }
+
+      try {
+        const detectionSnapshot = await runtimeService.loadSnapshot(detectionWorldId);
+        const detectedMode = detectBattleMonitorMode(detectionSnapshot);
+
+        if (isDisposed) {
+          return;
+        }
+
+        if (detectedMode === null) {
+          updateBattleDetectionState({
+            status: "error",
+            message: BATTLE_DETECTION_LOAD_ERROR_MESSAGE
+          });
+          return;
+        }
+
+        setActiveMode(detectedMode);
+        updateBattleDetectionState({ status: "resolved" });
+
+        if (detectedMode === "guildBattle") {
+          stopGrandBattleRealtime("battle mode resolved to guild battle", { nextState: "idle" });
+
+          if (configuredGuildContext !== null) {
+            setShared((currentShared) => {
+              const nextShared = {
+                ...currentShared,
+                worldInput: String(configuredGuildContext.world),
+                worldNumber: configuredGuildContext.world
+              };
+
+              return isSameBattleMonitorSharedState(currentShared, nextShared) ? currentShared : nextShared;
+            });
+            setLoadState({ status: "success", data: detectionSnapshot });
+            setSelectedGuildId(configuredGuildContext.guildId);
+
+            if (isAutoUpdateEnabled) {
+              await startRealtime(detectionSnapshot);
+            }
+          }
+          return;
+        }
+
+        stopRealtime("battle mode resolved to grand battle", { nextState: "idle" });
+
+        if (configuredGuildContext !== null) {
+          await resolveFirebaseGrandBattleSource(configuredGuildContext);
+          return;
+        }
+
+        if (grandBattleDraftSource.worldNumber !== null) {
+          await loadGrandBattleParticipantsForSource({
+            ...grandBattleDraftSource,
+            worldNumber: grandBattleDraftSource.worldNumber
+          });
+        }
+      } catch {
+        if (!isDisposed) {
+          updateBattleDetectionState({
+            status: "error",
+            message: isFirebaseVersion
+              ? FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
+              : BATTLE_DETECTION_LOAD_ERROR_MESSAGE
+          });
+        }
+      }
+    }
+
+    void resolveInitialBattleMode();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [
+    appMode,
+    configuredGuildContext,
+    isAutoUpdateEnabled,
+    isFirebaseVersion,
+    ownedGuildProfilePersistence?.isLoading,
+    runtimeService,
+    updateBattleDetectionState
+  ]);
 
   async function loadSnapshotForWorldId(
     nextWorldId: GvgWorldId,
@@ -678,6 +923,60 @@ export function GuildBattlePlaceholder({
     }
   }
 
+  async function resolveFirebaseGrandBattleSource(context: ConfiguredGuildContext) {
+    setGrandBattleParticipantLoadState({ status: "loading" });
+    setGrandBattleSnapshotLoadState({ status: "loading" });
+    setGrandBattleParticipantCandidates([]);
+    setGrandBattleCandidateSource(null);
+    setGrandBattleAppliedSource(null);
+    setSelectedGrandBattleGuildId(context.guildId);
+
+    for (const classId of GRAND_BATTLE_AUTO_CLASS_ORDER) {
+      for (const blockId of GRAND_BATTLE_AUTO_BLOCK_ORDER) {
+        const source: GrandBattleResolvedSource = {
+          serverId: GRAND_BATTLE_DEFAULT_SERVER_ID,
+          worldInput: String(context.world),
+          worldNumber: context.world,
+          classId,
+          blockId
+        };
+        const snapshot = await loadGrandBattleLatestSnapshot(source);
+
+        if (!Object.prototype.hasOwnProperty.call(snapshot.guildNames, context.guildId)) {
+          continue;
+        }
+
+        const participants = createGrandBattleParticipantsFromSnapshot(snapshot);
+        setGrandBattleDraftSource(source);
+        setGrandBattleCandidateSource(source);
+        setGrandBattleAppliedSource(source);
+        setGrandBattleParticipantCandidates(participants);
+        setGrandBattleParticipantLoadState({ status: "success", data: participants });
+        setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
+        setSelectedGrandBattleGuildId(context.guildId);
+        setKoMonitorRefreshKey((currentKey) => currentKey + 1);
+
+        if (isAutoUpdateEnabled) {
+          await startGrandBattleRealtime(snapshot);
+        }
+        return;
+      }
+    }
+
+    setGrandBattleParticipantLoadState({
+      status: "error",
+      error: new Error(FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE)
+    });
+    setGrandBattleSnapshotLoadState({
+      status: "error",
+      error: new Error(FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE)
+    });
+    updateBattleDetectionState({
+      status: "error",
+      message: FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
+    });
+  }
+
   async function startGrandBattleRealtime(snapshot: GrandBattleSnapshot) {
     stopGrandBattleRealtime("grand battle realtime restart", { nextState: "idle" });
 
@@ -816,62 +1115,6 @@ export function GuildBattlePlaceholder({
     });
   }
 
-  function handleModeChange(nextMode: BattleMonitorMode) {
-    if (!modePermissions.canEditBattleState) {
-      return;
-    }
-
-    if (activeMode === nextMode) {
-      return;
-    }
-
-    if (activeMode === "guildBattle" && nextMode === "grandBattle") {
-      stopRealtime("mode changed to grand battle", { nextState: "idle" });
-    }
-
-    if (activeMode === "grandBattle" && nextMode === "guildBattle") {
-      stopGrandBattleRealtime("mode changed to guild battle", { nextState: "idle" });
-    }
-
-    setActiveMode(nextMode);
-
-    if (nextMode === "guildBattle") {
-      if (isAutoUpdateEnabled && loadState.status === "success" && loadState.data.worldId === worldId) {
-        void startRealtime(loadState.data);
-      }
-      return;
-    }
-
-    if (nextMode === "grandBattle") {
-      const nextDraftSource = {
-        ...grandBattleDraftSource,
-        worldInput: shared.worldInput,
-        worldNumber: shared.worldNumber
-      };
-      setIsSettingsDialogOpen(false);
-      setGrandBattleDraftSource(nextDraftSource);
-
-      if (nextDraftSource.worldNumber !== null) {
-        void loadGrandBattleParticipantsForSource({
-          ...nextDraftSource,
-          worldNumber: nextDraftSource.worldNumber
-        });
-      }
-
-      if (
-        isAutoUpdateEnabled &&
-        nextDraftSource.worldNumber !== null &&
-        grandBattleSnapshotLoadState.status === "success" &&
-        isSameGrandBattleSource(grandBattleSnapshotLoadState.data.source, {
-          ...nextDraftSource,
-          worldNumber: nextDraftSource.worldNumber
-        })
-      ) {
-        void startGrandBattleRealtime(grandBattleSnapshotLoadState.data);
-      }
-    }
-  }
-
   const canApplyGrandBattleSource =
     grandBattleCandidateSource !== null &&
     grandBattleParticipantLoadState.status === "success" &&
@@ -943,26 +1186,7 @@ export function GuildBattlePlaceholder({
         </div>
         {afterHeader}
 
-        <div className="mode-tabs" aria-label="Battle Monitor mode">
-          <button
-            className={`mode-tabs__button${activeMode === "guildBattle" ? " mode-tabs__button--active" : ""}`}
-            disabled={!modePermissions.canEditBattleState}
-            type="button"
-            aria-pressed={activeMode === "guildBattle"}
-            onClick={() => handleModeChange("guildBattle")}
-          >
-            Guild Battle
-          </button>
-          <button
-            className={`mode-tabs__button${activeMode === "grandBattle" ? " mode-tabs__button--active" : ""}`}
-            disabled={!modePermissions.canEditBattleState}
-            type="button"
-            aria-pressed={activeMode === "grandBattle"}
-            onClick={() => handleModeChange("grandBattle")}
-          >
-            Grand Battle
-          </button>
-        </div>
+        <BattleDetectionMessage state={battleDetectionState} />
 
         {isSettingsDialogOpen ? (
           <SettingsDialog
@@ -1006,9 +1230,9 @@ export function GuildBattlePlaceholder({
           />
         ) : null}
 
-        {activeMode === "guildBattle" ? (
+        {!shouldBlockMonitorRendering && activeMode === "guildBattle" ? (
           <>
-        {sharedGuild === undefined || sharedGuild === null ? (
+        {!shouldHideManualGuildBattleSource ? (
           <form
             className="startup-panel"
             aria-label="起動"
@@ -1054,10 +1278,11 @@ export function GuildBattlePlaceholder({
           onTestModeRevive={(castleId) => testModeClientRef.current?.reviveCastle(castleId)}
         />
           </>
-        ) : (
+        ) : !shouldBlockMonitorRendering ? (
           <GrandBattleSetupPanel
             canApplySource={canApplyGrandBattleSource}
             draftSource={grandBattleDraftSource}
+            hideManualSourceControls={shouldHideManualGrandBattleSource}
             participantCandidates={grandBattleParticipantCandidates}
             participantLoadState={grandBattleParticipantLoadState}
             selectedGuildId={selectedGrandBattleGuildId}
@@ -1075,9 +1300,29 @@ export function GuildBattlePlaceholder({
             onWorldCommit={handleGrandBattleWorldCommit}
             onWorldInputChange={handleGrandBattleWorldInputChange}
           />
-        )}
+        ) : null}
       </section>
     </main>
+  );
+}
+
+function BattleDetectionMessage({ state }: { readonly state: BattleDetectionStatus }) {
+  if (state.status === "resolved") {
+    return null;
+  }
+
+  if (state.status === "loading") {
+    return (
+      <p className="status-message" aria-live="polite">
+        {BATTLE_DETECTION_LOADING_MESSAGE}
+      </p>
+    );
+  }
+
+  return (
+    <p className="status-message status-message--error" role="alert">
+      {state.message}
+    </p>
   );
 }
 
@@ -1128,7 +1373,7 @@ function useKoMonitorLoadState({
       loadKoGuildKoTotals === undefined ||
       subscribeKoGuildKoTotals === undefined
     ) {
-      setState({ status: "idle" });
+      setState((currentState) => getNextKoMonitorLoadState(currentState, { status: "idle" }));
       return;
     }
 
@@ -1137,7 +1382,7 @@ function useKoMonitorLoadState({
     const subscribeTotals = subscribeKoGuildKoTotals;
     let isDisposed = false;
     let unsubscribe: (() => void) | null = null;
-    setState({ status: "loading" });
+    setState((currentState) => (currentState.status === "idle" ? { status: "loading" } : currentState));
 
     async function load() {
       const currentTime = now();
@@ -1148,19 +1393,20 @@ function useKoMonitorLoadState({
         unsubscribe = subscribeTotals(
           (rows) => {
             if (!isDisposed) {
-              setState({ status: "success", isObserverStarted, rows });
+              setState((currentState) =>
+                getNextKoMonitorLoadState(currentState, { status: "success", isObserverStarted, rows })
+              );
             }
           },
           (error) => {
             if (!isDisposed) {
-              setState((currentState) => ({
-                status: "error",
-                error,
-                rows:
-                  currentState.status === "success" || currentState.status === "error"
-                    ? currentState.rows
-                    : []
-              }));
+              setState((currentState) =>
+                getNextKoMonitorLoadState(currentState, {
+                  status: "error",
+                  error,
+                  rows: getKoMonitorRows(currentState)
+                })
+              );
             }
           }
         );
@@ -1170,17 +1416,21 @@ function useKoMonitorLoadState({
       const rows = await loadTotals();
 
       if (!isDisposed) {
-        setState({ status: "success", isObserverStarted, rows });
+        setState((currentState) =>
+          getNextKoMonitorLoadState(currentState, { status: "success", isObserverStarted, rows })
+        );
       }
     }
 
     void load().catch((error) => {
       if (!isDisposed) {
-        setState({
-          status: "error",
-          error: error instanceof Error ? error : new Error("KO集計データを取得できませんでした。"),
-          rows: []
-        });
+        setState((currentState) =>
+          getNextKoMonitorLoadState(currentState, {
+            status: "error",
+            error: error instanceof Error ? error : new Error("KO集計データを取得できませんでした。"),
+            rows: getKoMonitorRows(currentState)
+          })
+        );
       }
     });
 
@@ -1227,6 +1477,66 @@ function isSameGrandBattleSource(
   );
 }
 
+function detectBattleMonitorMode(snapshot: GvgSnapshot): BattleMonitorMode | null {
+  if (snapshot.castles.length === 0) {
+    return null;
+  }
+
+  if (snapshot.castles.some((castle) => castle.state === "unknown")) {
+    return null;
+  }
+
+  if (
+    snapshot.castles.some(
+      (castle) =>
+        castle.state === "inBattle" ||
+        castle.state === "fallen" ||
+        castle.state === "counterattack" ||
+        castle.state === "counterattackSuccessful"
+    )
+  ) {
+    return "guildBattle";
+  }
+
+  return snapshot.castles.every((castle) => castle.state === "idle") ? "grandBattle" : null;
+}
+
+function getConfiguredGuildContext({
+  ownedGuildProfile,
+  sharedGuild
+}: {
+  readonly ownedGuildProfile: OwnedGuildProfile | null;
+  readonly sharedGuild?: SharedGuildContext | null;
+}): ConfiguredGuildContext | null {
+  if (sharedGuild !== undefined && sharedGuild !== null) {
+    return {
+      world: sharedGuild.world,
+      guildId: sharedGuild.guildId as GvgGuildId
+    };
+  }
+
+  if (!isCompleteOwnedGuildProfile(ownedGuildProfile)) {
+    return null;
+  }
+
+  return {
+    world: ownedGuildProfile.world,
+    guildId: ownedGuildProfile.guildId as GvgGuildId
+  };
+}
+
+function createGrandBattleParticipantsFromSnapshot(
+  snapshot: GrandBattleSnapshot
+): readonly GrandBattleParticipantGuildCandidate[] {
+  return Object.entries(snapshot.guildNames)
+    .sort(([leftGuildId], [rightGuildId]) => leftGuildId.localeCompare(rightGuildId))
+    .slice(0, 4)
+    .map(([guildId, guildName]) => ({
+      guildId: guildId as GvgGuildId,
+      guildName
+    }));
+}
+
 function useCurrentTime(): Date {
   const [currentTime, setCurrentTime] = useState(() => new Date());
 
@@ -1245,6 +1555,7 @@ function GrandBattleSetupPanel({
   alertThresholds,
   canApplySource,
   draftSource,
+  hideManualSourceControls,
   isAutoUpdateEnabled,
   koMonitorState,
   participantCandidates,
@@ -1264,6 +1575,7 @@ function GrandBattleSetupPanel({
   readonly alertThresholds: GuildBattleAlertThresholds;
   readonly canApplySource: boolean;
   readonly draftSource: GrandBattleSource;
+  readonly hideManualSourceControls: boolean;
   readonly isAutoUpdateEnabled: boolean;
   readonly koMonitorState: KoMonitorLoadState;
   readonly participantCandidates: readonly GrandBattleParticipantGuildCandidate[];
@@ -1280,6 +1592,25 @@ function GrandBattleSetupPanel({
   readonly onWorldCommit: () => void;
   readonly onWorldInputChange: (worldInput: string) => void;
 }) {
+  if (hideManualSourceControls) {
+    return (
+      <section className="grand-battle-setup">
+        <KoVictimSummaryPanel state={koMonitorState} />
+
+        <GrandBattleSnapshotStatus
+          alertThresholds={alertThresholds}
+          isAutoUpdateEnabled={isAutoUpdateEnabled}
+          participantCandidates={participantCandidates}
+          realtimeState={realtimeState}
+          selectedGuildId={selectedGuildId}
+          snapshotLoadState={snapshotLoadState}
+          onGuildChange={onGuildChange}
+          onOpenSettings={onOpenSettings}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="grand-battle-setup" aria-labelledby="grand-battle-setup-title">
       <h2 className="grand-battle-setup__title" id="grand-battle-setup-title">

@@ -325,52 +325,77 @@ function useResolvedSharedGuild(
   loadPublicShare: typeof loadPublicGuildShare
 ): ResolvedSharedGuildState {
   const [state, setState] = useState<ResolvedSharedGuildState>({ status: "owner" });
+  const routeMode = appRoute?.mode ?? null;
+  const routeGuildId = appRoute?.mode === "admin" || appRoute?.mode === "guest" ? appRoute.guildId : null;
+  const routeAccessKey = appRoute?.mode === "admin" || appRoute?.mode === "guest" ? appRoute.accessKey : null;
 
   useEffect(() => {
     let isDisposed = false;
 
-    if (appRoute === null || appRoute.mode === "owner") {
-      setState({ status: "owner" });
+    if (routeMode === null || routeMode === "owner" || routeGuildId === null || routeAccessKey === null) {
+      setState((currentState) => (currentState.status === "owner" ? currentState : { status: "owner" }));
       return;
     }
 
-    setState({ status: "loading" });
-    void loadPublicShare(appRoute.guildId)
+    setState((currentState) => (currentState.status === "loading" ? currentState : { status: "loading" }));
+    void loadPublicShare(routeGuildId)
       .then((share) => {
         if (isDisposed) {
           return;
         }
 
-        const mode = resolveSharedMode(appRoute.accessKey, share);
+        const mode = resolveSharedMode(routeAccessKey, share);
 
         if (share === null || mode === null) {
-          setState({ status: "fallback" });
+          setState((currentState) => (currentState.status === "fallback" ? currentState : { status: "fallback" }));
           return;
         }
 
-        setState({
-          status: "valid",
-          sharedGuild: {
-            mode,
-            guildId: appRoute.guildId,
-            world: share.world,
-            guildName: share.guildName
-          }
-        });
+        setState((currentState) =>
+          getNextResolvedSharedGuildState(currentState, {
+            status: "valid",
+            sharedGuild: {
+              mode,
+              guildId: routeGuildId,
+              world: share.world,
+              guildName: share.guildName
+            }
+          })
+        );
       })
       .catch((error) => {
         console.error("Failed to load guildShares/{guildId}.", error);
         if (!isDisposed) {
-          setState({ status: "fallback" });
+          setState((currentState) => (currentState.status === "fallback" ? currentState : { status: "fallback" }));
         }
       });
 
     return () => {
       isDisposed = true;
     };
-  }, [appRoute, loadPublicShare]);
+  }, [loadPublicShare, routeAccessKey, routeGuildId, routeMode]);
 
   return state;
+}
+
+function getNextResolvedSharedGuildState(
+  currentState: ResolvedSharedGuildState,
+  nextState: ResolvedSharedGuildState
+): ResolvedSharedGuildState {
+  if (currentState.status !== nextState.status) {
+    return nextState;
+  }
+
+  if (currentState.status !== "valid" || nextState.status !== "valid") {
+    return currentState;
+  }
+
+  return currentState.sharedGuild.mode === nextState.sharedGuild.mode &&
+    currentState.sharedGuild.guildId === nextState.sharedGuild.guildId &&
+    currentState.sharedGuild.world === nextState.sharedGuild.world &&
+    currentState.sharedGuild.guildName === nextState.sharedGuild.guildName
+    ? currentState
+    : nextState;
 }
 
 function resolveSharedMode(accessKey: string, share: PublicGuildShare | null): "admin" | "guest" | null {

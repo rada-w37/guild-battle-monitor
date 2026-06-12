@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 export type AppMode = "owner" | "admin" | "guest";
 
@@ -93,7 +93,9 @@ export function AppModeProvider({
   readonly children: ReactNode;
   readonly pathname?: string;
 }) {
-  return <AppRouteContext.Provider value={resolveRoute(pathname)}>{children}</AppRouteContext.Provider>;
+  const route = useMemo(() => resolveRoute(pathname), [pathname]);
+
+  return <AppRouteContext.Provider value={route}>{children}</AppRouteContext.Provider>;
 }
 
 export function useAppMode(): AppMode | null {
