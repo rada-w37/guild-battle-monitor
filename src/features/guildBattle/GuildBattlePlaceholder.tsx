@@ -1473,8 +1473,15 @@ function GrandBattleSnapshotSummary({
   const selectedGuildCandidate = guildCandidates.find((candidate) => candidate.guildId === selectedGuildId);
   const guildSelectValue = selectedGuildCandidate?.guildId ?? "";
   const viewModels = useMemo(
-    () => createGrandBattleCastleListViewModels(snapshot, guildSelectValue, alertThresholds, currentTime),
-    [alertThresholds, currentTime, guildSelectValue, snapshot]
+    () =>
+      createGrandBattleCastleListViewModels(
+        snapshot,
+        guildSelectValue,
+        alertThresholds,
+        currentTime,
+        selectedGuildCandidate?.guildName ?? null
+      ),
+    [alertThresholds, currentTime, guildSelectValue, selectedGuildCandidate?.guildName, snapshot]
   );
 
   return (

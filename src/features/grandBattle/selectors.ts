@@ -22,7 +22,9 @@ export function createGrandBattleGuildCandidates(
   return participants.map((participant) => ({
     guildId: participant.guildId,
     guildName: snapshot.guildNames[participant.guildId] ?? participant.guildName,
-    ownedCastleCount: snapshot.castles.filter((castle) => castle.ownerGuildId === participant.guildId).length
+    ownedCastleCount: snapshot.castles.filter((castle) =>
+      isSameGrandBattleGuild(castle.ownerGuildId, participant.guildId, snapshot.guildNames, participant.guildName)
+    ).length
   }));
 }
 
@@ -30,12 +32,13 @@ export function createGrandBattleCastleListViewModels(
   snapshot: GrandBattleSnapshot,
   selectedGuildId: GvgGuildId | "",
   alertThresholds: GuildBattleAlertThresholds,
-  currentTime = new Date()
+  currentTime = new Date(),
+  selectedGuildName?: string | null
 ): BattleMonitorCastleViewModel<GvgCastleId>[] {
   return snapshot.castles
     .map((castle) => ({
       castle,
-      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, currentTime)
+      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, selectedGuildName, snapshot.guildNames, currentTime)
     }))
     .filter(({ guildRelation }) => selectedGuildId.length === 0 || guildRelation !== "none")
     .map(({ castle, guildRelation }) => ({
@@ -73,9 +76,62 @@ export function createGrandBattleCastleListViewModels(
 function getSelectedGuildRelation(
   castle: Pick<GrandBattleCastle, "attackerGuildId" | "defenseCount" | "ownerGuildId" | "state">,
   selectedGuildId: GvgGuildId | "",
+  selectedGuildName: string | null | undefined,
+  guildNames: GrandBattleSnapshot["guildNames"],
   currentTime: Date
 ): BattleMonitorCastleGuildRelation {
-  return getGvgCastleStateGuildRelation(castle, selectedGuildId, currentTime);
+  const idRelation = getGvgCastleStateGuildRelation(castle, selectedGuildId, currentTime);
+
+  if (idRelation !== "none" || selectedGuildId.length === 0) {
+    return idRelation;
+  }
+
+  const selectedNonEmptyGuildId = selectedGuildId as GvgGuildId;
+
+  if (isSameGrandBattleGuildName(castle.attackerGuildId, selectedGuildName, guildNames)) {
+    return getGvgCastleStateGuildRelation(
+      { ...castle, attackerGuildId: selectedNonEmptyGuildId },
+      selectedNonEmptyGuildId,
+      currentTime
+    );
+  }
+
+  if (isSameGrandBattleGuildName(castle.ownerGuildId, selectedGuildName, guildNames)) {
+    return getGvgCastleStateGuildRelation(
+      { ...castle, ownerGuildId: selectedNonEmptyGuildId },
+      selectedNonEmptyGuildId,
+      currentTime
+    );
+  }
+
+  return "none";
+}
+
+function isSameGrandBattleGuild(
+  guildId: GvgGuildId | null,
+  selectedGuildId: GvgGuildId,
+  guildNames: GrandBattleSnapshot["guildNames"],
+  selectedGuildName: string | null | undefined
+): boolean {
+  return guildId === selectedGuildId || isSameGrandBattleGuildName(guildId, selectedGuildName, guildNames);
+}
+
+function isSameGrandBattleGuildName(
+  guildId: GvgGuildId | null,
+  selectedGuildName: string | null | undefined,
+  guildNames: GrandBattleSnapshot["guildNames"]
+): boolean {
+  if (guildId === null || selectedGuildName === null || selectedGuildName === undefined) {
+    return false;
+  }
+
+  return normalizeGrandBattleGuildName(guildNames[guildId]) === normalizeGrandBattleGuildName(selectedGuildName);
+}
+
+function normalizeGrandBattleGuildName(guildName: string | undefined): string | null {
+  const normalizedGuildName = guildName?.trim() ?? "";
+
+  return normalizedGuildName.length === 0 ? null : normalizedGuildName;
 }
 
 function getGrandBattleDefenseAlertLevel(
