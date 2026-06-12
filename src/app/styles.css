@@ -407,7 +407,7 @@ select {
 }
 
 .ko-victim-summary__count {
-  text-align: left;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
