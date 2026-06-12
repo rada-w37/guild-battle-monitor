@@ -264,6 +264,25 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
     }
   );
 
+  it("does not reload the public shared guild when the admin route rerenders", async () => {
+    const loadPublicShare = vi.fn(() => Promise.resolve(createPublicShare()));
+    const renderedApp = await renderApp(
+      "/saved-guild/a_admin",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      loadPublicShare
+    );
+
+    expect(loadPublicShare).toHaveBeenCalledTimes(1);
+
+    await renderedApp.rerender();
+
+    expect(loadPublicShare).toHaveBeenCalledTimes(1);
+  });
+
   it("falls back to the normal view when the shared access key does not match", async () => {
     await renderApp(
       "/saved-guild/a_invalid",
@@ -741,33 +760,45 @@ async function renderApp(
   document.body.append(container);
   root = createRoot(container);
 
+  const renderTree = () => (
+    <AppModeProvider pathname={pathname}>
+      <FirebasePhase0App
+        loadGuildShare={loadShare}
+        loadKoGuildKoTotals={() => Promise.resolve([])}
+        loadKoObserverRunMeta={() => Promise.resolve(null)}
+        loadNotificationDestination={loadDestination}
+        loadOwnedGuildProfile={loadProfile}
+        loadPublicGuildShare={loadPublicShare}
+        loadSnapshot={loadSnapshot}
+        saveGuildShare={saveShare}
+        saveNotificationDestination={saveDestination}
+        saveOwnedGuildProfile={saveProfile}
+        savePublicGuildShare={savePublicShare}
+        subscribeKoGuildKoTotals={() => () => {}}
+        subscribeToAuthState={(onStateChanged) => {
+          onStateChanged(authState);
+          return () => {};
+        }}
+      />
+    </AppModeProvider>
+  );
+
   await act(async () => {
-    root?.render(
-      <AppModeProvider pathname={pathname}>
-        <FirebasePhase0App
-          loadGuildShare={loadShare}
-          loadKoGuildKoTotals={() => Promise.resolve([])}
-          loadKoObserverRunMeta={() => Promise.resolve(null)}
-          loadNotificationDestination={loadDestination}
-          loadOwnedGuildProfile={loadProfile}
-          loadPublicGuildShare={loadPublicShare}
-          loadSnapshot={loadSnapshot}
-          saveGuildShare={saveShare}
-          saveNotificationDestination={saveDestination}
-          saveOwnedGuildProfile={saveProfile}
-          savePublicGuildShare={savePublicShare}
-          subscribeKoGuildKoTotals={() => () => {}}
-          subscribeToAuthState={(onStateChanged) => {
-            onStateChanged(authState);
-            return () => {};
-          }}
-        />
-      </AppModeProvider>
-    );
+    root?.render(renderTree());
     await flushPromises();
   });
 
   await waitForAppReady(pathname, authState);
+
+  return {
+    rerender: async () => {
+      await act(async () => {
+        root?.render(renderTree());
+        await flushPromises();
+      });
+      await waitForAppReady(pathname, authState);
+    }
+  };
 }
 
 async function waitForAppReady(pathname: string, authState: AuthState) {
