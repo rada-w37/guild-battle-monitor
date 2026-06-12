@@ -282,7 +282,10 @@ export function GuildBattlePlaceholder({
 }: GuildBattlePlaceholderProps) {
   const appRoute = useAppRoute();
   const appMode = modeOverride ?? sharedGuild?.mode ?? appRoute?.mode ?? "owner";
-  const modePermissions = { ...getAppModePermissions(appMode), ...permissionsOverride };
+  const modePermissions = useMemo(
+    () => ({ ...getAppModePermissions(appMode), ...permissionsOverride }),
+    [appMode, permissionsOverride]
+  );
   const isFirebaseVersion =
     ownedGuildProfilePersistence !== undefined ||
     notificationSettings !== undefined ||
@@ -299,17 +302,35 @@ export function GuildBattlePlaceholder({
     loadKoObserverRunMeta !== undefined &&
     loadKoGuildKoTotals !== undefined &&
     subscribeKoGuildKoTotals !== undefined;
-  const appCapabilities = createAppCapabilities({
-    firebaseEnabled: isFirebaseVersion,
-    hasConfiguredGuildContext,
-    hasKoMonitorView,
-    hasNotificationSettings: notificationSettings !== undefined,
-    hasOwnedGuildProfilePersistence: ownedGuildProfilePersistence !== undefined,
-    hasShareSettings: shareSettings !== undefined,
-    isSignedInOwner: ownedGuildProfilePersistence?.isSignedIn ?? false,
-    mode: appMode,
-    modePermissions
-  });
+  const hasNotificationSettings = notificationSettings !== undefined;
+  const hasOwnedGuildProfilePersistence = ownedGuildProfilePersistence !== undefined;
+  const hasShareSettings = shareSettings !== undefined;
+  const isSignedInOwner = ownedGuildProfilePersistence?.isSignedIn ?? false;
+  const appCapabilities = useMemo(
+    () =>
+      createAppCapabilities({
+        firebaseEnabled: isFirebaseVersion,
+        hasConfiguredGuildContext,
+        hasKoMonitorView,
+        hasNotificationSettings,
+        hasOwnedGuildProfilePersistence,
+        hasShareSettings,
+        isSignedInOwner,
+        mode: appMode,
+        modePermissions
+      }),
+    [
+      appMode,
+      hasConfiguredGuildContext,
+      hasKoMonitorView,
+      hasNotificationSettings,
+      hasOwnedGuildProfilePersistence,
+      hasShareSettings,
+      isFirebaseVersion,
+      isSignedInOwner,
+      modePermissions
+    ]
+  );
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
   const [battleDetectionState, setBattleDetectionState] = useState<BattleDetectionStatus>({

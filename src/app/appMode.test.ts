@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getAppModePermissions, resolveAppMode, resolveRoute, stripGithubPagesBasePath } from "./appMode";
+import {
+  getAppModePermissions,
+  getFirebasePermissionsOverride,
+  resolveAppMode,
+  resolveRoute,
+  stripGithubPagesBasePath
+} from "./appMode";
 
 describe("resolveAppMode", () => {
   it.each([
@@ -100,4 +106,33 @@ describe("getAppModePermissions", () => {
       showShareSettings: false
     });
   });
+});
+
+describe("getFirebasePermissionsOverride", () => {
+  it("returns a stable signed-out owner override", () => {
+    const firstOverride = getFirebasePermissionsOverride({ isSignedInOwner: false, mode: "owner" });
+    const secondOverride = getFirebasePermissionsOverride({ isSignedInOwner: false, mode: "owner" });
+
+    expect(firstOverride).toBe(secondOverride);
+    expect(firstOverride).toEqual({
+      canEditBattleState: false,
+      canManageGuildProfile: false,
+      canManageNotifications: false,
+      canManageShareUrls: false,
+      canPersistViewSettings: false,
+      showNotificationSettings: false,
+      showOwnedGuildSettings: false,
+      showShareSettings: false
+    });
+  });
+
+  it.each(["owner", "admin", "guest"] as const)(
+    "does not override permissions for signed-in or shared mode: %s",
+    (mode) => {
+      expect(getFirebasePermissionsOverride({ isSignedInOwner: true, mode })).toBeUndefined();
+      expect(getFirebasePermissionsOverride({ isSignedInOwner: false, mode })).toBe(
+        mode === "owner" ? getFirebasePermissionsOverride({ isSignedInOwner: false, mode: "owner" }) : undefined
+      );
+    }
+  );
 });

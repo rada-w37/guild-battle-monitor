@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAppCapabilities } from "./appCapabilities";
+import { createAppCapabilities, createFirebaseAppCapabilities } from "./appCapabilities";
 
 describe("createAppCapabilities", () => {
   it("keeps only local settings available for GitHub Pages-like owner usage", () => {
@@ -100,5 +100,24 @@ describe("createAppCapabilities", () => {
     });
 
     expect(capabilities.koMonitor.visible).toBe(false);
+  });
+});
+
+describe("createFirebaseAppCapabilities", () => {
+  it.each([
+    ["owner", true],
+    ["admin", false],
+    ["guest", false]
+  ] as const)("matches the existing Firebase capability rules for %s", (mode, isSignedInOwner) => {
+    expect(createFirebaseAppCapabilities({ isSignedInOwner, mode })).toEqual(
+      createAppCapabilities({
+        firebaseEnabled: true,
+        hasNotificationSettings: true,
+        hasOwnedGuildProfilePersistence: true,
+        hasShareSettings: true,
+        isSignedInOwner,
+        mode
+      })
+    );
   });
 });

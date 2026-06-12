@@ -37,6 +37,11 @@ export interface CreateAppCapabilitiesInput {
   readonly modePermissions?: AppModePermissions;
 }
 
+export interface CreateFirebaseAppCapabilitiesInput {
+  readonly isSignedInOwner: boolean;
+  readonly mode: AppMode;
+}
+
 export function createAppCapabilities({
   firebaseEnabled,
   hasConfiguredGuildContext = false,
@@ -80,4 +85,18 @@ export function createAppCapabilities({
       visible: firebaseEnabled && hasKoMonitorView && hasConfiguredGuildContext
     }
   };
+}
+
+export function createFirebaseAppCapabilities({
+  isSignedInOwner,
+  mode
+}: CreateFirebaseAppCapabilitiesInput): AppCapabilities {
+  return createAppCapabilities({
+    firebaseEnabled: true,
+    hasNotificationSettings: true,
+    hasOwnedGuildProfilePersistence: true,
+    hasShareSettings: true,
+    isSignedInOwner,
+    mode
+  });
 }

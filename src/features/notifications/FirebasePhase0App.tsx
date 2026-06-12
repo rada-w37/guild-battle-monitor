@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { createAppCapabilities } from "../../app/appCapabilities";
-import { useAppRoute, type AppModePermissions, type AppRoute } from "../../app/appMode";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createFirebaseAppCapabilities } from "../../app/appCapabilities";
+import { getFirebasePermissionsOverride, useAppRoute, type AppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
 import { createGuildShare, createGuildShareUrl } from "../guildBattle/guildShare";
@@ -88,34 +88,22 @@ export function FirebasePhase0App({
   const [authError, setAuthError] = useState<string | null>(null);
   const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
   const isSignedInOwner = appMode === "owner" && authState.status === "signed-in";
-  const permissionsOverride: Partial<AppModePermissions> | undefined =
-    appMode === "owner" && !isSignedInOwner
-      ? {
-          canEditBattleState: false,
-          canPersistViewSettings: false,
-          canManageNotifications: false,
-          canManageGuildProfile: false,
-          canManageShareUrls: false,
-          showNotificationSettings: false,
-          showOwnedGuildSettings: false,
-          showShareSettings: false
-        }
-      : undefined;
-  const appCapabilities = createAppCapabilities({
-    firebaseEnabled: true,
-    hasNotificationSettings: true,
-    hasOwnedGuildProfilePersistence: true,
-    hasShareSettings: true,
-    isSignedInOwner,
-    mode: appMode
-  });
+  const permissionsOverride = useMemo(
+    () => getFirebasePermissionsOverride({ isSignedInOwner, mode: appMode }),
+    [appMode, isSignedInOwner]
+  );
+  const appCapabilities = useMemo(
+    () => createFirebaseAppCapabilities({ isSignedInOwner, mode: appMode }),
+    [appMode, isSignedInOwner]
+  );
+  const ownerUid = appMode === "owner" ? notificationSettingsUid : null;
   const ownedGuildProfilePersistence = useOwnedGuildProfilePersistence(
-    appMode === "owner" ? notificationSettingsUid : null,
+    ownerUid,
     loadProfile,
     saveProfile
   );
   const guildShare = useGuildShare(
-    appMode === "owner" ? notificationSettingsUid : null,
+    ownerUid,
     loadShare,
     saveShare
   );
@@ -128,52 +116,56 @@ export function FirebasePhase0App({
   );
 
   const publicGuildShareCache = usePublicGuildShareCache(savePublicShare);
-  const shareDraftExternal: SettingsDraftExternal | undefined =
-    appMode === "owner" && isCompleteOwnedGuildProfile(ownedGuildProfilePersistence.profile)
-      ? {
-          hasValidationError: false,
-          isDirty: guildShare.share?.guildId !== ownedGuildProfilePersistence.profile.guildId,
-          onCancel: () => {},
-          onSave: async () => {
-            if (!isCompleteOwnedGuildProfile(ownedGuildProfilePersistence.profile)) {
-              return true;
-            }
-
-            const ensuredShare = await guildShare.ensureShare(ownedGuildProfilePersistence.profile);
-            return ensuredShare === null
-              ? false
-              : publicGuildShareCache.saveForProfile(ownedGuildProfilePersistence.profile, ensuredShare);
-          }
-        }
-      : undefined;
-  const settingsDraftExternal = combineSettingsDraftExternals(
-    notificationDestinationDraft.external,
-    shareDraftExternal
-  );
-  const ownedGuildProfilePersistenceWithShare = {
-    ...ownedGuildProfilePersistence,
-    onSave: async (profile: OwnedGuildProfile) => {
-      const profileSaved = ownedGuildProfilePersistence.onSave !== undefined
-        ? await ownedGuildProfilePersistence.onSave(profile)
-        : true;
-
-      if (!profileSaved) {
-        return false;
-      }
-
-      if (!isCompleteOwnedGuildProfile(profile)) {
-        return true;
-      }
-
-      const ensuredShare = await guildShare.ensureShare(profile);
-
-      if (ensuredShare === null) {
-        return false;
-      }
-
-      return publicGuildShareCache.saveForProfile(profile, ensuredShare);
+  const shareDraftExternal = useMemo<SettingsDraftExternal | undefined>(() => {
+    if (appMode !== "owner" || !isCompleteOwnedGuildProfile(ownedGuildProfilePersistence.profile)) {
+      return undefined;
     }
-  } satisfies OwnedGuildProfilePersistence;
+
+    const profile = ownedGuildProfilePersistence.profile;
+
+    return {
+      hasValidationError: false,
+      isDirty: guildShare.share?.guildId !== profile.guildId,
+      onCancel: () => {},
+      onSave: async () => {
+        const ensuredShare = await guildShare.ensureShare(profile);
+        return ensuredShare === null ? false : publicGuildShareCache.saveForProfile(profile, ensuredShare);
+      }
+    };
+  }, [appMode, guildShare, ownedGuildProfilePersistence.profile, publicGuildShareCache]);
+  const settingsDraftExternal = useMemo(
+    () => combineSettingsDraftExternals(notificationDestinationDraft.external, shareDraftExternal),
+    [notificationDestinationDraft.external, shareDraftExternal]
+  );
+  const ownedGuildProfilePersistenceWithShare = useMemo(
+    () =>
+      ({
+        ...ownedGuildProfilePersistence,
+        onSave: async (profile: OwnedGuildProfile) => {
+          const profileSaved =
+            ownedGuildProfilePersistence.onSave !== undefined
+              ? await ownedGuildProfilePersistence.onSave(profile)
+              : true;
+
+          if (!profileSaved) {
+            return false;
+          }
+
+          if (!isCompleteOwnedGuildProfile(profile)) {
+            return true;
+          }
+
+          const ensuredShare = await guildShare.ensureShare(profile);
+
+          if (ensuredShare === null) {
+            return false;
+          }
+
+          return publicGuildShareCache.saveForProfile(profile, ensuredShare);
+        }
+      }) satisfies OwnedGuildProfilePersistence,
+    [guildShare, ownedGuildProfilePersistence, publicGuildShareCache]
+  );
 
   useEffect(() => subscribeAuthState(setAuthState), [subscribeAuthState]);
 
