@@ -126,10 +126,12 @@ describe("grandBattle selectors", () => {
   });
 
   it("filters by selected owner guild without fallback", () => {
-    expect(createGrandBattleCastleListViewModels(snapshot, guildA, alertThresholds).map((castle) => castle.castleId)).toEqual(["1"]);
+    expect(createGrandBattleCastleListViewModels(snapshot, guildA, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
+      ["1", "defense"]
+    ]);
     expect(createGrandBattleCastleListViewModels(snapshot, guildB, alertThresholds).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["1", "attack"],
-      ["2", "securedDefense"]
+      ["2", "defense"]
     ]);
     expect(
       createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId, alertThresholds).map((castle) => castle.castleId)
@@ -181,9 +183,96 @@ describe("grandBattle selectors", () => {
         "Fuwa Fuwa Gorilla"
       ).map((castle) => [castle.castleId, castle.guildRelation])
     ).toEqual([
-      ["1", "securedDefense"],
+      ["1", "defense"],
       ["5", "attack"]
     ]);
+  });
+
+  it("keeps Grand Battle relations stable when only realtime counts and KO change", () => {
+    const countBaseSnapshot = {
+      ...snapshot,
+      guildNames: {
+        ...snapshot.guildNames,
+        [guildA]: "Fuwa Fuwa Gorilla",
+        [guildAAlternateId]: "Fuwa Fuwa Gorilla"
+      },
+      castles: [
+        {
+          ...snapshot.castles[0],
+          castleId: "1" as GvgCastleId,
+          state: "fallen",
+          ownerGuildId: guildAAlternateId,
+          attackerGuildId: guildB,
+          defenseCount: 1,
+          attackCount: 0,
+          lastWinPartyKnockOutCount: 4
+        },
+        {
+          ...snapshot.castles[0],
+          castleId: "5" as GvgCastleId,
+          state: "counterattack",
+          ownerGuildId: guildB,
+          attackerGuildId: guildAAlternateId,
+          defenseCount: 2,
+          attackCount: 3,
+          lastWinPartyKnockOutCount: 9
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+    const countUpdatedSnapshot = {
+      ...countBaseSnapshot,
+      castles: countBaseSnapshot.castles.map((castle) => ({
+        ...castle,
+        defenseCount: castle.defenseCount + 80,
+        attackCount: castle.attackCount + 12,
+        lastWinPartyKnockOutCount: castle.lastWinPartyKnockOutCount + 50
+      }))
+    } satisfies GrandBattleSnapshot;
+
+    const createRelations = (targetSnapshot: GrandBattleSnapshot) =>
+      createGrandBattleCastleListViewModels(
+        targetSnapshot,
+        guildA,
+        alertThresholds,
+        relationCurrentTime,
+        "Fuwa Fuwa Gorilla"
+      ).map((castle) => [castle.castleId, castle.guildRelation]);
+
+    expect(createRelations(countBaseSnapshot)).toEqual([
+      ["1", "defense"],
+      ["5", "attack"]
+    ]);
+    expect(createRelations(countUpdatedSnapshot)).toEqual(createRelations(countBaseSnapshot));
+  });
+
+  it("prioritizes owner matches over attacker matches including same-name fallback", () => {
+    const conflictSnapshot = {
+      ...snapshot,
+      guildNames: {
+        ...snapshot.guildNames,
+        [guildA]: "Fuwa Fuwa Gorilla",
+        [guildAAlternateId]: "Fuwa Fuwa Gorilla"
+      },
+      castles: [
+        {
+          ...snapshot.castles[0],
+          ownerGuildId: guildAAlternateId,
+          attackerGuildId: guildA,
+          defenseCount: 1,
+          attackCount: 10
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(
+      createGrandBattleCastleListViewModels(
+        conflictSnapshot,
+        guildA,
+        alertThresholds,
+        relationCurrentTime,
+        "Fuwa Fuwa Gorilla"
+      ).map((castle) => [castle.castleId, castle.guildRelation])
+    ).toEqual([["1", "defense"]]);
   });
 
   it("creates API based DEV details using resolved guild names", () => {
@@ -222,7 +311,7 @@ describe("grandBattle selectors", () => {
     });
   });
 
-  it("syncs selected owner relations with GvgCastleState", () => {
+  it("keeps selected owner relations stable across GvgCastleState", () => {
     const stateSnapshot = {
       ...snapshot,
       castles: [
@@ -242,16 +331,16 @@ describe("grandBattle selectors", () => {
     } satisfies GrandBattleSnapshot;
 
     expect(createGrandBattleCastleListViewModels(stateSnapshot, guildA, alertThresholds, relationCurrentTime).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
-      ["state-0", "securedDefense"],
+      ["state-0", "defense"],
       ["state-1", "defense"],
-      ["state-2", "attack"],
-      ["state-2-secured", "attackDisabled"],
-      ["state-3", "attack"],
-      ["state-4", "securedDefense"]
+      ["state-2", "defense"],
+      ["state-2-secured", "defense"],
+      ["state-3", "defense"],
+      ["state-4", "defense"]
     ]);
   });
 
-  it("syncs selected attacker relations with GvgCastleState", () => {
+  it("keeps selected attacker relations stable across GvgCastleState", () => {
     const stateSnapshot = {
       ...snapshot,
       castles: [
@@ -274,15 +363,15 @@ describe("grandBattle selectors", () => {
     expect(createGrandBattleCastleListViewModels(stateSnapshot, guildB, alertThresholds, relationCurrentTime).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["state-0", "attack"],
       ["state-1", "attack"],
-      ["state-2", "defense"],
-      ["state-2-secured", "securedDefense"],
-      ["state-3", "defense"],
-      ["state-3-secured", "securedDefense"],
-      ["state-4", "defenseDisabled"]
+      ["state-2", "attack"],
+      ["state-2-secured", "attack"],
+      ["state-3", "attack"],
+      ["state-3-secured", "attack"],
+      ["state-4", "attack"]
     ]);
   });
 
-  it("prioritizes attack relation and marks defense secured", () => {
+  it("prioritizes owner relation and marks defense secured", () => {
     const conflictSnapshot = {
       ...snapshot,
       castles: [
@@ -309,8 +398,8 @@ describe("grandBattle selectors", () => {
         new Date("2026-05-27T21:29:50.000+09:00")
       ).map((castle) => [castle.castleId, castle.guildRelation, castle.isDefenseSecured])
     ).toEqual([
-      ["1", "attack", true],
-      ["2", "securedDefense", false]
+      ["1", "defense", true],
+      ["2", "defense", false]
     ]);
   });
 
