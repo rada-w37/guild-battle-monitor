@@ -440,12 +440,14 @@ describe("FirebasePhase0App owned guild profile persistence", () => {
   it.each(["/123/a_admin", "/123/g_guest"])("does not load or save owner profile outside owner mode: %s", async (pathname) => {
     const loadProfile = vi.fn(() => Promise.resolve(createProfile()));
     const saveProfile = vi.fn(() => Promise.resolve());
+    const loadShare = vi.fn(() => Promise.resolve(null));
 
-    await renderApp(pathname, signedInState, loadProfile, saveProfile);
+    await renderApp(pathname, signedInState, loadProfile, saveProfile, loadShare);
 
     expect(document.querySelector(".owned-guild-settings")).toBeNull();
     expect(loadProfile).not.toHaveBeenCalled();
     expect(saveProfile).not.toHaveBeenCalled();
+    expect(loadShare).not.toHaveBeenCalled();
   });
 
   it("keeps the owner UI local and does not save while signed out", async () => {

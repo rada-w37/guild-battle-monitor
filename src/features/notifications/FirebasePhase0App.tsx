@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createFirebaseAppCapabilities } from "../../app/appCapabilities";
 import { getFirebasePermissionsOverride, useAppRoute, type AppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
@@ -84,7 +84,7 @@ export function FirebasePhase0App({
 }: FirebasePhase0AppProps = {}) {
   const appRoute = useAppRoute();
   const appMode = appRoute?.mode ?? "owner";
-  const [authState, setAuthState] = useState<AuthState>({ status: "loading" });
+  const authState = useFirebaseAuthState(subscribeAuthState);
   const [authError, setAuthError] = useState<string | null>(null);
   const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
   const isSignedInOwner = appMode === "owner" && authState.status === "signed-in";
@@ -107,7 +107,15 @@ export function FirebasePhase0App({
     loadShare,
     saveShare
   );
-  const sharedGuild = useResolvedSharedGuild(appRoute, loadPublicShare);
+  const routeMode = appRoute?.mode ?? null;
+  const routeGuildId = appRoute?.mode === "admin" || appRoute?.mode === "guest" ? appRoute.guildId : null;
+  const routeAccessKey = appRoute?.mode === "admin" || appRoute?.mode === "guest" ? appRoute.accessKey : null;
+  const sharedGuild = useResolvedSharedGuild({
+    loadPublicShare,
+    routeAccessKey,
+    routeGuildId,
+    routeMode
+  });
   const notificationDestinationDraft = useNotificationDestinationDraft(
     notificationSettingsUid,
     loadDestination,
@@ -167,25 +175,23 @@ export function FirebasePhase0App({
     [guildShare, ownedGuildProfilePersistence, publicGuildShareCache]
   );
 
-  useEffect(() => subscribeAuthState(setAuthState), [subscribeAuthState]);
-
-  async function handleSignIn() {
+  const handleSignIn = useCallback(async () => {
     setAuthError(null);
     try {
       await signInWithGoogle();
     } catch {
       setAuthError("Googleログインに失敗しました。");
     }
-  }
+  }, []);
 
-  async function handleSignOut() {
+  const handleSignOut = useCallback(async () => {
     setAuthError(null);
     try {
       await signOutCurrentUser();
     } catch {
       setAuthError("ログアウトに失敗しました。");
     }
-  }
+  }, []);
 
   if (sharedGuild.status === "loading") {
     return (
@@ -245,10 +251,48 @@ export function FirebasePhase0App({
   );
 }
 
+function useFirebaseAuthState(subscribeAuthState: typeof subscribeToAuthState): AuthState {
+  const [authState, setAuthState] = useState<AuthState>({ status: "loading" });
+
+  useEffect(
+    () =>
+      subscribeAuthState((nextAuthState) => {
+        setAuthState((currentAuthState) =>
+          isSameAuthState(currentAuthState, nextAuthState) ? currentAuthState : nextAuthState
+        );
+      }),
+    [subscribeAuthState]
+  );
+
+  return authState;
+}
+
+function isSameAuthState(currentAuthState: AuthState, nextAuthState: AuthState): boolean {
+  if (currentAuthState.status !== nextAuthState.status) {
+    return false;
+  }
+
+  if (currentAuthState.status === "error" && nextAuthState.status === "error") {
+    return currentAuthState.error === nextAuthState.error;
+  }
+
+  if (currentAuthState.status !== "signed-in" || nextAuthState.status !== "signed-in") {
+    return true;
+  }
+
+  return (
+    currentAuthState.user.uid === nextAuthState.user.uid &&
+    currentAuthState.user.displayName === nextAuthState.user.displayName &&
+    currentAuthState.user.email === nextAuthState.user.email &&
+    currentAuthState.user.photoUrl === nextAuthState.user.photoUrl
+  );
+}
+
+type GuildShareDataState = Omit<GuildShareState, "ensureShare">;
+
 function useGuildShare(uid: string | null, loadShare: typeof loadGuildShare, saveShare: typeof saveGuildShare): GuildShareState {
-  const [state, setState] = useState<GuildShareState>({
+  const [state, setState] = useState<GuildShareDataState>({
     error: null,
-    ensureShare,
     isLoading: false,
     share: null
   });
@@ -257,21 +301,29 @@ function useGuildShare(uid: string | null, loadShare: typeof loadGuildShare, sav
     let isDisposed = false;
 
     if (uid === null) {
-      setState({ error: null, ensureShare, isLoading: false, share: null });
+      setState((currentState) => getNextGuildShareState(currentState, { error: null, isLoading: false, share: null }));
       return;
     }
 
-    setState({ error: null, ensureShare, isLoading: true, share: null });
+    setState((currentState) => getNextGuildShareState(currentState, { error: null, isLoading: true, share: null }));
     void loadShare(uid)
       .then((loadedShare) => {
         if (!isDisposed) {
-          setState({ error: null, ensureShare, isLoading: false, share: loadedShare });
+          setState((currentState) =>
+            getNextGuildShareState(currentState, { error: null, isLoading: false, share: loadedShare })
+          );
         }
       })
       .catch((error) => {
         console.error("Failed to load users/{uid}/guild/share.", error);
         if (!isDisposed) {
-          setState({ error: SHARE_GENERATION_ERROR_MESSAGE, ensureShare, isLoading: false, share: null });
+          setState((currentState) =>
+            getNextGuildShareState(currentState, {
+              error: SHARE_GENERATION_ERROR_MESSAGE,
+              isLoading: false,
+              share: null
+            })
+          );
         }
       });
 
@@ -280,7 +332,7 @@ function useGuildShare(uid: string | null, loadShare: typeof loadGuildShare, sav
     };
   }, [loadShare, uid]);
 
-  async function ensureShare(profile: OwnedGuildProfile): Promise<GuildShare | null> {
+  const ensureShare = useCallback(async (profile: OwnedGuildProfile): Promise<GuildShare | null> => {
     if (uid === null || !isCompleteOwnedGuildProfile(profile)) {
       return null;
     }
@@ -294,16 +346,33 @@ function useGuildShare(uid: string | null, loadShare: typeof loadGuildShare, sav
 
     try {
       await saveShare(uid, nextShare);
-      setState({ error: null, ensureShare, isLoading: false, share: nextShare });
+      setState({ error: null, isLoading: false, share: nextShare });
       return nextShare;
     } catch (error) {
       console.error("Failed to save users/{uid}/guild/share.", error);
-      setState({ error: SHARE_GENERATION_ERROR_MESSAGE, ensureShare, isLoading: false, share: null });
+      setState({ error: SHARE_GENERATION_ERROR_MESSAGE, isLoading: false, share: null });
       return null;
     }
-  }
+  }, [saveShare, state.share, uid]);
 
-  return state;
+  return useMemo(
+    () => ({
+      ...state,
+      ensureShare
+    }),
+    [ensureShare, state]
+  );
+}
+
+function getNextGuildShareState(
+  currentState: GuildShareDataState,
+  nextState: GuildShareDataState
+): GuildShareDataState {
+  return currentState.error === nextState.error &&
+    currentState.isLoading === nextState.isLoading &&
+    currentState.share === nextState.share
+    ? currentState
+    : nextState;
 }
 
 type ResolvedSharedGuildState =
@@ -312,14 +381,18 @@ type ResolvedSharedGuildState =
   | { readonly status: "fallback" }
   | { readonly status: "valid"; readonly sharedGuild: SharedGuildContext };
 
-function useResolvedSharedGuild(
-  appRoute: AppRoute | null,
-  loadPublicShare: typeof loadPublicGuildShare
-): ResolvedSharedGuildState {
+function useResolvedSharedGuild({
+  loadPublicShare,
+  routeAccessKey,
+  routeGuildId,
+  routeMode
+}: {
+  readonly loadPublicShare: typeof loadPublicGuildShare;
+  readonly routeAccessKey: string | null;
+  readonly routeGuildId: string | null;
+  readonly routeMode: AppRoute["mode"] | null;
+}): ResolvedSharedGuildState {
   const [state, setState] = useState<ResolvedSharedGuildState>({ status: "owner" });
-  const routeMode = appRoute?.mode ?? null;
-  const routeGuildId = appRoute?.mode === "admin" || appRoute?.mode === "guest" ? appRoute.guildId : null;
-  const routeAccessKey = appRoute?.mode === "admin" || appRoute?.mode === "guest" ? appRoute.accessKey : null;
 
   useEffect(() => {
     let isDisposed = false;
@@ -444,14 +517,15 @@ function combineSettingsDraftExternals(
   };
 }
 
+type PublicGuildShareCacheDataState = Omit<PublicGuildShareCacheState, "saveForProfile">;
+
 function usePublicGuildShareCache(savePublicShare: typeof savePublicGuildShare): PublicGuildShareCacheState {
-  const [state, setState] = useState<PublicGuildShareCacheState>({
+  const [state, setState] = useState<PublicGuildShareCacheDataState>({
     error: null,
-    isSaving: false,
-    saveForProfile
+    isSaving: false
   });
 
-  async function saveForProfile(profile: OwnedGuildProfile, share: GuildShare): Promise<boolean> {
+  const saveForProfile = useCallback(async (profile: OwnedGuildProfile, share: GuildShare): Promise<boolean> => {
     if (
       !isCompleteOwnedGuildProfile(profile) ||
       share === null ||
@@ -467,20 +541,40 @@ function usePublicGuildShareCache(savePublicShare: typeof savePublicGuildShare):
       guestAccessKey: share.guestAccessKey
     };
 
-    setState({ error: null, isSaving: true, saveForProfile });
+    setState((currentState) => getNextPublicGuildShareCacheState(currentState, { error: null, isSaving: true }));
 
     try {
       await savePublicShare(profile.guildId, publicShare);
-      setState({ error: null, isSaving: false, saveForProfile });
+      setState((currentState) => getNextPublicGuildShareCacheState(currentState, { error: null, isSaving: false }));
       return true;
     } catch (error) {
       console.error("Failed to save guildShares/{guildId}.", error);
-      setState({ error: SHARE_GENERATION_ERROR_MESSAGE, isSaving: false, saveForProfile });
+      setState((currentState) =>
+        getNextPublicGuildShareCacheState(currentState, {
+          error: SHARE_GENERATION_ERROR_MESSAGE,
+          isSaving: false
+        })
+      );
       return false;
     }
-  }
+  }, [savePublicShare]);
 
-  return state;
+  return useMemo(
+    () => ({
+      ...state,
+      saveForProfile
+    }),
+    [saveForProfile, state]
+  );
+}
+
+function getNextPublicGuildShareCacheState(
+  currentState: PublicGuildShareCacheDataState,
+  nextState: PublicGuildShareCacheDataState
+): PublicGuildShareCacheDataState {
+  return currentState.error === nextState.error && currentState.isSaving === nextState.isSaving
+    ? currentState
+    : nextState;
 }
 
 function GuildSharePanel({
@@ -585,18 +679,22 @@ function useOwnedGuildProfilePersistence(
     persistedProfileKeyRef.current = null;
 
     if (uid === null) {
-      setProfile(null);
-      setError(null);
-      setIsLoading(false);
+      setProfile((currentProfile) => (currentProfile === null ? currentProfile : null));
+      setError((currentError) => (currentError === null ? currentError : null));
+      setIsLoading((currentIsLoading) => (currentIsLoading ? false : currentIsLoading));
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    setIsLoading((currentIsLoading) => (currentIsLoading ? currentIsLoading : true));
+    setError((currentError) => (currentError === null ? currentError : null));
     void loadProfile(uid)
       .then((loadedProfile) => {
         if (!isDisposed) {
-          setProfile(loadedProfile);
+          setProfile((currentProfile) =>
+            createOwnedGuildProfileKey(currentProfile) === createOwnedGuildProfileKey(loadedProfile)
+              ? currentProfile
+              : loadedProfile
+          );
           persistedProfileKeyRef.current = createOwnedGuildProfileKey(loadedProfile);
           setIsLoading(false);
         }
@@ -604,8 +702,8 @@ function useOwnedGuildProfilePersistence(
       .catch((loadError) => {
         console.error("Failed to load users/{uid}/guild/profile.", loadError);
         if (!isDisposed) {
-          setProfile(null);
-          setIsLoading(false);
+          setProfile((currentProfile) => (currentProfile === null ? currentProfile : null));
+          setIsLoading((currentIsLoading) => (currentIsLoading ? false : currentIsLoading));
         }
       });
 
@@ -614,9 +712,13 @@ function useOwnedGuildProfilePersistence(
     };
   }, [loadProfile, uid]);
 
-  async function saveProfileNow(nextProfile: OwnedGuildProfile): Promise<boolean> {
-    setProfile(nextProfile);
-    setError(null);
+  const saveProfileNow = useCallback(async (nextProfile: OwnedGuildProfile): Promise<boolean> => {
+    setProfile((currentProfile) =>
+      createOwnedGuildProfileKey(currentProfile) === createOwnedGuildProfileKey(nextProfile)
+        ? currentProfile
+        : nextProfile
+    );
+    setError((currentError) => (currentError === null ? currentError : null));
 
     if (uid === null || isLoading) {
       return true;
@@ -644,20 +746,23 @@ function useOwnedGuildProfilePersistence(
       setError(OWNED_GUILD_PROFILE_ERROR_MESSAGE);
       return false;
     }
-  }
+  }, [isLoading, saveProfile, uid]);
 
-  function handleChange(nextProfile: OwnedGuildProfile) {
+  const handleChange = useCallback((nextProfile: OwnedGuildProfile) => {
     void saveProfileNow(nextProfile);
-  }
+  }, [saveProfileNow]);
 
-  return {
-    error,
-    isLoading,
-    isSignedIn: uid !== null,
-    profile,
-    onChange: handleChange,
-    onSave: saveProfileNow
-  };
+  return useMemo(
+    () => ({
+      error,
+      isLoading,
+      isSignedIn: uid !== null,
+      profile,
+      onChange: handleChange,
+      onSave: saveProfileNow
+    }),
+    [error, handleChange, isLoading, profile, saveProfileNow, uid]
+  );
 }
 
 function createOwnedGuildProfileKey(profile: OwnedGuildProfile | null): string {
@@ -732,6 +837,8 @@ interface NotificationDestinationDraft {
   readonly endpoint: string;
 }
 
+const DEFAULT_NOTIFICATION_DRAFT: NotificationDestinationDraft = { enabled: true, endpoint: "" };
+
 interface NotificationDestinationDraftController {
   readonly draft: NotificationDestinationDraft;
   readonly external: SettingsDraftExternal;
@@ -751,8 +858,8 @@ function useNotificationDestinationDraft(
   saveDestination: typeof saveNotificationDestination,
   canEditEndpoint: boolean
 ): NotificationDestinationDraftController {
-  const [persisted, setPersisted] = useState<NotificationDestinationDraft>({ enabled: true, endpoint: "" });
-  const [draft, setDraft] = useState<NotificationDestinationDraft>({ enabled: true, endpoint: "" });
+  const [persisted, setPersisted] = useState<NotificationDestinationDraft>(DEFAULT_NOTIFICATION_DRAFT);
+  const [draft, setDraft] = useState<NotificationDestinationDraft>(DEFAULT_NOTIFICATION_DRAFT);
   const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -762,13 +869,14 @@ function useNotificationDestinationDraft(
   useEffect(() => {
     let isDisposed = false;
     setStatus("loading");
-    setMessage(null);
-    setValidationError(null);
+    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
+    setValidationError((currentValidationError) =>
+      currentValidationError === null ? currentValidationError : null
+    );
 
     if (uid === null) {
-      const initialDraft = { enabled: true, endpoint: "" };
-      setPersisted(initialDraft);
-      setDraft(initialDraft);
+      setPersisted((currentDraft) => getNextNotificationDraft(currentDraft, DEFAULT_NOTIFICATION_DRAFT));
+      setDraft((currentDraft) => getNextNotificationDraft(currentDraft, DEFAULT_NOTIFICATION_DRAFT));
       setStatus("idle");
       return;
     }
@@ -780,8 +888,8 @@ function useNotificationDestinationDraft(
             endpoint: typeof destination?.config.endpoint === "string" ? destination.config.endpoint : "",
             enabled: destination?.enabled ?? true
           };
-          setPersisted(loadedDraft);
-          setDraft(loadedDraft);
+          setPersisted((currentDraft) => getNextNotificationDraft(currentDraft, loadedDraft));
+          setDraft((currentDraft) => getNextNotificationDraft(currentDraft, loadedDraft));
           setStatus("idle");
         }
       })
@@ -800,39 +908,47 @@ function useNotificationDestinationDraft(
 
   useEffect(() => {
     if (!canEditEndpoint) {
-      setValidationError(null);
+      setValidationError((currentValidationError) =>
+        currentValidationError === null ? currentValidationError : null
+      );
     }
   }, [canEditEndpoint]);
 
-  function setDraftEndpoint(endpoint: string) {
-    setDraft((currentDraft) => ({ ...currentDraft, endpoint }));
-    setMessage(null);
-    setIsError(false);
-  }
+  const setDraftEndpoint = useCallback((endpoint: string) => {
+    setDraft((currentDraft) => getNextNotificationDraft(currentDraft, { ...currentDraft, endpoint }));
+    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
+    setIsError((currentIsError) => (currentIsError ? false : currentIsError));
+  }, []);
 
-  function setDraftEnabled(enabled: boolean) {
-    setDraft((currentDraft) => ({ ...currentDraft, enabled }));
-    setMessage(null);
-    setIsError(false);
-  }
+  const setDraftEnabled = useCallback((enabled: boolean) => {
+    setDraft((currentDraft) => getNextNotificationDraft(currentDraft, { ...currentDraft, enabled }));
+    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
+    setIsError((currentIsError) => (currentIsError ? false : currentIsError));
+  }, []);
 
-  function validateEndpoint() {
+  const validateEndpoint = useCallback(() => {
     if (!canEditEndpoint) {
-      setValidationError(null);
+      setValidationError((currentValidationError) =>
+        currentValidationError === null ? currentValidationError : null
+      );
       return;
     }
 
     const validation = validateWebhookUrl(draft.endpoint);
-    setValidationError(validation);
-  }
+    setValidationError((currentValidationError) =>
+      currentValidationError === validation ? currentValidationError : validation
+    );
+  }, [canEditEndpoint, draft.endpoint]);
 
-  async function saveDraft(): Promise<boolean> {
+  const saveDraft = useCallback(async (): Promise<boolean> => {
     if (uid === null) {
       return true;
     }
 
     const validation = canEditEndpoint ? validateWebhookUrl(draft.endpoint) : null;
-    setValidationError(validation);
+    setValidationError((currentValidationError) =>
+      currentValidationError === validation ? currentValidationError : validation
+    );
 
     if (validation !== null) {
       return false;
@@ -855,7 +971,9 @@ function useNotificationDestinationDraft(
         selectableMentions: DEFAULT_SELECTABLE_MENTIONS,
         config: { endpoint: draft.endpoint.trim() }
       });
-      setPersisted({ enabled: draft.enabled, endpoint: draft.endpoint });
+      setPersisted((currentDraft) =>
+        getNextNotificationDraft(currentDraft, { enabled: draft.enabled, endpoint: draft.endpoint })
+      );
       setMessage("通知先設定を保存しました。");
       return true;
     } catch {
@@ -865,32 +983,62 @@ function useNotificationDestinationDraft(
     } finally {
       setStatus("idle");
     }
-  }
+  }, [canEditEndpoint, draft, isDirty, saveDestination, uid]);
 
-  function cancelDraft() {
-    setDraft(persisted);
-    setValidationError(null);
-    setMessage(null);
-    setIsError(false);
-  }
+  const cancelDraft = useCallback(() => {
+    setDraft((currentDraft) => getNextNotificationDraft(currentDraft, persisted));
+    setValidationError((currentValidationError) =>
+      currentValidationError === null ? currentValidationError : null
+    );
+    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
+    setIsError((currentIsError) => (currentIsError ? false : currentIsError));
+  }, [persisted]);
 
-  return {
-    draft,
-    external: {
+  const external = useMemo(
+    () => ({
       hasValidationError: canEditEndpoint && validationError !== null,
       isDirty,
       onCancel: cancelDraft,
       onSave: saveDraft
-    },
-    isError,
-    message,
-    setEnabled: setDraftEnabled,
-    setEndpoint: setDraftEndpoint,
-    status,
-    uid,
-    validateEndpoint,
-    validationError
-  };
+    }),
+    [canEditEndpoint, cancelDraft, isDirty, saveDraft, validationError]
+  );
+
+  return useMemo(
+    () => ({
+      draft,
+      external,
+      isError,
+      message,
+      setEnabled: setDraftEnabled,
+      setEndpoint: setDraftEndpoint,
+      status,
+      uid,
+      validateEndpoint,
+      validationError
+    }),
+    [
+      draft,
+      external,
+      isError,
+      message,
+      setDraftEnabled,
+      setDraftEndpoint,
+      status,
+      uid,
+      validateEndpoint,
+      validationError
+    ]
+  );
+}
+
+function getNextNotificationDraft(
+  currentDraft: NotificationDestinationDraft,
+  nextDraft: NotificationDestinationDraft
+): NotificationDestinationDraft {
+  return currentDraft.enabled === nextDraft.enabled && currentDraft.endpoint === nextDraft.endpoint
+    ? currentDraft
+    : nextDraft;
 }
 
 function validateWebhookUrl(endpoint: string): string | null {
