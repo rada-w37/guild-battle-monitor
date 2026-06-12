@@ -40,10 +40,9 @@ import {
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { KoVictimSummaryPanel } from "../koMonitor/KoVictimSummaryPanel";
 import {
-  getNextKoObserverReadBoundary,
-  isKoObserverStartedForToday,
-  shouldUseKoObserverRealtime
-} from "../koMonitor/koObserverTime";
+  KO_MONITOR_GUILD_KO_TOTALS_SCOPE,
+  useKoMonitorLoadState
+} from "../koMonitor/useKoMonitorLoadState";
 import type {
   KoGuildKoTotal,
   KoGuildKoTotalsSubscriber,
@@ -109,7 +108,6 @@ const GRAND_BATTLE_BLOCK_OPTIONS: readonly {
   { value: 3, label: "D" }
 ];
 const CURRENT_TIME_REFRESH_INTERVAL_MS = 1000;
-const MAX_TIMEOUT_MS = 2_147_483_647;
 const BATTLE_DETECTION_LOADING_MESSAGE = "戦場情報を確認中...";
 const FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE = "監視条件を解決できませんでした";
 
@@ -187,60 +185,6 @@ function isSameBattleMonitorSharedState(
     currentState.autoUpdate === nextState.autoUpdate &&
     currentState.sortMode === nextState.sortMode
   );
-}
-
-function isSameKoGuildKoTotals(
-  currentRows: readonly KoGuildKoTotal[],
-  nextRows: readonly KoGuildKoTotal[]
-): boolean {
-  if (currentRows.length !== nextRows.length) {
-    return false;
-  }
-
-  return currentRows.every((currentRow, index) => {
-    const nextRow = nextRows[index];
-
-    return (
-      currentRow.guildId === nextRow.guildId &&
-      currentRow.guildName === nextRow.guildName &&
-      currentRow.totalVictimKoCount === nextRow.totalVictimKoCount &&
-      (currentRow.updatedAt?.getTime() ?? null) === (nextRow.updatedAt?.getTime() ?? null)
-    );
-  });
-}
-
-function getKoMonitorRows(state: KoMonitorLoadState): readonly KoGuildKoTotal[] {
-  return state.status === "success" || state.status === "error" ? state.rows : [];
-}
-
-function isSameKoMonitorLoadState(currentState: KoMonitorLoadState, nextState: KoMonitorLoadState): boolean {
-  if (currentState.status !== nextState.status) {
-    return false;
-  }
-
-  if (currentState.status === "success" && nextState.status === "success") {
-    return (
-      currentState.isObserverStarted === nextState.isObserverStarted &&
-      isSameKoGuildKoTotals(currentState.rows, nextState.rows)
-    );
-  }
-
-  if (currentState.status === "error" && nextState.status === "error") {
-    return (
-      currentState.error.name === nextState.error.name &&
-      currentState.error.message === nextState.error.message &&
-      isSameKoGuildKoTotals(currentState.rows, nextState.rows)
-    );
-  }
-
-  return true;
-}
-
-function getNextKoMonitorLoadState(
-  currentState: KoMonitorLoadState,
-  nextState: KoMonitorLoadState
-): KoMonitorLoadState {
-  return isSameKoMonitorLoadState(currentState, nextState) ? currentState : nextState;
 }
 
 export function GuildBattlePlaceholder({
@@ -451,6 +395,7 @@ export function GuildBattlePlaceholder({
     loadKoGuildKoTotals,
     now: koMonitorNow,
     refreshKey: koMonitorRefreshKey,
+    scope: KO_MONITOR_GUILD_KO_TOTALS_SCOPE,
     subscribeKoGuildKoTotals
   });
   useEffect(() => {
@@ -1178,131 +1123,6 @@ function BattleDetectionMessage({ state }: { readonly state: BattleDetectionStat
       {state.message}
     </p>
   );
-}
-
-function useKoMonitorLoadState({
-  enabled,
-  loadKoObserverRunMeta,
-  loadKoGuildKoTotals,
-  now,
-  refreshKey,
-  subscribeKoGuildKoTotals
-}: {
-  readonly enabled: boolean;
-  readonly loadKoObserverRunMeta?: () => Promise<KoObserverRunMeta | null>;
-  readonly loadKoGuildKoTotals?: () => Promise<readonly KoGuildKoTotal[]>;
-  readonly now: () => Date;
-  readonly refreshKey: number;
-  readonly subscribeKoGuildKoTotals?: KoGuildKoTotalsSubscriber;
-}): KoMonitorLoadState {
-  const [state, setState] = useState<KoMonitorLoadState>({ status: "idle" });
-  const [boundaryRefreshKey, setBoundaryRefreshKey] = useState(0);
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    const currentTime = now();
-    const boundary = getNextKoObserverReadBoundary(currentTime);
-
-    if (boundary === null) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(
-      () => setBoundaryRefreshKey((currentKey) => currentKey + 1),
-      Math.min(Math.max(0, boundary.getTime() - currentTime.getTime()), MAX_TIMEOUT_MS)
-    );
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [boundaryRefreshKey, enabled, now]);
-
-  useEffect(() => {
-    if (
-      !enabled ||
-      loadKoObserverRunMeta === undefined ||
-      loadKoGuildKoTotals === undefined ||
-      subscribeKoGuildKoTotals === undefined
-    ) {
-      setState((currentState) => getNextKoMonitorLoadState(currentState, { status: "idle" }));
-      return;
-    }
-
-    const loadMeta = loadKoObserverRunMeta;
-    const loadTotals = loadKoGuildKoTotals;
-    const subscribeTotals = subscribeKoGuildKoTotals;
-    let isDisposed = false;
-    let unsubscribe: (() => void) | null = null;
-    setState((currentState) => (currentState.status === "idle" ? { status: "loading" } : currentState));
-
-    async function load() {
-      const currentTime = now();
-      const meta = await loadMeta();
-      const isObserverStarted = isKoObserverStartedForToday(meta?.lastStartedAt ?? null, currentTime);
-
-      if (shouldUseKoObserverRealtime(currentTime)) {
-        unsubscribe = subscribeTotals(
-          (rows) => {
-            if (!isDisposed) {
-              setState((currentState) =>
-                getNextKoMonitorLoadState(currentState, { status: "success", isObserverStarted, rows })
-              );
-            }
-          },
-          (error) => {
-            if (!isDisposed) {
-              setState((currentState) =>
-                getNextKoMonitorLoadState(currentState, {
-                  status: "error",
-                  error,
-                  rows: getKoMonitorRows(currentState)
-                })
-              );
-            }
-          }
-        );
-        return;
-      }
-
-      const rows = await loadTotals();
-
-      if (!isDisposed) {
-        setState((currentState) =>
-          getNextKoMonitorLoadState(currentState, { status: "success", isObserverStarted, rows })
-        );
-      }
-    }
-
-    void load().catch((error) => {
-      if (!isDisposed) {
-        setState((currentState) =>
-          getNextKoMonitorLoadState(currentState, {
-            status: "error",
-            error: error instanceof Error ? error : new Error("KO集計データを取得できませんでした。"),
-            rows: getKoMonitorRows(currentState)
-          })
-        );
-      }
-    });
-
-    return () => {
-      isDisposed = true;
-      unsubscribe?.();
-    };
-  }, [
-    boundaryRefreshKey,
-    enabled,
-    loadKoGuildKoTotals,
-    loadKoObserverRunMeta,
-    now,
-    refreshKey,
-    subscribeKoGuildKoTotals
-  ]);
-
-  return state;
 }
 
 function createInitialGrandBattleSource(shared: BattleMonitorSharedState): GrandBattleSource {
