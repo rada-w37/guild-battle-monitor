@@ -7,6 +7,7 @@ import {
 import type { GrandBattleSnapshot } from "./types";
 
 const guildA = "111111111050" as GvgGuildId;
+const guildAAlternateId = "111111111037" as GvgGuildId;
 const guildB = "222222222050" as GvgGuildId;
 const relationCurrentTime = new Date("2026-05-27T12:29:50.000Z");
 const alertThresholds = {
@@ -133,6 +134,56 @@ describe("grandBattle selectors", () => {
     expect(
       createGrandBattleCastleListViewModels(snapshot, "999999999050" as GvgGuildId, alertThresholds).map((castle) => castle.castleId)
     ).toEqual([]);
+  });
+
+  it("keeps Grand Battle castles related by guild name when display IDs differ", () => {
+    const sameNameSnapshot = {
+      ...snapshot,
+      guildNames: {
+        ...snapshot.guildNames,
+        [guildA]: "Fuwa Fuwa Gorilla",
+        [guildAAlternateId]: "Fuwa Fuwa Gorilla"
+      },
+      castles: [
+        {
+          ...snapshot.castles[0],
+          castleId: "1" as GvgCastleId,
+          state: "idle",
+          ownerGuildId: guildAAlternateId,
+          attackerGuildId: null
+        },
+        {
+          ...snapshot.castles[0],
+          castleId: "5" as GvgCastleId,
+          state: "inBattle",
+          ownerGuildId: guildB,
+          attackerGuildId: guildAAlternateId
+        },
+        {
+          ...snapshot.castles[0],
+          castleId: "6" as GvgCastleId,
+          state: "idle",
+          ownerGuildId: guildB,
+          attackerGuildId: null
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(
+      createGrandBattleGuildCandidates([{ guildId: guildA, guildName: "Fuwa Fuwa Gorilla" }], sameNameSnapshot)
+    ).toEqual([{ guildId: guildA, guildName: "Fuwa Fuwa Gorilla", ownedCastleCount: 1 }]);
+    expect(
+      createGrandBattleCastleListViewModels(
+        sameNameSnapshot,
+        guildA,
+        alertThresholds,
+        relationCurrentTime,
+        "Fuwa Fuwa Gorilla"
+      ).map((castle) => [castle.castleId, castle.guildRelation])
+    ).toEqual([
+      ["1", "securedDefense"],
+      ["5", "attack"]
+    ]);
   });
 
   it("creates API based DEV details using resolved guild names", () => {
