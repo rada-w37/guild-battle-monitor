@@ -550,6 +550,80 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.querySelector(".castle-list")).not.toBeNull();
   });
 
+  it("does not rerun Firebase GrandBattle auto resolution when an admin route rerenders", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(grandBattleDetectionSnapshot));
+    const loadGrandBattleLatestSnapshot = vi.fn<typeof loadGrandBattleSnapshot>(() =>
+      Promise.resolve(grandBattleSnapshot)
+    );
+    const sharedGuild = {
+      mode: "admin",
+      guildId: grandBattleParticipants[0].guildId,
+      world: 50,
+      guildName: "ギルドA"
+    } satisfies SharedGuildContext;
+    const rendered = renderComponent(
+      loadSnapshot,
+      undefined,
+      undefined,
+      loadGrandBattleLatestSnapshot,
+      <div />,
+      "/saved-guild/a_admin",
+      undefined,
+      sharedGuild
+    );
+    await flushPromises();
+
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
+    expect(loadGrandBattleLatestSnapshot).toHaveBeenCalledTimes(1);
+
+    await rendered.rerender();
+
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
+    expect(loadGrandBattleLatestSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the previous Firebase GrandBattle display when a later auto resolution fails", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(grandBattleDetectionSnapshot));
+    const initialGrandBattleSnapshotLoader = vi.fn<typeof loadGrandBattleSnapshot>(() =>
+      Promise.resolve(grandBattleSnapshot)
+    );
+    const failingGrandBattleSnapshotLoader = vi.fn<typeof loadGrandBattleSnapshot>(() =>
+      Promise.reject(new Error("GrandBattle auto resolution failed"))
+    );
+    const sharedGuild = {
+      mode: "admin",
+      guildId: grandBattleParticipants[0].guildId,
+      world: 50,
+      guildName: "ギルドA"
+    } satisfies SharedGuildContext;
+    const rendered = renderComponent(
+      loadSnapshot,
+      undefined,
+      undefined,
+      initialGrandBattleSnapshotLoader,
+      <div />,
+      "/saved-guild/a_admin",
+      undefined,
+      sharedGuild
+    );
+    await flushPromises();
+
+    const previousCastleLabels = getRenderedCastleLabels();
+    expect(previousCastleLabels.length).toBeGreaterThan(0);
+
+    await rendered.rerender({
+      nextLoadGrandBattleLatestSnapshot: failingGrandBattleSnapshotLoader,
+      nextSharedGuild: {
+        ...sharedGuild,
+        world: 51
+      }
+    });
+
+    expect(failingGrandBattleSnapshotLoader).toHaveBeenCalled();
+    expect(getRenderedCastleLabels()).toEqual(previousCastleLabels);
+    expect(document.querySelector(".castle-list")).not.toBeNull();
+  });
+
   it("shows the KO victim summary below the GrandBattle update button and above the monitor list", async () => {
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));
     const loadGrandBattleLatestSnapshot = vi.fn(() => Promise.resolve(grandBattleSnapshot));
@@ -1708,25 +1782,45 @@ function renderComponent(
   document.body.append(container);
   root = createRoot(container);
 
+  const renderTree = ({
+    nextLoadGrandBattleLatestSnapshot = loadGrandBattleLatestSnapshot,
+    nextSharedGuild = sharedGuild
+  }: {
+    readonly nextLoadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
+    readonly nextSharedGuild?: SharedGuildContext | null;
+  } = {}) => (
+    <AppModeProvider pathname={pathname}>
+      <GuildBattlePlaceholder
+        loadSnapshot={loadSnapshot}
+        loadGrandBattleParticipants={loadGrandBattleParticipants}
+        loadGrandBattleLatestSnapshot={nextLoadGrandBattleLatestSnapshot}
+        loadKoObserverRunMeta={koMonitor?.loadKoObserverRunMeta}
+        loadKoGuildKoTotals={koMonitor?.loadKoGuildKoTotals}
+        subscribeKoGuildKoTotals={koMonitor?.subscribeKoGuildKoTotals}
+        koMonitorNow={koMonitor?.koMonitorNow}
+        createRealtimeClient={createRealtimeClient}
+        notificationSettings={notificationSettings}
+        ownedGuildProfilePersistence={ownedGuildProfilePersistence}
+        sharedGuild={nextSharedGuild}
+      />
+    </AppModeProvider>
+  );
+
   act(() => {
-    root?.render(
-      <AppModeProvider pathname={pathname}>
-        <GuildBattlePlaceholder
-          loadSnapshot={loadSnapshot}
-          loadGrandBattleParticipants={loadGrandBattleParticipants}
-          loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
-          loadKoObserverRunMeta={koMonitor?.loadKoObserverRunMeta}
-          loadKoGuildKoTotals={koMonitor?.loadKoGuildKoTotals}
-          subscribeKoGuildKoTotals={koMonitor?.subscribeKoGuildKoTotals}
-          koMonitorNow={koMonitor?.koMonitorNow}
-          createRealtimeClient={createRealtimeClient}
-          notificationSettings={notificationSettings}
-          ownedGuildProfilePersistence={ownedGuildProfilePersistence}
-          sharedGuild={sharedGuild}
-        />
-      </AppModeProvider>
-    );
+    root?.render(renderTree());
   });
+
+  return {
+    rerender: async (overrides: {
+      readonly nextLoadGrandBattleLatestSnapshot?: typeof loadGrandBattleSnapshot;
+      readonly nextSharedGuild?: SharedGuildContext | null;
+    } = {}) => {
+      await act(async () => {
+        root?.render(renderTree(overrides));
+        await flushPromises();
+      });
+    }
+  };
 }
 
 function renderComponentWithDefaultRealtimeClient(loadSnapshot: typeof loadLocalGvgSnapshot) {

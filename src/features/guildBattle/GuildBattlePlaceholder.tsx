@@ -59,6 +59,7 @@ import {
   validateGuildBattleAlertThresholds,
   type EditableGuildBattleAlertThresholds
 } from "./alertThresholdStorage";
+import { resolveGrandBattleSourceForGuild } from "./grandBattleAutoResolution";
 import {
   createGuildBattleCastleDisplayViewModel,
   createGuildBattleGuildCandidates,
@@ -76,6 +77,11 @@ import {
   saveBattleMonitorViewSettings,
   type BattleMonitorSharedViewSettings
 } from "./viewSettingsStorage";
+import {
+  useBattleDetection,
+  type BattleDetectionStatus,
+  type BattleMonitorMode
+} from "./useBattleDetection";
 
 const IS_DEV = import.meta.env.DEV;
 const WORLD_ID_BASE = 1000;
@@ -105,13 +111,8 @@ const GRAND_BATTLE_BLOCK_OPTIONS: readonly {
 ];
 const CURRENT_TIME_REFRESH_INTERVAL_MS = 1000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
-const PAGES_BATTLE_DETECTION_WORLD_ID = "1001" as GvgWorldId;
 const BATTLE_DETECTION_LOADING_MESSAGE = "戦場情報を確認中...";
-const BATTLE_DETECTION_LOAD_ERROR_MESSAGE = "戦場情報を取得できませんでした。時間をおいて再読み込みしてください。";
-const FIREBASE_OWNER_PROFILE_REQUIRED_MESSAGE = "所属ギルド設定を確認してください";
 const FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE = "監視条件を解決できませんでした";
-const GRAND_BATTLE_AUTO_CLASS_ORDER: readonly GrandBattleClassId[] = [3, 2, 1];
-const GRAND_BATTLE_AUTO_BLOCK_ORDER: readonly GrandBattleBlockId[] = [0, 1, 2, 3];
 
 function getCurrentDate() {
   return new Date();
@@ -120,12 +121,6 @@ function getCurrentDate() {
 function createDefaultRealtimeClient() {
   return new BrowserGvgRealtimeClient();
 }
-
-type BattleMonitorMode = "guildBattle" | "grandBattle";
-type BattleDetectionStatus =
-  | { readonly status: "loading" }
-  | { readonly status: "error"; readonly message: string }
-  | { readonly status: "resolved" };
 
 type BattleMonitorSharedState = BattleMonitorSharedViewSettings;
 
@@ -181,18 +176,6 @@ interface GuildBattleRuntimeService {
 interface ConfiguredGuildContext {
   readonly world: number;
   readonly guildId: GvgGuildId;
-}
-
-function isSameBattleDetectionStatus(currentState: BattleDetectionStatus, nextState: BattleDetectionStatus): boolean {
-  if (currentState.status !== nextState.status) {
-    return false;
-  }
-
-  if (currentState.status === "error" && nextState.status === "error") {
-    return currentState.message === nextState.message;
-  }
-
-  return true;
 }
 
 function isSameBattleMonitorSharedState(
@@ -333,9 +316,6 @@ export function GuildBattlePlaceholder({
   );
   const [initialViewSettings] = useState(() => loadBattleMonitorViewSettings());
   const [activeMode, setActiveMode] = useState<BattleMonitorMode>("guildBattle");
-  const [battleDetectionState, setBattleDetectionState] = useState<BattleDetectionStatus>({
-    status: "loading"
-  });
   const [shared, setShared] = useState<BattleMonitorSharedState>(() =>
     sharedGuild === undefined || sharedGuild === null
       ? initialViewSettings.shared
@@ -361,6 +341,7 @@ export function GuildBattlePlaceholder({
   const [grandBattleSnapshotLoadState, setGrandBattleSnapshotLoadState] = useState<
     AsyncLoadState<GrandBattleSnapshot>
   >({ status: "idle" });
+  const [grandBattleAutoResolutionError, setGrandBattleAutoResolutionError] = useState<string | null>(null);
   const [grandBattleRealtimeState, setGrandBattleRealtimeState] = useState<GvgRealtimeConnectionState>({
     status: "idle"
   });
@@ -391,6 +372,10 @@ export function GuildBattlePlaceholder({
   const ownedGuildCandidateRequestSeqRef = useRef(0);
   const grandBattleParticipantRequestSeqRef = useRef(0);
   const grandBattleSnapshotRequestSeqRef = useRef(0);
+  const grandBattleAutoResolutionRequestSeqRef = useRef(0);
+  const loadGrandBattleLatestSnapshotRef = useRef(loadGrandBattleLatestSnapshot);
+
+  loadGrandBattleLatestSnapshotRef.current = loadGrandBattleLatestSnapshot;
 
   const runtimeService = useMemo<GuildBattleRuntimeService>(
     () => ({
@@ -410,6 +395,25 @@ export function GuildBattlePlaceholder({
       }),
     [ownedGuildProfilePersistence?.profile, sharedGuild]
   );
+  const configuredGuildWorld = configuredGuildContext?.world ?? null;
+  const configuredGuildId = configuredGuildContext?.guildId ?? null;
+  const configuredGuildWorldId = useMemo(
+    () => createWorldIdFromWorldNumber(configuredGuildWorld),
+    [configuredGuildWorld]
+  );
+  const battleDetection = useBattleDetection({
+    appMode,
+    configuredWorldId: configuredGuildWorldId,
+    isFirebaseVersion,
+    isOwnerProfileLoading: ownedGuildProfilePersistence?.isLoading ?? false,
+    loadSnapshot
+  });
+  const battleDetectionStatus = battleDetection.status;
+  const battleDetectionState: BattleDetectionStatus =
+    grandBattleAutoResolutionError === null
+      ? battleDetectionStatus
+      : { status: "error", message: grandBattleAutoResolutionError };
+  const battleDetectionResult = battleDetection.result;
   const shouldHideManualGuildBattleSource = isFirebaseVersion && configuredGuildContext !== null;
   const shouldHideManualGrandBattleSource = isFirebaseVersion && configuredGuildContext !== null;
   const shouldBlockMonitorRendering = isFirebaseVersion && battleDetectionState.status === "error";
@@ -437,12 +441,6 @@ export function GuildBattlePlaceholder({
     refreshKey: koMonitorRefreshKey,
     subscribeKoGuildKoTotals
   });
-  const updateBattleDetectionState = useCallback((nextState: BattleDetectionStatus) => {
-    setBattleDetectionState((currentState) =>
-      isSameBattleDetectionStatus(currentState, nextState) ? currentState : nextState
-    );
-  }, []);
-
   useEffect(() => {
     return () => {
       stopRealtime("component unmounted");
@@ -480,120 +478,59 @@ export function GuildBattlePlaceholder({
   }, [sharedGuild]);
 
   useEffect(() => {
-    let isDisposed = false;
-
-    async function resolveInitialBattleMode() {
-      if (isFirebaseVersion && ownedGuildProfilePersistence?.isLoading) {
-        updateBattleDetectionState({ status: "loading" });
-        return;
-      }
-
-      if (isFirebaseVersion && configuredGuildContext === null) {
-        updateBattleDetectionState({
-          status: "error",
-          message:
-            appMode === "owner"
-              ? FIREBASE_OWNER_PROFILE_REQUIRED_MESSAGE
-              : FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
-        });
-        return;
-      }
-
-      updateBattleDetectionState({ status: "loading" });
-
-      const detectionWorldId =
-        configuredGuildContext === null
-          ? PAGES_BATTLE_DETECTION_WORLD_ID
-          : createWorldIdFromWorldNumber(configuredGuildContext.world);
-
-      if (detectionWorldId === null) {
-        updateBattleDetectionState({
-          status: "error",
-          message: FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
-        });
-        return;
-      }
-
-      try {
-        const detectionSnapshot = await runtimeService.loadSnapshot(detectionWorldId);
-        const detectedMode = detectBattleMonitorMode(detectionSnapshot);
-
-        if (isDisposed) {
-          return;
-        }
-
-        if (detectedMode === null) {
-          updateBattleDetectionState({
-            status: "error",
-            message: BATTLE_DETECTION_LOAD_ERROR_MESSAGE
-          });
-          return;
-        }
-
-        setActiveMode(detectedMode);
-        updateBattleDetectionState({ status: "resolved" });
-
-        if (detectedMode === "guildBattle") {
-          stopGrandBattleRealtime("battle mode resolved to guild battle", { nextState: "idle" });
-
-          if (configuredGuildContext !== null) {
-            setShared((currentShared) => {
-              const nextShared = {
-                ...currentShared,
-                worldInput: String(configuredGuildContext.world),
-                worldNumber: configuredGuildContext.world
-              };
-
-              return isSameBattleMonitorSharedState(currentShared, nextShared) ? currentShared : nextShared;
-            });
-            setLoadState({ status: "success", data: detectionSnapshot });
-            setSelectedGuildId(configuredGuildContext.guildId);
-
-            if (isAutoUpdateEnabled) {
-              await startRealtime(detectionSnapshot);
-            }
-          }
-          return;
-        }
-
-        stopRealtime("battle mode resolved to grand battle", { nextState: "idle" });
-
-        if (configuredGuildContext !== null) {
-          await resolveFirebaseGrandBattleSource(configuredGuildContext);
-          return;
-        }
-
-        if (grandBattleDraftSource.worldNumber !== null) {
-          await loadGrandBattleParticipantsForSource({
-            ...grandBattleDraftSource,
-            worldNumber: grandBattleDraftSource.worldNumber
-          });
-        }
-      } catch {
-        if (!isDisposed) {
-          updateBattleDetectionState({
-            status: "error",
-            message: isFirebaseVersion
-              ? FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
-              : BATTLE_DETECTION_LOAD_ERROR_MESSAGE
-          });
-        }
-      }
+    if (battleDetectionStatus.status !== "resolved" || battleDetectionResult === null) {
+      return;
     }
 
-    void resolveInitialBattleMode();
+    const detectedMode = battleDetectionResult.mode;
+    const detectionSnapshot = battleDetectionResult.snapshot;
 
-    return () => {
-      isDisposed = true;
-    };
+    setActiveMode(detectedMode);
+
+    if (detectedMode === "guildBattle") {
+      stopGrandBattleRealtime("battle mode resolved to guild battle", { nextState: "idle" });
+
+      if (configuredGuildWorld !== null && configuredGuildId !== null) {
+        setShared((currentShared) => {
+          const nextShared = {
+            ...currentShared,
+            worldInput: String(configuredGuildWorld),
+            worldNumber: configuredGuildWorld
+          };
+
+          return isSameBattleMonitorSharedState(currentShared, nextShared) ? currentShared : nextShared;
+        });
+        setLoadState({ status: "success", data: detectionSnapshot });
+        setSelectedGuildId(configuredGuildId);
+
+        if (isAutoUpdateEnabled) {
+          void startRealtime(detectionSnapshot);
+        }
+      }
+      return;
+    }
+
+    stopRealtime("battle mode resolved to grand battle", { nextState: "idle" });
+
+    if (configuredGuildWorld !== null && configuredGuildId !== null) {
+      void resolveFirebaseGrandBattleSource({
+        guildId: configuredGuildId,
+        world: configuredGuildWorld
+      });
+      return;
+    }
+
+    if (grandBattleDraftSource.worldNumber !== null) {
+      void loadGrandBattleParticipantsForSource({
+        ...grandBattleDraftSource,
+        worldNumber: grandBattleDraftSource.worldNumber
+      });
+    }
   }, [
-    appMode,
-    configuredGuildContext,
-    isAutoUpdateEnabled,
-    isFirebaseVersion,
-    ownedGuildProfilePersistence?.isLoading,
-    runtimeService,
-    updateBattleDetectionState
+    battleDetectionResult,
+    battleDetectionStatus.status,
+    configuredGuildId,
+    configuredGuildWorld
   ]);
 
   async function loadSnapshotForWorldId(
@@ -945,57 +882,64 @@ export function GuildBattlePlaceholder({
   }
 
   async function resolveFirebaseGrandBattleSource(context: ConfiguredGuildContext) {
-    setGrandBattleParticipantLoadState({ status: "loading" });
-    setGrandBattleSnapshotLoadState({ status: "loading" });
-    setGrandBattleParticipantCandidates([]);
-    setGrandBattleCandidateSource(null);
-    setGrandBattleAppliedSource(null);
+    const requestSeq = grandBattleAutoResolutionRequestSeqRef.current + 1;
+    const shouldKeepPreviousSnapshot = grandBattleSnapshotLoadState.status === "success";
+    grandBattleAutoResolutionRequestSeqRef.current = requestSeq;
+
+    if (!shouldKeepPreviousSnapshot) {
+      setGrandBattleAutoResolutionError(null);
+      setGrandBattleParticipantLoadState({ status: "loading" });
+      setGrandBattleSnapshotLoadState({ status: "loading" });
+      setGrandBattleParticipantCandidates([]);
+      setGrandBattleCandidateSource(null);
+      setGrandBattleAppliedSource(null);
+    }
     setSelectedGrandBattleGuildId(context.guildId);
 
-    for (const classId of GRAND_BATTLE_AUTO_CLASS_ORDER) {
-      for (const blockId of GRAND_BATTLE_AUTO_BLOCK_ORDER) {
-        const source: GrandBattleResolvedSource = {
-          serverId: GRAND_BATTLE_DEFAULT_SERVER_ID,
-          worldInput: String(context.world),
-          worldNumber: context.world,
-          classId,
-          blockId
-        };
-        const snapshot = await loadGrandBattleLatestSnapshot(source);
+    try {
+      const resolution = await resolveGrandBattleSourceForGuild({
+        context,
+        loadGrandBattleLatestSnapshot: loadGrandBattleLatestSnapshotRef.current
+      });
 
-        if (!Object.prototype.hasOwnProperty.call(snapshot.guildNames, context.guildId)) {
-          continue;
-        }
-
-        const participants = createGrandBattleParticipantsFromSnapshot(snapshot);
-        setGrandBattleDraftSource(source);
-        setGrandBattleCandidateSource(source);
-        setGrandBattleAppliedSource(source);
-        setGrandBattleParticipantCandidates(participants);
-        setGrandBattleParticipantLoadState({ status: "success", data: participants });
-        setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
-        setSelectedGrandBattleGuildId(context.guildId);
-        setKoMonitorRefreshKey((currentKey) => currentKey + 1);
-
-        if (isAutoUpdateEnabled) {
-          await startGrandBattleRealtime(snapshot);
-        }
+      if (grandBattleAutoResolutionRequestSeqRef.current !== requestSeq) {
         return;
       }
+
+      if (resolution === null) {
+        handleGrandBattleAutoResolutionFailure(shouldKeepPreviousSnapshot);
+        return;
+      }
+
+      setGrandBattleAutoResolutionError(null);
+      setGrandBattleDraftSource(resolution.source);
+      setGrandBattleCandidateSource(resolution.source);
+      setGrandBattleAppliedSource(resolution.source);
+      setGrandBattleParticipantCandidates(resolution.participants);
+      setGrandBattleParticipantLoadState({ status: "success", data: resolution.participants });
+      setGrandBattleSnapshotLoadState({ status: "success", data: resolution.snapshot });
+      setSelectedGrandBattleGuildId(context.guildId);
+      setKoMonitorRefreshKey((currentKey) => currentKey + 1);
+
+      if (isAutoUpdateEnabled) {
+        await startGrandBattleRealtime(resolution.snapshot);
+      }
+    } catch {
+      if (grandBattleAutoResolutionRequestSeqRef.current === requestSeq) {
+        handleGrandBattleAutoResolutionFailure(shouldKeepPreviousSnapshot);
+      }
+    }
+  }
+
+  function handleGrandBattleAutoResolutionFailure(shouldKeepPreviousSnapshot: boolean) {
+    if (shouldKeepPreviousSnapshot) {
+      return;
     }
 
-    setGrandBattleParticipantLoadState({
-      status: "error",
-      error: new Error(FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE)
-    });
-    setGrandBattleSnapshotLoadState({
-      status: "error",
-      error: new Error(FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE)
-    });
-    updateBattleDetectionState({
-      status: "error",
-      message: FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
-    });
+    const error = new Error(FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE);
+    setGrandBattleAutoResolutionError(FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE);
+    setGrandBattleParticipantLoadState({ status: "error", error });
+    setGrandBattleSnapshotLoadState({ status: "error", error });
   }
 
   async function startGrandBattleRealtime(snapshot: GrandBattleSnapshot) {
@@ -1498,30 +1442,6 @@ function isSameGrandBattleSource(
   );
 }
 
-function detectBattleMonitorMode(snapshot: GvgSnapshot): BattleMonitorMode | null {
-  if (snapshot.castles.length === 0) {
-    return null;
-  }
-
-  if (snapshot.castles.some((castle) => castle.state === "unknown")) {
-    return null;
-  }
-
-  if (
-    snapshot.castles.some(
-      (castle) =>
-        castle.state === "inBattle" ||
-        castle.state === "fallen" ||
-        castle.state === "counterattack" ||
-        castle.state === "counterattackSuccessful"
-    )
-  ) {
-    return "guildBattle";
-  }
-
-  return snapshot.castles.every((castle) => castle.state === "idle") ? "grandBattle" : null;
-}
-
 function getConfiguredGuildContext({
   ownedGuildProfile,
   sharedGuild
@@ -1544,18 +1464,6 @@ function getConfiguredGuildContext({
     world: ownedGuildProfile.world,
     guildId: ownedGuildProfile.guildId as GvgGuildId
   };
-}
-
-function createGrandBattleParticipantsFromSnapshot(
-  snapshot: GrandBattleSnapshot
-): readonly GrandBattleParticipantGuildCandidate[] {
-  return Object.entries(snapshot.guildNames)
-    .sort(([leftGuildId], [rightGuildId]) => leftGuildId.localeCompare(rightGuildId))
-    .slice(0, 4)
-    .map(([guildId, guildName]) => ({
-      guildId: guildId as GvgGuildId,
-      guildName
-    }));
 }
 
 function useCurrentTime(): Date {
