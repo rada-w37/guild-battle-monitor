@@ -207,6 +207,60 @@ function isSameBattleMonitorSharedState(
   );
 }
 
+function isSameKoGuildKoTotals(
+  currentRows: readonly KoGuildKoTotal[],
+  nextRows: readonly KoGuildKoTotal[]
+): boolean {
+  if (currentRows.length !== nextRows.length) {
+    return false;
+  }
+
+  return currentRows.every((currentRow, index) => {
+    const nextRow = nextRows[index];
+
+    return (
+      currentRow.guildId === nextRow.guildId &&
+      currentRow.guildName === nextRow.guildName &&
+      currentRow.totalVictimKoCount === nextRow.totalVictimKoCount &&
+      (currentRow.updatedAt?.getTime() ?? null) === (nextRow.updatedAt?.getTime() ?? null)
+    );
+  });
+}
+
+function getKoMonitorRows(state: KoMonitorLoadState): readonly KoGuildKoTotal[] {
+  return state.status === "success" || state.status === "error" ? state.rows : [];
+}
+
+function isSameKoMonitorLoadState(currentState: KoMonitorLoadState, nextState: KoMonitorLoadState): boolean {
+  if (currentState.status !== nextState.status) {
+    return false;
+  }
+
+  if (currentState.status === "success" && nextState.status === "success") {
+    return (
+      currentState.isObserverStarted === nextState.isObserverStarted &&
+      isSameKoGuildKoTotals(currentState.rows, nextState.rows)
+    );
+  }
+
+  if (currentState.status === "error" && nextState.status === "error") {
+    return (
+      currentState.error.name === nextState.error.name &&
+      currentState.error.message === nextState.error.message &&
+      isSameKoGuildKoTotals(currentState.rows, nextState.rows)
+    );
+  }
+
+  return true;
+}
+
+function getNextKoMonitorLoadState(
+  currentState: KoMonitorLoadState,
+  nextState: KoMonitorLoadState
+): KoMonitorLoadState {
+  return isSameKoMonitorLoadState(currentState, nextState) ? currentState : nextState;
+}
+
 export function GuildBattlePlaceholder({
   afterHeader,
   loadSnapshot = loadLocalGvgSnapshot,
@@ -1319,7 +1373,7 @@ function useKoMonitorLoadState({
       loadKoGuildKoTotals === undefined ||
       subscribeKoGuildKoTotals === undefined
     ) {
-      setState({ status: "idle" });
+      setState((currentState) => getNextKoMonitorLoadState(currentState, { status: "idle" }));
       return;
     }
 
@@ -1328,7 +1382,7 @@ function useKoMonitorLoadState({
     const subscribeTotals = subscribeKoGuildKoTotals;
     let isDisposed = false;
     let unsubscribe: (() => void) | null = null;
-    setState({ status: "loading" });
+    setState((currentState) => (currentState.status === "idle" ? { status: "loading" } : currentState));
 
     async function load() {
       const currentTime = now();
@@ -1339,19 +1393,20 @@ function useKoMonitorLoadState({
         unsubscribe = subscribeTotals(
           (rows) => {
             if (!isDisposed) {
-              setState({ status: "success", isObserverStarted, rows });
+              setState((currentState) =>
+                getNextKoMonitorLoadState(currentState, { status: "success", isObserverStarted, rows })
+              );
             }
           },
           (error) => {
             if (!isDisposed) {
-              setState((currentState) => ({
-                status: "error",
-                error,
-                rows:
-                  currentState.status === "success" || currentState.status === "error"
-                    ? currentState.rows
-                    : []
-              }));
+              setState((currentState) =>
+                getNextKoMonitorLoadState(currentState, {
+                  status: "error",
+                  error,
+                  rows: getKoMonitorRows(currentState)
+                })
+              );
             }
           }
         );
@@ -1361,17 +1416,21 @@ function useKoMonitorLoadState({
       const rows = await loadTotals();
 
       if (!isDisposed) {
-        setState({ status: "success", isObserverStarted, rows });
+        setState((currentState) =>
+          getNextKoMonitorLoadState(currentState, { status: "success", isObserverStarted, rows })
+        );
       }
     }
 
     void load().catch((error) => {
       if (!isDisposed) {
-        setState({
-          status: "error",
-          error: error instanceof Error ? error : new Error("KO集計データを取得できませんでした。"),
-          rows: []
-        });
+        setState((currentState) =>
+          getNextKoMonitorLoadState(currentState, {
+            status: "error",
+            error: error instanceof Error ? error : new Error("KO集計データを取得できませんでした。"),
+            rows: getKoMonitorRows(currentState)
+          })
+        );
       }
     });
 

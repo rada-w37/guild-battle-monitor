@@ -733,6 +733,61 @@ describe("GuildBattlePlaceholder", () => {
     expect(loadKoGuildKoTotals).not.toHaveBeenCalled();
   });
 
+  it("keeps previous KO rows when the boundary refresh fails after realtime", async () => {
+    vi.useFakeTimers();
+    let currentTime = new Date(2026, 4, 27, 21, 29, 59);
+    const unsubscribeKoGuildKoTotals = vi.fn();
+    const loadKoGuildKoTotals = vi.fn(() => Promise.reject(new Error("read failed")));
+    const subscribeKoGuildKoTotals = vi.fn((onRows: (rows: readonly KoGuildKoTotal[]) => void) => {
+      onRows(koGuildKoTotals);
+      return unsubscribeKoGuildKoTotals;
+    });
+    renderGrandBattleComponent(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: grandBattleParticipants[0].guildId, guildName: "ギルドA" }),
+      undefined,
+      createKoMonitorProps({
+        loadKoGuildKoTotals,
+        subscribeKoGuildKoTotals,
+        koMonitorNow: () => currentTime
+      })
+    );
+
+    await flushPromises();
+    const initialSubscriptionCount = subscribeKoGuildKoTotals.mock.calls.length;
+    const initialUnsubscriptionCount = unsubscribeKoGuildKoTotals.mock.calls.length;
+    expect(initialSubscriptionCount).toBeGreaterThan(0);
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual([
+      "12",
+      "0"
+    ]);
+
+    currentTime = new Date(2026, 4, 27, 21, 30, 0);
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(unsubscribeKoGuildKoTotals).toHaveBeenCalledTimes(initialUnsubscriptionCount + 1);
+    expect(subscribeKoGuildKoTotals).toHaveBeenCalledTimes(initialSubscriptionCount);
+    expect(loadKoGuildKoTotals).toHaveBeenCalledTimes(1);
+    expect(getKoVictimSummary().textContent).toContain("KO集計データを取得できませんでした。");
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__guild")?.textContent)).toEqual([
+      "ギルドA",
+      "ギルドB"
+    ]);
+    expect(getKoVictimRows().map((row) => row.querySelector(".ko-victim-summary__count")?.textContent)).toEqual([
+      "-",
+      "-"
+    ]);
+  });
+
   it("updates the GrandBattle snapshot list from realtime payloads", async () => {
     const realtimeClient = new MockGvgRealtimeClient();
     const loadGrandBattleParticipants = vi.fn(() => Promise.resolve(grandBattleParticipants));

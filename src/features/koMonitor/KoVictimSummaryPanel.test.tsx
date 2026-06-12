@@ -10,7 +10,7 @@ describe("KoVictimSummaryPanel styles", () => {
 
     expect(tableRule).toContain("--ko-victim-summary-columns: minmax(0, 1fr) 110px;");
     expect(gridRule).toContain("grid-template-columns: var(--ko-victim-summary-columns);");
-    expect(countRule).toContain("text-align: left;");
+    expect(countRule).toContain("text-align: center;");
     expect(countRule).not.toContain("text-align: right;");
   });
 });
