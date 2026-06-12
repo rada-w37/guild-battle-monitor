@@ -366,6 +366,8 @@ select {
 }
 
 .ko-victim-summary__table {
+  --ko-victim-summary-columns: minmax(0, 1fr) 110px;
+
   display: grid;
   gap: 4px;
   width: min(100%, 500px);
@@ -374,7 +376,7 @@ select {
 .ko-victim-summary__header,
 .ko-victim-summary__row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px;
+  grid-template-columns: var(--ko-victim-summary-columns);
   align-items: center;
 }
 
@@ -405,7 +407,7 @@ select {
 }
 
 .ko-victim-summary__count {
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
