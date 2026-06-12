@@ -22,6 +22,16 @@ export type AppRoute =
 
 const AppRouteContext = createContext<AppRoute | null>(null);
 const GITHUB_PAGES_BASE_PATH = "/guild-battle-monitor";
+const SIGNED_OUT_OWNER_PERMISSIONS_OVERRIDE: Partial<AppModePermissions> = {
+  canEditBattleState: false,
+  canPersistViewSettings: false,
+  canManageNotifications: false,
+  canManageGuildProfile: false,
+  canManageShareUrls: false,
+  showNotificationSettings: false,
+  showOwnedGuildSettings: false,
+  showShareSettings: false
+};
 
 export function resolveAppMode(pathname: string): AppMode | null {
   return resolveRoute(pathname)?.mode ?? null;
@@ -46,6 +56,16 @@ export function getAppModePermissions(mode: AppMode): AppModePermissions {
     showOwnedGuildSettings: canManageGuildProfile,
     showShareSettings: canManageShareUrls
   };
+}
+
+export function getFirebasePermissionsOverride({
+  isSignedInOwner,
+  mode
+}: {
+  readonly isSignedInOwner: boolean;
+  readonly mode: AppMode;
+}): Partial<AppModePermissions> | undefined {
+  return mode === "owner" && !isSignedInOwner ? SIGNED_OUT_OWNER_PERMISSIONS_OVERRIDE : undefined;
 }
 
 export function resolveRoute(pathname: string): AppRoute | null {
