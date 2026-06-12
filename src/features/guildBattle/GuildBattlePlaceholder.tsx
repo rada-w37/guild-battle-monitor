@@ -15,7 +15,6 @@ import {
   loadGrandBattleParticipantGuilds,
   loadGrandBattleSnapshot
 } from "../grandBattle/grandBattleParticipantService";
-import { GrandBattleRealtimeSnapshotRuntime } from "../grandBattle/realtimeSnapshotRuntime";
 import {
   createGrandBattleCastleListViewModels,
   createGrandBattleGuildCandidates
@@ -29,6 +28,7 @@ import type {
   GrandBattleSource,
   GrandBattleSnapshot
 } from "../grandBattle/types";
+import { useGrandBattleRealtime } from "../grandBattle/useGrandBattleRealtime";
 import { BrowserGvgRealtimeClient } from "../gvg/browserRealtimeClient";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import {
@@ -37,7 +37,6 @@ import {
   type GvgRealtimeConnectionState,
   type GvgRealtimeSubscription
 } from "../gvg/realtimeClientTypes";
-import { GvgRealtimeSnapshotRuntime } from "../gvg/realtimeSnapshotRuntime";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import { KoVictimSummaryPanel } from "../koMonitor/KoVictimSummaryPanel";
 import {
@@ -65,7 +64,6 @@ import {
   createGuildBattleGuildCandidates,
   sortGuildBattleCastleViewModels
 } from "./selectors";
-import type { TestModeGvgRealtimeClient } from "./testModeRealtimeClient";
 import type {
   GuildBattleAlertThresholds,
   GuildBattleCastleListSortMode,
@@ -82,6 +80,7 @@ import {
   type BattleDetectionStatus,
   type BattleMonitorMode
 } from "./useBattleDetection";
+import { useGuildBattleRealtime } from "./useGuildBattleRealtime";
 
 const IS_DEV = import.meta.env.DEV;
 const WORLD_ID_BASE = 1000;
@@ -342,9 +341,6 @@ export function GuildBattlePlaceholder({
     AsyncLoadState<GrandBattleSnapshot>
   >({ status: "idle" });
   const [grandBattleAutoResolutionError, setGrandBattleAutoResolutionError] = useState<string | null>(null);
-  const [grandBattleRealtimeState, setGrandBattleRealtimeState] = useState<GvgRealtimeConnectionState>({
-    status: "idle"
-  });
   const [selectedGrandBattleGuildId, setSelectedGrandBattleGuildId] = useState<GvgGuildId | "">("");
   const [selectedGuildId, setSelectedGuildId] = useState(initialViewSettings.guildBattle.selectedGuildId);
   const [selectedOwnedGuildWorldId, setSelectedOwnedGuildWorldId] = useState("");
@@ -356,7 +352,6 @@ export function GuildBattlePlaceholder({
   >({ status: "idle" });
   const [ownedGuildCandidates, setOwnedGuildCandidates] = useState<readonly GuildBattleGuildCandidateViewModel[]>([]);
   const [loadState, setLoadState] = useState<AsyncLoadState<GvgSnapshot>>({ status: "idle" });
-  const [realtimeState, setRealtimeState] = useState<GvgRealtimeConnectionState>({ status: "idle" });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isTestModeEnabled, setIsTestModeEnabled] = useState(false);
   const [koMonitorRefreshKey, setKoMonitorRefreshKey] = useState(0);
@@ -364,11 +359,6 @@ export function GuildBattlePlaceholder({
     loadGuildBattleAlertThresholds()
   );
   const [alertThresholdError, setAlertThresholdError] = useState<string | null>(null);
-  const runtimeRef = useRef<GvgRealtimeSnapshotRuntime | null>(null);
-  const removeRealtimeListenerRef = useRef<(() => void) | null>(null);
-  const testModeClientRef = useRef<TestModeGvgRealtimeClient | null>(null);
-  const grandBattleRuntimeRef = useRef<GrandBattleRealtimeSnapshotRuntime | null>(null);
-  const removeGrandBattleRealtimeListenerRef = useRef<(() => void) | null>(null);
   const ownedGuildCandidateRequestSeqRef = useRef(0);
   const grandBattleParticipantRequestSeqRef = useRef(0);
   const grandBattleSnapshotRequestSeqRef = useRef(0);
@@ -385,6 +375,28 @@ export function GuildBattlePlaceholder({
     }),
     [createRealtimeClient, loadSnapshot]
   );
+  const handleGuildBattleRealtimeSnapshotUpdated = useCallback((snapshot: GvgSnapshot) => {
+    setLoadState({ status: "success", data: snapshot });
+  }, []);
+  const guildBattleRealtime = useGuildBattleRealtime({
+    createRealtimeClient: runtimeService.createRealtimeClient,
+    createSubscription: runtimeService.createSubscription,
+    isTestModeEnabled,
+    onSnapshotUpdated: handleGuildBattleRealtimeSnapshotUpdated
+  });
+  const realtimeState = guildBattleRealtime.state;
+  const startRealtime = guildBattleRealtime.start;
+  const stopRealtime = guildBattleRealtime.stop;
+  const handleGrandBattleRealtimeSnapshotUpdated = useCallback((snapshot: GrandBattleSnapshot) => {
+    setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
+  }, []);
+  const grandBattleRealtime = useGrandBattleRealtime({
+    createRealtimeClient: runtimeService.createRealtimeClient,
+    onSnapshotUpdated: handleGrandBattleRealtimeSnapshotUpdated
+  });
+  const grandBattleRealtimeState = grandBattleRealtime.state;
+  const startGrandBattleRealtime = grandBattleRealtime.start;
+  const stopGrandBattleRealtime = grandBattleRealtime.stop;
   const world = shared.worldInput;
   const worldId = useMemo(() => createWorldIdFromWorldNumber(shared.worldNumber), [shared.worldNumber]);
   const configuredGuildContext = useMemo(
@@ -606,77 +618,6 @@ export function GuildBattlePlaceholder({
     if (activeMode === "grandBattle" && grandBattleSnapshotLoadState.status === "success") {
       await startGrandBattleRealtime(grandBattleSnapshotLoadState.data);
     }
-  }
-
-  async function startRealtime(snapshot: GvgSnapshot) {
-    stopRealtime("realtime restart", { nextState: "idle" });
-
-    const { client, testModeClient } = await createRealtimeClientForCurrentMode(snapshot);
-    testModeClientRef.current = testModeClient;
-
-    const removeRealtimeListener = client.addEventListener((event) => {
-      if (event.type === "stateChanged") {
-        setRealtimeState(event.state);
-      }
-
-      if (event.type === "error") {
-        setRealtimeState({ status: "error", error: event.error });
-      }
-    });
-    const runtime = new GvgRealtimeSnapshotRuntime({
-      client,
-      createSubscription: runtimeService.createSubscription,
-      onSnapshotUpdated: (snapshot) => {
-        setLoadState({ status: "success", data: snapshot });
-      },
-      onError: (error) => {
-        setRealtimeState({ status: "error", error });
-      }
-    });
-
-    removeRealtimeListenerRef.current = removeRealtimeListener;
-    runtimeRef.current = runtime;
-
-    try {
-      await runtime.start(snapshot);
-    } catch (error) {
-      setRealtimeState({
-        status: "error",
-        error: error instanceof Error ? error : new Error("realtime start failed")
-      });
-    }
-  }
-
-  function stopRealtime(reason: string, options: { readonly nextState?: "idle" } = {}) {
-    runtimeRef.current?.dispose(reason);
-    runtimeRef.current = null;
-    testModeClientRef.current = null;
-    removeRealtimeListenerRef.current?.();
-    removeRealtimeListenerRef.current = null;
-
-    if (options.nextState === "idle") {
-      setRealtimeState({ status: "idle" });
-      return;
-    }
-
-    if (realtimeState.status !== "idle" && realtimeState.status !== "disconnected") {
-      setRealtimeState({ status: "disconnected", reason });
-    }
-  }
-
-  async function createRealtimeClientForCurrentMode(snapshot: GvgSnapshot): Promise<{
-    readonly client: GvgRealtimeClient;
-    readonly testModeClient: TestModeGvgRealtimeClient | null;
-  }> {
-    if (IS_DEV && isTestModeEnabled) {
-      const { TestModeGvgRealtimeClient } = await import("./testModeRealtimeClient");
-      const testModeClient = new TestModeGvgRealtimeClient();
-      testModeClient.setSnapshot(snapshot);
-
-      return { client: testModeClient, testModeClient };
-    }
-
-    return { client: runtimeService.createRealtimeClient(), testModeClient: null };
   }
 
   function handleAlertThresholdChange(nextThresholds: EditableGuildBattleAlertThresholds): boolean {
@@ -942,58 +883,6 @@ export function GuildBattlePlaceholder({
     setGrandBattleSnapshotLoadState({ status: "error", error });
   }
 
-  async function startGrandBattleRealtime(snapshot: GrandBattleSnapshot) {
-    stopGrandBattleRealtime("grand battle realtime restart", { nextState: "idle" });
-
-    const client = runtimeService.createRealtimeClient();
-    const removeRealtimeListener = client.addEventListener((event) => {
-      if (event.type === "stateChanged") {
-        setGrandBattleRealtimeState(event.state);
-      }
-
-      if (event.type === "error") {
-        setGrandBattleRealtimeState({ status: "error", error: event.error });
-      }
-    });
-    const runtime = new GrandBattleRealtimeSnapshotRuntime({
-      client,
-      onSnapshotUpdated: (snapshot) => {
-        setGrandBattleSnapshotLoadState({ status: "success", data: snapshot });
-      },
-      onError: (error) => {
-        setGrandBattleRealtimeState({ status: "error", error });
-      }
-    });
-
-    removeGrandBattleRealtimeListenerRef.current = removeRealtimeListener;
-    grandBattleRuntimeRef.current = runtime;
-
-    try {
-      await runtime.start(snapshot);
-    } catch (error) {
-      setGrandBattleRealtimeState({
-        status: "error",
-        error: error instanceof Error ? error : new Error("GrandBattle realtime start failed")
-      });
-    }
-  }
-
-  function stopGrandBattleRealtime(reason: string, options: { readonly nextState?: "idle" } = {}) {
-    grandBattleRuntimeRef.current?.dispose(reason);
-    grandBattleRuntimeRef.current = null;
-    removeGrandBattleRealtimeListenerRef.current?.();
-    removeGrandBattleRealtimeListenerRef.current = null;
-
-    if (options.nextState === "idle") {
-      setGrandBattleRealtimeState({ status: "idle" });
-      return;
-    }
-
-    if (grandBattleRealtimeState.status !== "idle" && grandBattleRealtimeState.status !== "disconnected") {
-      setGrandBattleRealtimeState({ status: "disconnected", reason });
-    }
-  }
-
   function handleGuildChange(nextGuildId: string) {
     if (!appCapabilities.localSettings.editable) {
       return;
@@ -1238,9 +1127,9 @@ export function GuildBattlePlaceholder({
           showDevDetails={IS_DEV}
           onGuildChange={handleGuildChange}
           onOpenSettings={() => setIsSettingsDialogOpen(true)}
-          onTestModeDefenseIncrease={(castleId, amount) => testModeClientRef.current?.increaseDefense(castleId, amount)}
-          onTestModeAttackIncrease={(castleId, amount) => testModeClientRef.current?.increaseAttack(castleId, amount)}
-          onTestModeRevive={(castleId) => testModeClientRef.current?.reviveCastle(castleId)}
+          onTestModeDefenseIncrease={guildBattleRealtime.testMode.increaseDefense}
+          onTestModeAttackIncrease={guildBattleRealtime.testMode.increaseAttack}
+          onTestModeRevive={guildBattleRealtime.testMode.reviveCastle}
         />
           </>
         ) : !shouldBlockMonitorRendering ? (

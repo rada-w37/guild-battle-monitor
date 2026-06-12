@@ -260,6 +260,27 @@ describe("GuildBattlePlaceholder", () => {
     expect(getWorldInput()).not.toBeNull();
   });
 
+  it("does not restart GuildBattle realtime when the same detected snapshot rerenders", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    const rendered = renderComponent(
+      vi.fn(() => Promise.resolve(snapshot)),
+      () => realtimeClient,
+      undefined,
+      undefined,
+      undefined,
+      "/",
+      createOwnedGuildPersistence({ world: 37, guildId: ownGuildId, guildName: "Owner Guild" })
+    );
+    await flushPromises();
+
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await rendered.rerender();
+
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(0);
+  });
+
   it("shows the owner guild setup message when Firebase owner context is missing", async () => {
     renderComponent(undefined, undefined, undefined, undefined, undefined, "/", createOwnedGuildPersistence(null));
     await flushPromises();
@@ -915,6 +936,25 @@ describe("GuildBattlePlaceholder", () => {
     });
 
     expect(getCastleRows()[0].classList.contains("castle-list__row--critical")).toBe(true);
+  });
+
+  it("does not restart GrandBattle realtime when the same source rerenders", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    const rendered = renderGrandBattleComponent(() => realtimeClient);
+
+    await flushPromises();
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await rendered.rerender();
+
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(0);
   });
 
   it("does not start GrandBattle realtime when auto update is off", async () => {
@@ -1851,7 +1891,7 @@ function renderGrandBattleComponent(
   sharedGuild?: SharedGuildContext | null,
   koMonitor?: KoMonitorTestProps
 ) {
-  renderComponent(
+  return renderComponent(
     vi.fn(() => Promise.resolve(grandBattleDetectionSnapshot)),
     createRealtimeClient,
     loadGrandBattleParticipants,
