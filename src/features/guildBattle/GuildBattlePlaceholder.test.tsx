@@ -214,6 +214,19 @@ describe("GuildBattlePlaceholder", () => {
     expect(getWorldInput().value).toBe("");
   });
 
+  it("does not restart Pages battle detection after local UI rerenders", async () => {
+    const loadSnapshot = vi.fn(() => Promise.resolve(snapshot));
+    renderComponentWithDefaultRealtimeClient(loadSnapshot);
+    await flushPromises();
+    loadSnapshot.mockClear();
+
+    await clickSettingsButton();
+    await flushPromises();
+
+    expect(loadSnapshot).not.toHaveBeenCalled();
+    expect(getSettingsDialog()).not.toBeNull();
+  });
+
   it("shows the battle detection failure message for REST failure, empty castles, and unknown states", async () => {
     const loadSnapshot = vi.fn(() => Promise.reject(new Error("failed")));
     renderComponent(loadSnapshot);
@@ -1654,6 +1667,20 @@ function renderComponent(
           ownedGuildProfilePersistence={ownedGuildProfilePersistence}
           sharedGuild={sharedGuild}
         />
+      </AppModeProvider>
+    );
+  });
+}
+
+function renderComponentWithDefaultRealtimeClient(loadSnapshot: typeof loadLocalGvgSnapshot) {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  act(() => {
+    root?.render(
+      <AppModeProvider pathname="/">
+        <GuildBattlePlaceholder loadSnapshot={loadSnapshot} />
       </AppModeProvider>
     );
   });

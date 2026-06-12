@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode
+} from "react";
 import { createAppCapabilities } from "../../app/appCapabilities";
 import { getAppModePermissions, useAppRoute, type AppMode, type AppModePermissions } from "../../app/appMode";
 import type { AsyncLoadState } from "../../shared/asyncLoadState";
@@ -109,6 +117,10 @@ function getCurrentDate() {
   return new Date();
 }
 
+function createDefaultRealtimeClient() {
+  return new BrowserGvgRealtimeClient();
+}
+
 type BattleMonitorMode = "guildBattle" | "grandBattle";
 type BattleDetectionStatus =
   | { readonly status: "loading" }
@@ -171,6 +183,30 @@ interface ConfiguredGuildContext {
   readonly guildId: GvgGuildId;
 }
 
+function isSameBattleDetectionStatus(currentState: BattleDetectionStatus, nextState: BattleDetectionStatus): boolean {
+  if (currentState.status !== nextState.status) {
+    return false;
+  }
+
+  if (currentState.status === "error" && nextState.status === "error") {
+    return currentState.message === nextState.message;
+  }
+
+  return true;
+}
+
+function isSameBattleMonitorSharedState(
+  currentState: BattleMonitorSharedState,
+  nextState: BattleMonitorSharedState
+): boolean {
+  return (
+    currentState.worldInput === nextState.worldInput &&
+    currentState.worldNumber === nextState.worldNumber &&
+    currentState.autoUpdate === nextState.autoUpdate &&
+    currentState.sortMode === nextState.sortMode
+  );
+}
+
 export function GuildBattlePlaceholder({
   afterHeader,
   loadSnapshot = loadLocalGvgSnapshot,
@@ -180,7 +216,7 @@ export function GuildBattlePlaceholder({
   loadKoGuildKoTotals,
   subscribeKoGuildKoTotals,
   koMonitorNow = getCurrentDate,
-  createRealtimeClient = () => new BrowserGvgRealtimeClient(),
+  createRealtimeClient = createDefaultRealtimeClient,
   headerActions,
   modeOverride,
   notificationSettings,
@@ -326,6 +362,11 @@ export function GuildBattlePlaceholder({
     refreshKey: koMonitorRefreshKey,
     subscribeKoGuildKoTotals
   });
+  const updateBattleDetectionState = useCallback((nextState: BattleDetectionStatus) => {
+    setBattleDetectionState((currentState) =>
+      isSameBattleDetectionStatus(currentState, nextState) ? currentState : nextState
+    );
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -352,12 +393,15 @@ export function GuildBattlePlaceholder({
       return;
     }
 
-    const nextShared = {
-      ...shared,
-      worldInput: String(sharedGuild.world),
-      worldNumber: sharedGuild.world
-    };
-    setShared(nextShared);
+    setShared((currentShared) => {
+      const nextShared = {
+        ...currentShared,
+        worldInput: String(sharedGuild.world),
+        worldNumber: sharedGuild.world
+      };
+
+      return isSameBattleMonitorSharedState(currentShared, nextShared) ? currentShared : nextShared;
+    });
   }, [sharedGuild]);
 
   useEffect(() => {
@@ -365,12 +409,12 @@ export function GuildBattlePlaceholder({
 
     async function resolveInitialBattleMode() {
       if (isFirebaseVersion && ownedGuildProfilePersistence?.isLoading) {
-        setBattleDetectionState({ status: "loading" });
+        updateBattleDetectionState({ status: "loading" });
         return;
       }
 
       if (isFirebaseVersion && configuredGuildContext === null) {
-        setBattleDetectionState({
+        updateBattleDetectionState({
           status: "error",
           message:
             appMode === "owner"
@@ -380,7 +424,7 @@ export function GuildBattlePlaceholder({
         return;
       }
 
-      setBattleDetectionState({ status: "loading" });
+      updateBattleDetectionState({ status: "loading" });
 
       const detectionWorldId =
         configuredGuildContext === null
@@ -388,7 +432,7 @@ export function GuildBattlePlaceholder({
           : createWorldIdFromWorldNumber(configuredGuildContext.world);
 
       if (detectionWorldId === null) {
-        setBattleDetectionState({
+        updateBattleDetectionState({
           status: "error",
           message: FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
         });
@@ -404,7 +448,7 @@ export function GuildBattlePlaceholder({
         }
 
         if (detectedMode === null) {
-          setBattleDetectionState({
+          updateBattleDetectionState({
             status: "error",
             message: BATTLE_DETECTION_LOAD_ERROR_MESSAGE
           });
@@ -412,18 +456,21 @@ export function GuildBattlePlaceholder({
         }
 
         setActiveMode(detectedMode);
-        setBattleDetectionState({ status: "resolved" });
+        updateBattleDetectionState({ status: "resolved" });
 
         if (detectedMode === "guildBattle") {
           stopGrandBattleRealtime("battle mode resolved to guild battle", { nextState: "idle" });
 
           if (configuredGuildContext !== null) {
-            const nextShared = {
-              ...shared,
-              worldInput: String(configuredGuildContext.world),
-              worldNumber: configuredGuildContext.world
-            };
-            setShared(nextShared);
+            setShared((currentShared) => {
+              const nextShared = {
+                ...currentShared,
+                worldInput: String(configuredGuildContext.world),
+                worldNumber: configuredGuildContext.world
+              };
+
+              return isSameBattleMonitorSharedState(currentShared, nextShared) ? currentShared : nextShared;
+            });
             setLoadState({ status: "success", data: detectionSnapshot });
             setSelectedGuildId(configuredGuildContext.guildId);
 
@@ -449,7 +496,7 @@ export function GuildBattlePlaceholder({
         }
       } catch {
         if (!isDisposed) {
-          setBattleDetectionState({
+          updateBattleDetectionState({
             status: "error",
             message: isFirebaseVersion
               ? FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
@@ -470,7 +517,8 @@ export function GuildBattlePlaceholder({
     isAutoUpdateEnabled,
     isFirebaseVersion,
     ownedGuildProfilePersistence?.isLoading,
-    runtimeService
+    runtimeService,
+    updateBattleDetectionState
   ]);
 
   async function loadSnapshotForWorldId(
@@ -869,7 +917,7 @@ export function GuildBattlePlaceholder({
       status: "error",
       error: new Error(FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE)
     });
-    setBattleDetectionState({
+    updateBattleDetectionState({
       status: "error",
       message: FIREBASE_MONITOR_RESOLUTION_ERROR_MESSAGE
     });
