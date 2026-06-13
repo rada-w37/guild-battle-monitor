@@ -8,3 +8,4 @@ dist
 *.tsbuildinfo
 start-local-monitor.bat
 .codegraph/
+deploy.bat
