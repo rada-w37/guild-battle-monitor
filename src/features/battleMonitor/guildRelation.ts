@@ -3,6 +3,27 @@ import { normalizeGvgGuildIdForComparison } from "../gvg/guildId";
 import type { GvgCastleState, GvgGuildId } from "../gvg/types";
 import type { BattleMonitorCastleGuildRelation } from "./types";
 
+export function getBattleMonitorDisplayGuildSides(castle: {
+  readonly attackerGuildId: GvgGuildId | null;
+  readonly ownerGuildId: GvgGuildId | null;
+  readonly state: GvgCastleState;
+}): {
+  readonly displayDefenseGuildId: GvgGuildId | null;
+  readonly displayAttackGuildId: GvgGuildId | null;
+} {
+  if (castle.state === "fallen") {
+    return {
+      displayDefenseGuildId: castle.attackerGuildId,
+      displayAttackGuildId: castle.ownerGuildId
+    };
+  }
+
+  return {
+    displayDefenseGuildId: castle.ownerGuildId,
+    displayAttackGuildId: castle.attackerGuildId
+  };
+}
+
 export function getGvgCastleStateGuildRelation(
   castle: {
     readonly attackerGuildId: GvgGuildId | null;

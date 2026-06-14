@@ -239,10 +239,39 @@ describe("grandBattle selectors", () => {
       ).map((castle) => [castle.castleId, castle.guildRelation]);
 
     expect(createRelations(countBaseSnapshot)).toEqual([
-      ["1", "defense"],
+      ["1", "attack"],
       ["5", "attack"]
     ]);
     expect(createRelations(countUpdatedSnapshot)).toEqual(createRelations(countBaseSnapshot));
+  });
+
+  it("keeps same-name fallback after fallen display side swap", () => {
+    const sameNameFallenSnapshot = {
+      ...snapshot,
+      guildNames: {
+        ...snapshot.guildNames,
+        [guildA]: "Fuwa Fuwa Gorilla",
+        [guildAAlternateId]: "Fuwa Fuwa Gorilla"
+      },
+      castles: [
+        {
+          ...snapshot.castles[0],
+          state: "fallen",
+          ownerGuildId: guildAAlternateId,
+          attackerGuildId: guildB
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    expect(
+      createGrandBattleCastleListViewModels(
+        sameNameFallenSnapshot,
+        guildA,
+        alertThresholds,
+        relationCurrentTime,
+        "Fuwa Fuwa Gorilla"
+      ).map((castle) => [castle.castleId, castle.guildRelation, castle.attackerGuildName])
+    ).toEqual([["1", "attack", "Fuwa Fuwa Gorilla"]]);
   });
 
   it("prioritizes owner matches over attacker matches including same-name fallback", () => {
@@ -311,7 +340,7 @@ describe("grandBattle selectors", () => {
     });
   });
 
-  it("keeps selected owner relations stable across GvgCastleState", () => {
+  it("swaps selected owner relation only for fallen castles", () => {
     const stateSnapshot = {
       ...snapshot,
       castles: [
@@ -333,14 +362,14 @@ describe("grandBattle selectors", () => {
     expect(createGrandBattleCastleListViewModels(stateSnapshot, guildA, alertThresholds, relationCurrentTime).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["state-0", "defense"],
       ["state-1", "defense"],
-      ["state-2", "defense"],
-      ["state-2-secured", "defense"],
+      ["state-2", "attack"],
+      ["state-2-secured", "attack"],
       ["state-3", "defense"],
       ["state-4", "defense"]
     ]);
   });
 
-  it("keeps selected attacker relations stable across GvgCastleState", () => {
+  it("swaps selected attacker relation only for fallen castles", () => {
     const stateSnapshot = {
       ...snapshot,
       castles: [
@@ -363,12 +392,52 @@ describe("grandBattle selectors", () => {
     expect(createGrandBattleCastleListViewModels(stateSnapshot, guildB, alertThresholds, relationCurrentTime).map((castle) => [castle.castleId, castle.guildRelation])).toEqual([
       ["state-0", "attack"],
       ["state-1", "attack"],
-      ["state-2", "attack"],
-      ["state-2-secured", "attack"],
+      ["state-2", "defense"],
+      ["state-2-secured", "defense"],
       ["state-3", "attack"],
       ["state-3-secured", "attack"],
       ["state-4", "attack"]
     ]);
+  });
+
+  it("uses display attack guild name for fallen castles while keeping raw dev details", () => {
+    const fallenSnapshot = {
+      ...snapshot,
+      castles: [
+        {
+          ...snapshot.castles[0],
+          state: "fallen",
+          ownerGuildId: guildA,
+          attackerGuildId: guildB,
+          fallenAt: "2026-05-27T00:05:00.000Z"
+        }
+      ]
+    } satisfies GrandBattleSnapshot;
+
+    const ownerDisplay = createGrandBattleCastleListViewModels(
+      fallenSnapshot,
+      guildA,
+      alertThresholds,
+      relationCurrentTime
+    )[0];
+    const attackerDisplay = createGrandBattleCastleListViewModels(
+      fallenSnapshot,
+      guildB,
+      alertThresholds,
+      relationCurrentTime
+    )[0];
+
+    expect(ownerDisplay.guildRelation).toBe("attack");
+    expect(attackerDisplay.guildRelation).toBe("defense");
+    expect(ownerDisplay.attackerGuildName).toBe("ギルドA");
+    expect(ownerDisplay.devDetails).toEqual({
+      castleId: "1",
+      guildId: "ギルドA（111111111050）",
+      attackerGuildId: "ギルドB（222222222050）",
+      defenseGuildId: "ギルドA（111111111050）",
+      gvgCastleState: "2 (fallen)",
+      utcFallenTimeStamp: "2026-05-27T00:05:00.000Z (2026-05-27 00:05:00 UTC)"
+    });
   });
 
   it("prioritizes owner relation and marks defense secured", () => {

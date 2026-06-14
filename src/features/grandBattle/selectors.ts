@@ -5,6 +5,7 @@ import type {
 } from "../battleMonitor/types";
 import { createBattleMonitorCastleDevDetails } from "../battleMonitor/devDetails";
 import { isDefenseSecured } from "../battleMonitor/defenseSecured";
+import { getBattleMonitorDisplayGuildSides } from "../battleMonitor/guildRelation";
 import type { GvgCastleId, GvgGuildId } from "../gvg/types";
 import type { GuildBattleAlertLevel, GuildBattleAlertThresholds } from "../guildBattle/types";
 import type {
@@ -35,18 +36,31 @@ export function createGrandBattleCastleListViewModels(
   selectedGuildName?: string | null
 ): BattleMonitorCastleViewModel<GvgCastleId>[] {
   return snapshot.castles
-    .map((castle) => ({
-      castle,
-      guildRelation: getSelectedGuildRelation(castle, selectedGuildId, selectedGuildName, snapshot.guildNames)
-    }))
+    .map((castle) => {
+      const displayGuildSides = getBattleMonitorDisplayGuildSides(castle);
+
+      return {
+        castle,
+        displayGuildSides,
+        guildRelation: getSelectedGuildRelation(
+          displayGuildSides,
+          selectedGuildId,
+          selectedGuildName,
+          snapshot.guildNames
+        )
+      };
+    })
     .filter(({ guildRelation }) => selectedGuildId.length === 0 || guildRelation !== "none")
-    .map(({ castle, guildRelation }) => ({
+    .map(({ castle, displayGuildSides, guildRelation }) => ({
       castleId: castle.castleId,
       castleName: getGrandBattleCastleName(castle.castleId),
       guildRelation,
       ownerGuildName: castle.ownerGuildId === null ? "Unknown guild" : snapshot.guildNames[castle.ownerGuildId] ?? "Unknown guild",
+      // attackerGuildName is the display attack side; Fallen castles show the raw owner side here.
       attackerGuildName:
-        castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
+        displayGuildSides.displayAttackGuildId === null
+          ? null
+          : snapshot.guildNames[displayGuildSides.displayAttackGuildId] ?? null,
       defenseCount: castle.defenseCount,
       attackCount: castle.attackCount,
       devDetails: createBattleMonitorCastleDevDetails({
@@ -73,7 +87,7 @@ export function createGrandBattleCastleListViewModels(
 }
 
 function getSelectedGuildRelation(
-  castle: Pick<GrandBattleCastle, "attackerGuildId" | "ownerGuildId">,
+  displayGuildSides: ReturnType<typeof getBattleMonitorDisplayGuildSides>,
   selectedGuildId: GvgGuildId | "",
   selectedGuildName: string | null | undefined,
   guildNames: GrandBattleSnapshot["guildNames"]
@@ -84,11 +98,25 @@ function getSelectedGuildRelation(
 
   const selectedNonEmptyGuildId = selectedGuildId as GvgGuildId;
 
-  if (isSameGrandBattleGuild(castle.ownerGuildId, selectedNonEmptyGuildId, guildNames, selectedGuildName)) {
+  if (
+    isSameGrandBattleGuild(
+      displayGuildSides.displayDefenseGuildId,
+      selectedNonEmptyGuildId,
+      guildNames,
+      selectedGuildName
+    )
+  ) {
     return "defense";
   }
 
-  if (isSameGrandBattleGuild(castle.attackerGuildId, selectedNonEmptyGuildId, guildNames, selectedGuildName)) {
+  if (
+    isSameGrandBattleGuild(
+      displayGuildSides.displayAttackGuildId,
+      selectedNonEmptyGuildId,
+      guildNames,
+      selectedGuildName
+    )
+  ) {
     return "attack";
   }
 
