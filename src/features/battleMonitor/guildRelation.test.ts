@@ -1,12 +1,41 @@
 import { describe, expect, it } from "vitest";
 import type { GvgCastleState, GvgGuildId } from "../gvg/types";
-import { getGvgCastleStateGuildRelation } from "./guildRelation";
+import {
+  getBattleMonitorDisplayGuildSides,
+  getGvgCastleStateGuildRelation
+} from "./guildRelation";
 
 const selectedGuildId = "123" as GvgGuildId;
 const otherGuildId = "456" as GvgGuildId;
 const currentTime = new Date("2026-05-27T12:29:50.000Z");
 
 describe("getGvgCastleStateGuildRelation", () => {
+  it("keeps owner as display defense and attacker as display attack before fallen", () => {
+    expect(
+      getBattleMonitorDisplayGuildSides({
+        ownerGuildId: selectedGuildId,
+        attackerGuildId: otherGuildId,
+        state: "inBattle"
+      })
+    ).toEqual({
+      displayDefenseGuildId: selectedGuildId,
+      displayAttackGuildId: otherGuildId
+    });
+  });
+
+  it("swaps display defense and display attack after fallen", () => {
+    expect(
+      getBattleMonitorDisplayGuildSides({
+        ownerGuildId: selectedGuildId,
+        attackerGuildId: otherGuildId,
+        state: "fallen"
+      })
+    ).toEqual({
+      displayDefenseGuildId: otherGuildId,
+      displayAttackGuildId: selectedGuildId
+    });
+  });
+
   it("maps owner guild states to GvgCastleState synced relations", () => {
     expectOwnerRelations([
       ["idle", "securedDefense"],

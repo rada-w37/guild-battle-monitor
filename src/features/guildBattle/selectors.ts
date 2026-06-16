@@ -1,6 +1,9 @@
 import { createBattleMonitorCastleDevDetails } from "../battleMonitor/devDetails";
 import { isDefenseSecured } from "../battleMonitor/defenseSecured";
-import { getGvgCastleStateGuildRelation } from "../battleMonitor/guildRelation";
+import {
+  getBattleMonitorDisplayGuildSides,
+  getGvgCastleStateGuildRelation
+} from "../battleMonitor/guildRelation";
 import type { BattleMonitorCastleGuildRelation } from "../battleMonitor/types";
 import { normalizeGvgGuildIdForComparison } from "../gvg/guildId";
 import type { GvgCastle, GvgGuildId, GvgSnapshot } from "../gvg/types";
@@ -238,6 +241,7 @@ function createCastleViewModel(
 ): GuildBattleCastleViewModel {
   const statusDisplay = getGuildBattleCastleStatusDisplay(castle);
   const castleMetadata = getGuildBattleCastleMetadata(castle.castleId);
+  const displayGuildSides = getBattleMonitorDisplayGuildSides(castle);
 
   return {
     castleId: castle.castleId,
@@ -248,8 +252,11 @@ function createCastleViewModel(
     ownerGuildId: castle.ownerGuildId,
     ownerGuildName: castle.ownerGuildId === null ? "Unknown guild" : snapshot.guildNames[castle.ownerGuildId] ?? "Unknown guild",
     attackerGuildId: castle.attackerGuildId,
+    // attackerGuildName is the display attack side; Fallen castles show the raw owner side here.
     attackerGuildName:
-      castle.attackerGuildId === null ? null : snapshot.guildNames[castle.attackerGuildId] ?? null,
+      displayGuildSides.displayAttackGuildId === null
+        ? null
+        : snapshot.guildNames[displayGuildSides.displayAttackGuildId] ?? null,
     state: castle.state,
     statusLabel: statusDisplay.statusLabel,
     statusTone: statusDisplay.statusTone,

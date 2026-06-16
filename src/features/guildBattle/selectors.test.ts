@@ -180,6 +180,7 @@ describe("guild battle selectors", () => {
       }
     );
 
+    expect(display.castles[0].attackerGuildName).toBe("Own Guild");
     expect(display.castles[0].devDetails).toEqual({
       castleId: "fallen-castle",
       guildId: "Own Guild（123）",
