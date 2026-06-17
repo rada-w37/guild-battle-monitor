@@ -8,7 +8,7 @@ export const NOTIFICATION_TEMPLATE_VARIABLES = [
 ] as const;
 
 export const DEFAULT_NOTIFICATION_PREVIEW_CONTEXT = {
-  拠点名: "アイアン",
+  拠点名: "ブラッセル",
   侵攻ギルド: "敵ギルドA",
   防御数: "20",
   侵攻数: "15",
