@@ -27,9 +27,15 @@ service cloud.firestore {
     }
 
     match /guildShares/{guildId} {
-      allow read: if true;
-      allow create, update: if isSignedIn();
-      allow delete: if false;
+      allow read, write: if false;
+
+      match /notificationRules/{ruleId} {
+        allow read, write: if false;
+      }
+
+      match /notificationDestinations/{destinationId} {
+        allow read, write: if false;
+      }
     }
 
     match /koObserverRuns/{documentId} {

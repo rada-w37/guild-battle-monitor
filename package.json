@@ -7,10 +7,13 @@
     "dev": "vite",
     "dev:hosting": "vite --base /",
     "build": "tsc -b && vite build",
+    "build:functions": "npm.cmd --prefix functions run build",
     "build:hosting": "vite build --base /",
     "preview:hosting": "vite preview --base /",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:all": "npm.cmd run test && npm.cmd run test:functions",
+    "test:functions": "npm.cmd --prefix functions run test"
   },
   "dependencies": {
     "firebase": "^12.14.0",

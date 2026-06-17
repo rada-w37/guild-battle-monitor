@@ -3,6 +3,7 @@ import { featureFlags } from "../config/featureFlags";
 interface FirebaseServices {
   readonly auth: import("firebase/auth").Auth;
   readonly firestore: import("firebase/firestore").Firestore;
+  readonly functions: import("firebase/functions").Functions;
 }
 
 export type FirebaseServiceState =
@@ -29,10 +30,11 @@ async function initializeFirebaseServices(): Promise<FirebaseServiceState> {
   }
 
   try {
-    const [{ getApps, initializeApp }, { getAuth }, { getFirestore }] = await Promise.all([
+    const [{ getApps, initializeApp }, { getAuth }, { getFirestore }, { getFunctions }] = await Promise.all([
       import("firebase/app"),
       import("firebase/auth"),
-      import("firebase/firestore")
+      import("firebase/firestore"),
+      import("firebase/functions")
     ]);
     const app = getApps()[0] ?? initializeApp(config);
 
@@ -40,7 +42,8 @@ async function initializeFirebaseServices(): Promise<FirebaseServiceState> {
       status: "available",
       services: {
         auth: getAuth(app),
-        firestore: getFirestore(app)
+        firestore: getFirestore(app),
+        functions: getFunctions(app, "asia-northeast1")
       }
     };
   } catch {

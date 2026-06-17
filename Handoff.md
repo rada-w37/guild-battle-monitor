@@ -1,74 +1,172 @@
 # Handoff.md
 
-## Current Goal
-
-KOO定刻起動など本来機能へ戻れる状態にする。Step7 composition化は必要時まで延期可能。
-
-## Current Status
-
-- Branch: `feature/リファクタリング`
-- Latest commit: `9ac13bd refactor(ko-monitor): step5 extract load state hook`
-- Step1〜6完了: appMode/capability安定化、Firebase副作用整理、battle detection分離、GrandBattle自動解決分離、KO monitor分離、realtime分離。
-- `GuildBattlePlaceholder.tsx` は2266行。副作用の中核はhook/serviceへ移動済みだが、画面shellとフォーム/state同期は残っている。
-- 作業ツリーはクリーン。
-
-## Architecture
-
-- `AppModeProvider` / `appMode.tsx`: owner/admin/guest route解決。
-- `appCapabilities.ts`: mode / Firebase / permissions由来のcapability生成。
-- `FirebasePhase0App.tsx`: Auth、owner profile、share URL、public sharedGuild、notification destinationを扱う。
-- `GuildBattlePlaceholder.tsx`: GuildBattle/GrandBattle画面shell、設定UI、手動更新、hook接続。
-- `useBattleDetection.ts`: battle detection REST取得と判定。
-- `grandBattleAutoResolution.ts`: Firebase版GrandBattle自動解決。
-- `useGuildBattleRealtime.ts` / `useGrandBattleRealtime.ts`: realtime start/stop。
-- `useKoMonitorLoadState.ts`: KO monitor取得/購読state。
-
-## Decisions
-
-- effect依存はprimitive中心にする。
-- repository / callback / options は必要に応じてref/useMemo/useCallbackで安定化する。
-- 同値state更新は抑止する。
-- エラー時は可能な範囲で前回表示データを維持する。
-- realtime start/stopはidempotentにする。
-- KO購読は明示subscription keyで管理する。
-- UI仕様、Firestore schema、KO推定ロジックは変更しない。
-- Step7 composition化は緊急ではない。
-
-## Important Files
-
-- `src/features/guildBattle/GuildBattlePlaceholder.tsx`
-- `src/features/guildBattle/useBattleDetection.ts`
-- `src/features/guildBattle/grandBattleAutoResolution.ts`
-- `src/features/guildBattle/useGuildBattleRealtime.ts`
-- `src/features/grandBattle/useGrandBattleRealtime.ts`
-- `src/features/koMonitor/useKoMonitorLoadState.ts`
-- `src/features/notifications/FirebasePhase0App.tsx`
-- `src/app/appCapabilities.ts`
-- `src/app/appMode.tsx`
-
-## Remaining Tasks
-
-1. KOO定刻起動など本来機能へ戻る。
-2. 必要になった時点でStep7 composition化を実施する。
-3. Step7を行う場合は、GuildBattle panel、GrandBattle panel、Settings dialog、owned guild draft、GrandBattle manual sourceを小分けに抽出する。
-
-## Known Issues
-
-- `GuildBattlePlaceholder.tsx` はまだ大きく、UI部品と一部I/O関数が同居している。
-- 既存テストでReact `act(...)` warningが一部残っている。
-- Hosting本番でのadmin/owner/guest実ブラウザ確認は未実施。
-
-## Validation Status
-
-- Step5完了時: `npm.cmd run test` 成功、41 files / 326 tests passed。
-- Step5完了時: `npm.cmd run typecheck` 成功。
-- Step6完了時: `npm.cmd run test` 成功、40 files / 322 tests passed。
-- Step6完了時: `npm.cmd run typecheck` 成功。
-- 最新Handoff更新時はテスト未実行、`git status --short` は更新前クリーン。
-
 ## Next Session Start
 
 1. `git status --short`
 2. `git log -6 --oneline`
-3. KOO定刻起動タスクの対象ファイルを確認する。
-4. `GuildBattlePlaceholder.tsx` を触る作業なら、先にStep7 composition化の要否を再判断する。
+3. Handoff.md を確認
+4. Discord通知 Phase1 の実装Planを作成
+5. `notificationRules` / `notificationDestinations` のFunctions設計確認
+6. `NotificationSettingsDialog` の構成確認
+7. 実装開始
+
+## Validation Status
+
+* `npm.cmd run test`: passed
+* `npm.cmd run test:functions`: passed
+* `npm.cmd run typecheck`: passed
+* `npm.cmd run build:functions`: passed
+* Functions deploy済み
+
+  * region: `asia-northeast1`
+* Hosting deploy済み
+* Firestore Rules deploy済み
+* Owner/Admin/Viewer URL 実機確認済み
+
+Latest commits:
+
+* `2999123 fix(functions): set share callable region`
+* `77865c5 fix(share-url): step1 move share access to functions`
+
+## Known Issues
+
+* 所属ギルド設定UIが今後の権限モデルと不整合
+
+  * Notion Issue化済み
+  * 今回は未対応
+* functions依存の audit warning
+
+  * moderate 8 / high 5
+  * 未調査
+* 既に壊れた旧共有URLは自動復旧しない
+
+## Remaining Tasks
+
+1. Discord通知 Phase1
+2. Discord通知 Phase2: KOO連携による通知判定/送信
+3. guild owner申請機能
+4. site owner承認機能
+5. guild member/admin付与機能
+6. 所属ギルド設定UI整理
+7. URL再発行機能
+8. 操作ログ
+
+## Important Files
+
+```text
+src/features/notifications/
+src/features/guildBattle/GuildBattlePlaceholder.tsx
+src/features/notifications/FirebasePhase0App.tsx
+src/lib/firebase.ts
+src/app/styles.css
+
+functions/src/index.ts
+functions/src/guildShare.ts
+
+firestore.rules
+firebase.json
+docs/step1-share-functions-deploy.md
+```
+
+## Decisions
+
+* `guildShares/{guildId}` が共有URL/accessKeyの唯一の正。
+* clientは `guildShares/{guildId}` を直接read/writeしない。
+* Owner表示/保存、Admin/Viewer URL検証はCallable Functions経由。
+* Functions regionは `asia-northeast1`。
+* `guildOwnerUid` がguild owner判定の正。
+* `profile.guildId` は権限根拠にしない。
+* 旧guestはUI上 `viewer` / `Viewer URL` とする。
+* `guestAccessKey` は内部互換のため当面維持。
+* Discord通知 Phase1では通知送信しない。
+* Webhook URLはguild ownerのみ表示/編集可。
+* adminは通知ルール編集可、Webhook不可。
+* viewer / signed-in user / anonymous は通知設定不可。
+
+## Architecture
+
+共有URL:
+
+```text
+guildShares/{guildId}
+  guildOwnerUid
+  adminAccessKey
+  guestAccessKey
+  world
+  guildName
+```
+
+Step1 Functions:
+
+```text
+getOwnerGuildShare
+saveOwnerGuildShare
+verifyGuildShareAccess
+```
+
+通知ルール保存先:
+
+```text
+guildShares/{guildId}/notificationRules/{ruleId}
+```
+
+通知先保存先:
+
+```text
+guildShares/{guildId}/notificationDestinations/discord
+```
+
+通知Phase1条件:
+
+```text
+開始時刻
+防御数 ○○以下
+侵攻数 ○○以上
+```
+
+通知Phase1テンプレート変数:
+
+```text
+{拠点名}
+{侵攻ギルド}
+{防御数}
+{侵攻数}
+{通知時刻}
+{通知ルール名}
+```
+
+通知実行方針:
+
+```text
+GBM: 通知ルール管理
+KOO: 通知判定
+Function: Webhook読込/Discord送信
+```
+
+## Current Status
+
+Step1 共有URL/accessKey固定化 + Functions移行は完了。
+
+完了済み:
+
+* Functions基盤追加
+* `guildOwnerUid` 導入
+* `guildShares/{guildId}` client直接read/write禁止
+* Owner表示/保存のFunctions移行
+* Admin/Viewer URL検証のFunctions移行
+* Viewer URL表記対応
+* Functions / Hosting / Firestore Rules deploy
+* 実機確認
+
+## Current Goal
+
+Discord通知 Phase1 を実装する。
+
+対象:
+
+* 通知設定ダイアログ
+* 通知ルールCRUD
+* 通知ルール保存/読込
+* Discord Webhook保存/読込
+* テンプレート変数プレビュー
+* 権限制御
