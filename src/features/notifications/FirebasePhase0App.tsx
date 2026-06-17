@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFirebaseAppCapabilities } from "../../app/appCapabilities";
 import { getFirebasePermissionsOverride, useAppRoute, type AppRoute } from "../../app/appMode";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
@@ -27,11 +27,15 @@ import {
   saveOwnedGuildProfile
 } from "../guildBattle/ownedGuildProfileRepository";
 import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
-import { loadNotificationDestination, saveNotificationDestination } from "./notificationDestinationRepository";
+import { NotificationSettingsDialog } from "./NotificationSettingsDialog";
+import {
+  deleteNotificationRule,
+  getNotificationSettings,
+  saveNotificationDestination,
+  saveNotificationRule
+} from "./notificationSettingsFunctionsRepository";
+import type { NotificationSettingsRole } from "./types";
 
-const DEFAULT_DESTINATION_ID = "default";
-const DEFAULT_DESTINATION_NAME = "ギルドDiscord";
-const DEFAULT_SELECTABLE_MENTIONS = ["@here", "@everyone"] as const;
 const OWNED_GUILD_PROFILE_ERROR_MESSAGE =
   "所属ギルド設定の保存に失敗しました。ログイン状態またはFirestore設定を確認してください。";
 const SHARE_GENERATION_ERROR_MESSAGE =
@@ -51,14 +55,16 @@ interface GuildShareState {
 interface FirebasePhase0AppProps {
   readonly loadOwnedGuildProfile?: typeof loadOwnedGuildProfile;
   readonly getOwnerGuildShare?: typeof getOwnerGuildShare;
-  readonly loadNotificationDestination?: typeof loadNotificationDestination;
+  readonly getNotificationSettings?: typeof getNotificationSettings;
   readonly loadKoObserverRunMeta?: () => Promise<KoObserverRunMeta | null>;
   readonly loadKoGuildKoTotals?: () => Promise<readonly KoGuildKoTotal[]>;
   readonly subscribeKoGuildKoTotals?: KoGuildKoTotalsSubscriber;
+  readonly deleteNotificationRule?: typeof deleteNotificationRule;
   readonly saveOwnedGuildProfile?: typeof saveOwnedGuildProfile;
   readonly saveOwnerGuildShare?: typeof saveOwnerGuildShare;
   readonly verifyGuildShareAccess?: typeof verifyGuildShareAccess;
   readonly saveNotificationDestination?: typeof saveNotificationDestination;
+  readonly saveNotificationRule?: typeof saveNotificationRule;
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly subscribeToAuthState?: typeof subscribeToAuthState;
 }
@@ -66,14 +72,16 @@ interface FirebasePhase0AppProps {
 export function FirebasePhase0App({
   loadOwnedGuildProfile: loadProfile = loadOwnedGuildProfile,
   getOwnerGuildShare: getOwnerShare = getOwnerGuildShare,
-  loadNotificationDestination: loadDestination = loadNotificationDestination,
+  getNotificationSettings: getNotificationSettingsForDialog = getNotificationSettings,
   loadKoObserverRunMeta: loadKoMeta = loadKoObserverRunMeta,
   loadKoGuildKoTotals: loadKoTotals = loadKoGuildKoTotals,
   subscribeKoGuildKoTotals: subscribeKoTotals = subscribeKoGuildKoTotals,
+  deleteNotificationRule: deleteNotificationRuleForDialog = deleteNotificationRule,
   saveOwnedGuildProfile: saveProfile = saveOwnedGuildProfile,
   saveOwnerGuildShare: saveOwnerShare = saveOwnerGuildShare,
   verifyGuildShareAccess: verifyShareAccess = verifyGuildShareAccess,
-  saveNotificationDestination: saveDestination = saveNotificationDestination,
+  saveNotificationDestination: saveNotificationDestinationForDialog = saveNotificationDestination,
+  saveNotificationRule: saveNotificationRuleForDialog = saveNotificationRule,
   loadSnapshot = loadLocalGvgSnapshot,
   subscribeToAuthState: subscribeAuthState = subscribeToAuthState
 }: FirebasePhase0AppProps = {}) {
@@ -81,6 +89,7 @@ export function FirebasePhase0App({
   const appMode = appRoute?.mode ?? "owner";
   const authState = useFirebaseAuthState(subscribeAuthState);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
   const notificationSettingsUid = authState.status === "signed-in" ? authState.user.uid : null;
   const isSignedInOwner = appMode === "owner" && authState.status === "signed-in";
   const permissionsOverride = useMemo(
@@ -107,12 +116,6 @@ export function FirebasePhase0App({
     routeGuildId,
     routeMode
   });
-  const notificationDestinationDraft = useNotificationDestinationDraft(
-    notificationSettingsUid,
-    loadDestination,
-    saveDestination,
-    appCapabilities.notifications.webhookUrlVisible
-  );
 
   const shareDraftExternal = useMemo<SettingsDraftExternal | undefined>(() => {
     if (appMode !== "owner" || !isCompleteOwnedGuildProfile(ownedGuildProfilePersistence.profile)) {
@@ -132,10 +135,7 @@ export function FirebasePhase0App({
       onSave: async () => (await guildShare.saveMetadata(profile)) !== null
     };
   }, [appMode, guildShare, ownedGuildProfilePersistence.profile]);
-  const settingsDraftExternal = useMemo(
-    () => combineSettingsDraftExternals(notificationDestinationDraft.external, shareDraftExternal),
-    [notificationDestinationDraft.external, shareDraftExternal]
-  );
+  const settingsDraftExternal = shareDraftExternal;
   const ownedGuildProfilePersistenceWithShare = useMemo(
     () =>
       ({
@@ -193,6 +193,13 @@ export function FirebasePhase0App({
   const effectiveMode =
     sharedGuild.status === "valid" ? sharedGuild.sharedGuild.mode : sharedGuild.status === "fallback" ? "guest" : appMode;
   const effectiveSharedGuild = sharedGuild.status === "valid" ? sharedGuild.sharedGuild : null;
+  const notificationSettingsContext = createNotificationSettingsContext({
+    appMode,
+    guildShare,
+    ownedGuildProfile: ownedGuildProfilePersistence.profile,
+    routeAccessKey,
+    sharedGuild: effectiveSharedGuild
+  });
 
   return (
     <GuildBattlePlaceholder
@@ -213,10 +220,22 @@ export function FirebasePhase0App({
         />
       }
       notificationSettings={
-        <NotificationDestinationPanel
-          draft={notificationDestinationDraft}
-          showWebhookUrl={appCapabilities.notifications.webhookUrlVisible}
-        />
+        notificationSettingsContext === null ? undefined : (
+          <NotificationSettingsEntry onOpen={() => setIsNotificationSettingsOpen(true)} />
+        )
+      }
+      notificationSettingsDialog={
+        isNotificationSettingsOpen && notificationSettingsContext !== null ? (
+          <NotificationSettingsDialog
+            deleteNotificationRule={deleteNotificationRuleForDialog}
+            getNotificationSettings={getNotificationSettingsForDialog}
+            request={notificationSettingsContext.request}
+            role={notificationSettingsContext.role}
+            saveNotificationDestination={saveNotificationDestinationForDialog}
+            saveNotificationRule={saveNotificationRuleForDialog}
+            onClose={() => setIsNotificationSettingsOpen(false)}
+          />
+        ) : undefined
       }
       ownedGuildProfilePersistence={ownedGuildProfilePersistenceWithShare}
       sharedGuild={effectiveSharedGuild}
@@ -531,31 +550,51 @@ function isCompleteOwnedGuildProfile(
   );
 }
 
-function combineSettingsDraftExternals(
-  first: SettingsDraftExternal | undefined,
-  second: SettingsDraftExternal | undefined
-): SettingsDraftExternal | undefined {
-  if (first === undefined) {
-    return second;
+function createNotificationSettingsContext({
+  appMode,
+  guildShare,
+  ownedGuildProfile,
+  routeAccessKey,
+  sharedGuild
+}: {
+  readonly appMode: AppRoute["mode"];
+  readonly guildShare: GuildShareState;
+  readonly ownedGuildProfile: OwnedGuildProfile | null;
+  readonly routeAccessKey: string | null;
+  readonly sharedGuild: SharedGuildContext | null;
+}): { readonly request: { readonly guildId: string; readonly accessKey?: string }; readonly role: NotificationSettingsRole } | null {
+  if (
+    appMode === "owner" &&
+    isCompleteOwnedGuildProfile(ownedGuildProfile) &&
+    guildShare.share !== null &&
+    guildShare.share.guildId === ownedGuildProfile.guildId
+  ) {
+    return {
+      request: { guildId: guildShare.share.guildId },
+      role: "guildOwner"
+    };
   }
 
-  if (second === undefined) {
-    return first;
+  if (sharedGuild?.mode === "admin" && routeAccessKey !== null) {
+    return {
+      request: { guildId: sharedGuild.guildId, accessKey: routeAccessKey },
+      role: "admin"
+    };
   }
 
-  return {
-    hasValidationError: first.hasValidationError || second.hasValidationError,
-    isDirty: first.isDirty || second.isDirty,
-    onCancel: () => {
-      first.onCancel();
-      second.onCancel();
-    },
-    onSave: async () => {
-      const firstSaved = first.isDirty ? await first.onSave() : true;
-      const secondSaved = second.isDirty ? await second.onSave() : true;
-      return firstSaved && secondSaved;
-    }
-  };
+  return null;
+}
+
+function NotificationSettingsEntry({ onOpen }: { readonly onOpen: () => void }) {
+  return (
+    <section className="notification-settings-entry">
+      <h3>通知設定</h3>
+      <p className="notification-settings-entry__description">通知ルールを管理します。</p>
+      <button className="load-form__button" type="button" onClick={onOpen}>
+        通知設定画面を開く
+      </button>
+    </section>
+  );
 }
 
 function GuildSharePanel({
@@ -807,296 +846,5 @@ function SharedGuildNotFoundPage() {
     <main>
       <h1>ギルドが見つかりません</h1>
     </main>
-  );
-}
-
-interface NotificationDestinationDraft {
-  readonly enabled: boolean;
-  readonly endpoint: string;
-}
-
-const DEFAULT_NOTIFICATION_DRAFT: NotificationDestinationDraft = { enabled: true, endpoint: "" };
-
-interface NotificationDestinationDraftController {
-  readonly draft: NotificationDestinationDraft;
-  readonly external: SettingsDraftExternal;
-  readonly isError: boolean;
-  readonly message: string | null;
-  readonly setEnabled: (enabled: boolean) => void;
-  readonly setEndpoint: (endpoint: string) => void;
-  readonly status: "loading" | "idle" | "saving";
-  readonly uid: string | null;
-  readonly validateEndpoint: () => void;
-  readonly validationError: string | null;
-}
-
-function useNotificationDestinationDraft(
-  uid: string | null,
-  loadDestination: typeof loadNotificationDestination,
-  saveDestination: typeof saveNotificationDestination,
-  canEditEndpoint: boolean
-): NotificationDestinationDraftController {
-  const [persisted, setPersisted] = useState<NotificationDestinationDraft>(DEFAULT_NOTIFICATION_DRAFT);
-  const [draft, setDraft] = useState<NotificationDestinationDraft>(DEFAULT_NOTIFICATION_DRAFT);
-  const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
-  const [message, setMessage] = useState<string | null>(null);
-  const [isError, setIsError] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const isDirty = persisted.enabled !== draft.enabled || persisted.endpoint !== draft.endpoint;
-
-  useEffect(() => {
-    let isDisposed = false;
-    setStatus("loading");
-    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
-    setValidationError((currentValidationError) =>
-      currentValidationError === null ? currentValidationError : null
-    );
-
-    if (uid === null) {
-      setPersisted((currentDraft) => getNextNotificationDraft(currentDraft, DEFAULT_NOTIFICATION_DRAFT));
-      setDraft((currentDraft) => getNextNotificationDraft(currentDraft, DEFAULT_NOTIFICATION_DRAFT));
-      setStatus("idle");
-      return;
-    }
-
-    void loadDestination(uid, DEFAULT_DESTINATION_ID)
-      .then((destination) => {
-        if (!isDisposed) {
-          const loadedDraft = {
-            endpoint: typeof destination?.config.endpoint === "string" ? destination.config.endpoint : "",
-            enabled: destination?.enabled ?? true
-          };
-          setPersisted((currentDraft) => getNextNotificationDraft(currentDraft, loadedDraft));
-          setDraft((currentDraft) => getNextNotificationDraft(currentDraft, loadedDraft));
-          setStatus("idle");
-        }
-      })
-      .catch(() => {
-        if (!isDisposed) {
-          setIsError(true);
-          setMessage("通知先設定の読込に失敗しました。");
-          setStatus("idle");
-        }
-      });
-
-    return () => {
-      isDisposed = true;
-    };
-  }, [loadDestination, uid]);
-
-  useEffect(() => {
-    if (!canEditEndpoint) {
-      setValidationError((currentValidationError) =>
-        currentValidationError === null ? currentValidationError : null
-      );
-    }
-  }, [canEditEndpoint]);
-
-  const setDraftEndpoint = useCallback((endpoint: string) => {
-    setDraft((currentDraft) => getNextNotificationDraft(currentDraft, { ...currentDraft, endpoint }));
-    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
-    setIsError((currentIsError) => (currentIsError ? false : currentIsError));
-  }, []);
-
-  const setDraftEnabled = useCallback((enabled: boolean) => {
-    setDraft((currentDraft) => getNextNotificationDraft(currentDraft, { ...currentDraft, enabled }));
-    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
-    setIsError((currentIsError) => (currentIsError ? false : currentIsError));
-  }, []);
-
-  const validateEndpoint = useCallback(() => {
-    if (!canEditEndpoint) {
-      setValidationError((currentValidationError) =>
-        currentValidationError === null ? currentValidationError : null
-      );
-      return;
-    }
-
-    const validation = validateWebhookUrl(draft.endpoint);
-    setValidationError((currentValidationError) =>
-      currentValidationError === validation ? currentValidationError : validation
-    );
-  }, [canEditEndpoint, draft.endpoint]);
-
-  const saveDraft = useCallback(async (): Promise<boolean> => {
-    if (uid === null) {
-      return true;
-    }
-
-    const validation = canEditEndpoint ? validateWebhookUrl(draft.endpoint) : null;
-    setValidationError((currentValidationError) =>
-      currentValidationError === validation ? currentValidationError : validation
-    );
-
-    if (validation !== null) {
-      return false;
-    }
-
-    if (!isDirty) {
-      return true;
-    }
-
-    setStatus("saving");
-    setMessage(null);
-    setIsError(false);
-
-    try {
-      await saveDestination(uid, DEFAULT_DESTINATION_ID, {
-        name: DEFAULT_DESTINATION_NAME,
-        provider: "discord",
-        type: "webhook",
-        enabled: draft.enabled,
-        selectableMentions: DEFAULT_SELECTABLE_MENTIONS,
-        config: { endpoint: draft.endpoint.trim() }
-      });
-      setPersisted((currentDraft) =>
-        getNextNotificationDraft(currentDraft, { enabled: draft.enabled, endpoint: draft.endpoint })
-      );
-      setMessage("通知先設定を保存しました。");
-      return true;
-    } catch {
-      setIsError(true);
-      setMessage("通知先設定の保存に失敗しました。");
-      return false;
-    } finally {
-      setStatus("idle");
-    }
-  }, [canEditEndpoint, draft, isDirty, saveDestination, uid]);
-
-  const cancelDraft = useCallback(() => {
-    setDraft((currentDraft) => getNextNotificationDraft(currentDraft, persisted));
-    setValidationError((currentValidationError) =>
-      currentValidationError === null ? currentValidationError : null
-    );
-    setMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
-    setIsError((currentIsError) => (currentIsError ? false : currentIsError));
-  }, [persisted]);
-
-  const external = useMemo(
-    () => ({
-      hasValidationError: canEditEndpoint && validationError !== null,
-      isDirty,
-      onCancel: cancelDraft,
-      onSave: saveDraft
-    }),
-    [canEditEndpoint, cancelDraft, isDirty, saveDraft, validationError]
-  );
-
-  return useMemo(
-    () => ({
-      draft,
-      external,
-      isError,
-      message,
-      setEnabled: setDraftEnabled,
-      setEndpoint: setDraftEndpoint,
-      status,
-      uid,
-      validateEndpoint,
-      validationError
-    }),
-    [
-      draft,
-      external,
-      isError,
-      message,
-      setDraftEnabled,
-      setDraftEndpoint,
-      status,
-      uid,
-      validateEndpoint,
-      validationError
-    ]
-  );
-}
-
-function getNextNotificationDraft(
-  currentDraft: NotificationDestinationDraft,
-  nextDraft: NotificationDestinationDraft
-): NotificationDestinationDraft {
-  return currentDraft.enabled === nextDraft.enabled && currentDraft.endpoint === nextDraft.endpoint
-    ? currentDraft
-    : nextDraft;
-}
-
-function validateWebhookUrl(endpoint: string): string | null {
-  const trimmedEndpoint = endpoint.trim();
-
-  if (trimmedEndpoint.length === 0) {
-    return null;
-  }
-
-  try {
-    const url = new URL(trimmedEndpoint);
-    return url.protocol === "http:" || url.protocol === "https:" ? null : "Webhook URLの形式を確認してください。";
-  } catch {
-    return "Webhook URLの形式を確認してください。";
-  }
-}
-
-function blurInputOnEnter(event: ReactKeyboardEvent<HTMLInputElement>) {
-  if (event.key !== "Enter") {
-    return;
-  }
-
-  event.preventDefault();
-  event.currentTarget.blur();
-}
-
-function NotificationDestinationPanel({
-  draft,
-  showWebhookUrl
-}: {
-  readonly draft: NotificationDestinationDraftController;
-  readonly showWebhookUrl: boolean;
-}) {
-  const { uid, status, message, isError, validationError } = draft;
-
-  return (
-    <section className="notification-destination" aria-labelledby="notification-destination-title">
-      <h3 id="notification-destination-title">Discord通知</h3>
-      <label className="notification-destination__toggle">
-        <input
-          checked={draft.draft.enabled}
-          disabled={uid === null || status !== "idle"}
-          type="checkbox"
-          onChange={(event) => draft.setEnabled(event.target.checked)}
-        />
-        Discord通知を有効にする
-      </label>
-      {showWebhookUrl ? (
-        <>
-          <label className="field" htmlFor="notification-endpoint">
-            <span className="field__label">Discord Webhook URL</span>
-            <input
-              autoCapitalize="none"
-              autoComplete="off"
-              autoCorrect="off"
-              className="field__input"
-              disabled={uid === null || status !== "idle"}
-              id="notification-endpoint"
-              name="notification-endpoint"
-              spellCheck={false}
-              type="url"
-              value={draft.draft.endpoint}
-              onBlur={draft.validateEndpoint}
-              onChange={(event) => draft.setEndpoint(event.target.value)}
-              onKeyDown={blurInputOnEnter}
-            />
-          </label>
-          {validationError !== null ? (
-            <p className="firebase-message firebase-message--error">{validationError}</p>
-          ) : null}
-        </>
-      ) : null}
-      {uid === null ? <p className="firebase-message">ログイン後に通知先設定を利用できます。</p> : null}
-      {status === "loading" ? <p className="firebase-message">通知先設定を読込中です。</p> : null}
-      {status === "saving" ? <p className="firebase-message">通知先設定を保存中です。</p> : null}
-      {message !== null ? (
-        <p className={`firebase-message ${isError ? "firebase-message--error" : "firebase-message--success"}`}>
-          {message}
-        </p>
-      ) : null}
-    </section>
   );
 }

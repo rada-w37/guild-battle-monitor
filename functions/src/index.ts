@@ -4,7 +4,21 @@ import {
   saveOwnerGuildShare,
   verifyGuildShareAccess
 } from "./guildShare.js";
+import {
+  deleteNotificationRule,
+  getNotificationSettings,
+  saveNotificationDestination,
+  saveNotificationRule
+} from "./notificationSettings.js";
 
 initializeApp();
 
-export { getOwnerGuildShare, saveOwnerGuildShare, verifyGuildShareAccess };
+export {
+  deleteNotificationRule,
+  getNotificationSettings,
+  getOwnerGuildShare,
+  saveNotificationDestination,
+  saveNotificationRule,
+  saveOwnerGuildShare,
+  verifyGuildShareAccess
+};

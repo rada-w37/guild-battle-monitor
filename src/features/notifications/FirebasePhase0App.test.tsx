@@ -8,7 +8,7 @@ import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSettingsStorage";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
-import type { NotificationDestination, NotificationDestinationInput } from "./types";
+import type { NotificationDestination, NotificationRule } from "./types";
 
 vi.mock("../auth/authService", () => ({
   signInWithGoogle: () => Promise.resolve(),
@@ -56,6 +56,7 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
       headerActions,
       modeOverride,
       notificationSettings,
+      notificationSettingsDialog,
       ownedGuildProfilePersistence,
       permissionsOverride,
       settingsDraftExternal,
@@ -65,6 +66,7 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
       readonly headerActions?: React.ReactNode;
       readonly modeOverride?: "guest";
       readonly notificationSettings?: React.ReactNode;
+      readonly notificationSettingsDialog?: React.ReactNode;
       readonly ownedGuildProfilePersistence?: {
         readonly error: string | null;
         readonly profile: OwnedGuildProfile | null;
@@ -95,6 +97,7 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
       const notificationSettingsVisible =
         modeOverride !== "guest" &&
         permissionsOverride?.showNotificationSettings !== false &&
+        notificationSettings !== undefined &&
         (sharedGuild === null || sharedGuild?.mode === "admin");
 
       React.useEffect(() => {
@@ -195,6 +198,7 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
               </div>
             </section>
           ) : null}
+          {notificationSettingsDialog}
         </main>
       );
     }
@@ -211,11 +215,6 @@ vi.mock("../koMonitor/koObserverTime", () => ({
   getNextKoObserverReadBoundary: () => null,
   isKoObserverStartedForToday: () => false,
   shouldUseKoObserverRealtime: () => false
-}));
-
-vi.mock("./notificationDestinationRepository", () => ({
-  loadNotificationDestination: () => Promise.resolve(null),
-  saveNotificationDestination: () => Promise.resolve()
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -677,34 +676,52 @@ describe("FirebasePhase0App guild share settings", () => {
     expect(document.querySelector(".share-settings")).toBeNull();
   });
 });
-describe("FirebasePhase0App notification settings draft", () => {
-  it("shows the webhook URL only for the owner notification settings", async () => {
+describe("FirebasePhase0App notification settings dialog", () => {
+  it("shows the notification settings entry only after owner share is loaded", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      vi.fn(() => Promise.resolve(createMissingOwnerShareResult()))
+    );
+    await openSettings();
+
+    expect(document.querySelector(".notification-settings")).toBeNull();
+  });
+
+  it("opens owner notification settings with the webhook URL field", async () => {
     await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
     await openNotificationSettings();
 
-    expect(getNotificationToggle()).not.toBeNull();
-    expect(getNotificationEndpointInput()).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(document.querySelector(".notification-settings-dialog")).not.toBeNull();
+    });
+    expect(document.body.textContent).toContain("Discord Webhook設定");
+    expect(document.querySelector("input[type='url']")).not.toBeNull();
   });
 
-  it("hides the webhook URL but keeps notification toggle visible for admin", async () => {
+  it("opens admin notification settings without the webhook URL field", async () => {
     await renderApp("/123/a_admin", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
     await openNotificationSettings();
 
-    expect(getNotificationToggle()).not.toBeNull();
-    expect(document.querySelector("#notification-endpoint")).toBeNull();
+    await vi.waitFor(() => {
+      expect(document.querySelector(".notification-settings-dialog")).not.toBeNull();
+    });
+    expect(document.body.textContent).not.toContain("Discord Webhook設定");
+    expect(document.querySelector("input[type='url']")).toBeNull();
   });
 
-  it("saves notification changes only from the common settings save button", async () => {
-    const saveDestination = vi.fn<
-      (uid: string, destinationId: string, input: NotificationDestinationInput) => Promise<void>
-    >(() => Promise.resolve());
-    const loadDestination = vi.fn(() =>
-      Promise.resolve(
-        createNotificationDestination({
-          enabled: true,
-          endpoint: "https://example.com/old"
-        })
-      )
+  it("saves the webhook destination from the notification dialog, not the common settings save button", async () => {
+    const saveNotificationDestination = vi.fn((input: {
+      readonly guildId: string;
+      readonly destination: Pick<NotificationDestination, "enabled" | "webhookUrl" | "defaultUsernameTemplate">;
+    }) =>
+      Promise.resolve({
+        id: "discord" as const,
+        type: "discord_webhook" as const,
+        ...input.destination
+      })
     );
 
     await renderApp(
@@ -717,30 +734,37 @@ describe("FirebasePhase0App notification settings draft", () => {
       undefined,
       undefined,
       undefined,
-      loadDestination,
-      saveDestination
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [],
+          destination: {
+            id: "discord" as const,
+            type: "discord_webhook" as const,
+            enabled: true,
+            webhookUrl: "https://discord.com/api/webhooks/123/old"
+          }
+        })
+      ),
+      saveNotificationDestination
     );
     await openNotificationSettings();
 
+    expect(saveNotificationDestination).not.toHaveBeenCalled();
+    await clickSettingsSaveButton();
+    expect(saveNotificationDestination).not.toHaveBeenCalled();
+
     await act(async () => {
-      const input = getNotificationEndpointInput();
-      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      valueSetter?.call(input, "https://example.com/new");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
+      getNotificationDestinationSaveButton().click();
       await flushPromises();
     });
 
-    expect(saveDestination).not.toHaveBeenCalled();
-    await clickSettingsSaveButton();
-
-    expect(saveDestination).toHaveBeenCalledWith(
-      "owner-uid",
-      "default",
-      expect.objectContaining({
+    expect(saveNotificationDestination).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      destination: expect.objectContaining({
         enabled: true,
-        config: { endpoint: "https://example.com/new" }
+        webhookUrl: "https://discord.com/api/webhooks/123/old"
       })
-    );
+    });
   });
 });
 
@@ -766,12 +790,27 @@ async function renderApp(
   ),
   _unusedShareWriter: unknown = undefined,
   loadSnapshot: typeof loadLocalGvgSnapshot = vi.fn(() => Promise.resolve(createGvgSnapshot())),
-  loadDestination: (uid: string, destinationId: string) => Promise<NotificationDestination | null> = vi.fn(() =>
-    Promise.resolve(null)
+  getNotificationSettings: (input: { readonly guildId: string; readonly accessKey?: string }) => Promise<{
+    readonly rules: readonly NotificationRule[];
+    readonly destination?: NotificationDestination;
+  }> = vi.fn(() => Promise.resolve({ rules: [] })),
+  saveNotificationDestination: (input: {
+    readonly guildId: string;
+    readonly destination: Pick<NotificationDestination, "enabled" | "webhookUrl" | "defaultUsernameTemplate">;
+  }) => Promise<NotificationDestination> = vi.fn((input) =>
+    Promise.resolve({
+      id: "discord",
+      type: "discord_webhook",
+      ...input.destination
+    })
   ),
-  saveDestination: (uid: string, destinationId: string, input: NotificationDestinationInput) => Promise<void> = vi.fn(
-    () => Promise.resolve()
-  )
+  saveNotificationRule: (input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) => Promise<NotificationRule> = vi.fn((input) =>
+    Promise.resolve({
+      id: "saved-rule",
+      ...input.rule
+    })
+  ),
+  deleteNotificationRule: (input: { readonly ruleId: string }) => Promise<void> = vi.fn(() => Promise.resolve())
 ) {
   const { FirebasePhase0App } = await import("./FirebasePhase0App");
   container = document.createElement("div");
@@ -782,12 +821,14 @@ async function renderApp(
     <AppModeProvider pathname={pathname}>
       <FirebasePhase0App
         getOwnerGuildShare={getOwnerShare}
+        getNotificationSettings={getNotificationSettings}
+        deleteNotificationRule={deleteNotificationRule}
         loadKoGuildKoTotals={() => Promise.resolve([])}
         loadKoObserverRunMeta={() => Promise.resolve(null)}
-        loadNotificationDestination={loadDestination}
         loadOwnedGuildProfile={loadProfile}
         loadSnapshot={loadSnapshot}
-        saveNotificationDestination={saveDestination}
+        saveNotificationDestination={saveNotificationDestination}
+        saveNotificationRule={saveNotificationRule}
         saveOwnerGuildShare={saveOwnerShare}
         saveOwnedGuildProfile={saveProfile}
         subscribeKoGuildKoTotals={() => () => {}}
@@ -853,6 +894,18 @@ async function openNotificationSettings() {
   }
 
   await openDetails(settings);
+  const button = Array.from(settings.querySelectorAll<HTMLButtonElement>("button")).find(
+    (candidate) => candidate.textContent === "通知設定画面を開く"
+  );
+
+  if (!button) {
+    throw new Error("notification settings open button was not found");
+  }
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+  });
 }
 
 async function openSettings() {
@@ -958,24 +1011,16 @@ function getShareUrlInputs() {
   return Array.from(getShareSettings().querySelectorAll<HTMLInputElement>("input[type='url']"));
 }
 
-function getNotificationEndpointInput() {
-  const input = document.querySelector<HTMLInputElement>("#notification-endpoint");
+function getNotificationDestinationSaveButton() {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog button")).find(
+    (candidate) => candidate.textContent === "保存"
+  );
 
-  if (!input) {
-    throw new Error("notification endpoint input was not found");
+  if (!button) {
+    throw new Error("notification destination save button was not found");
   }
 
-  return input;
-}
-
-function getNotificationToggle() {
-  const input = document.querySelector<HTMLInputElement>(".notification-destination__toggle input[type='checkbox']");
-
-  if (!input) {
-    throw new Error("notification toggle was not found");
-  }
-
-  return input;
+  return button;
 }
 
 async function clickSettingsSaveButton() {
@@ -1048,26 +1093,6 @@ function createSharedAccessResult(role: "admin" | "viewer") {
     guildId: "saved-guild",
     world: 37,
     guildName: "Saved Guild"
-  };
-}
-
-function createNotificationDestination({
-  enabled,
-  endpoint
-}: {
-  readonly enabled: boolean;
-  readonly endpoint: string;
-}): NotificationDestination {
-  return {
-    id: "default",
-    name: "Discord",
-    provider: "discord",
-    type: "webhook",
-    enabled,
-    selectableMentions: ["@here", "@everyone"],
-    config: { endpoint },
-    createdAt: null,
-    updatedAt: null
   };
 }
 
