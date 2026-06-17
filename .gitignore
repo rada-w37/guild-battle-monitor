@@ -9,4 +9,4 @@ functions/lib
 *.tsbuildinfo
 start-local-monitor.bat
 .codegraph/
-deploy.bat
+deploy*.bat
