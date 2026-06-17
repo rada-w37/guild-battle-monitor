@@ -182,26 +182,10 @@ export async function handleNotificationRequestCreated(
   }
 
   const payload = createDiscordPayload(request);
-  try {
-    const response = await dependencies.postDiscordWebhook(destination.webhookUrl, payload);
-    const now = dependencies.now();
-    if (!response.ok) {
-      await updateHistoryStatus(historyRef, "failed", now, {
-        errorCode: "discord_http_error",
-        errorMessage: `HTTP status: ${response.status}`
-      });
-      await updateRequestStatus(requestRef, "failed", now, "discord_http_error");
-      dependencies.logger.warn("notification_request_failed", {
-        ...logContext,
-        status: "failed",
-        errorCode: "discord_http_error"
-      });
-      return;
-    }
+  let response: DiscordResponseLike;
 
-    await updateHistoryStatus(historyRef, "sent", now, { notifiedAt: now });
-    await updateRequestStatus(requestRef, "sent", now);
-    dependencies.logger.info("notification_request_sent", { ...logContext, status: "sent" });
+  try {
+    response = await dependencies.postDiscordWebhook(destination.webhookUrl, payload);
   } catch {
     const now = dependencies.now();
     await updateHistoryStatus(historyRef, "failed", now, {
@@ -214,7 +198,27 @@ export async function handleNotificationRequestCreated(
       status: "failed",
       errorCode: "discord_post_failed"
     });
+    return;
   }
+
+  const now = dependencies.now();
+  if (!response.ok) {
+    await updateHistoryStatus(historyRef, "failed", now, {
+      errorCode: "discord_http_error",
+      errorMessage: `HTTP status: ${response.status}`
+    });
+    await updateRequestStatus(requestRef, "failed", now, "discord_http_error");
+    dependencies.logger.warn("notification_request_failed", {
+      ...logContext,
+      status: "failed",
+      errorCode: "discord_http_error"
+    });
+    return;
+  }
+
+  await updateHistoryStatus(historyRef, "sent", now, { notifiedAt: now });
+  await updateRequestStatus(requestRef, "sent", now);
+  dependencies.logger.info("notification_request_sent", { ...logContext, status: "sent" });
 }
 
 async function acquireProcessingLock(
@@ -391,7 +395,7 @@ function readNotificationRequest(input: unknown): NotificationRequest | null {
     return null;
   }
 
-  const guildId = readRequiredString(input.guildId);
+  const guildId = readRequiredPathSegment(input.guildId);
   const battleType = input.battleType === "guildBattle" || input.battleType === "grandBattle" ? input.battleType : null;
   const ruleId = readRequiredString(input.ruleId);
   const ruleName = readRequiredString(input.ruleName);
@@ -467,6 +471,15 @@ function readRequiredString(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function readRequiredPathSegment(value: unknown): string | null {
+  const text = readRequiredString(value);
+  if (text === null || text.includes("/")) {
+    return null;
+  }
+
+  return text;
 }
 
 function readOptionalString(value: unknown): string | undefined {

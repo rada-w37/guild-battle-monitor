@@ -302,6 +302,39 @@ describe("notification dispatch trigger", () => {
     expect(serializedLogs).not.toContain("network failed");
   });
 
+  it("does not classify post-send Firestore update failures as discord_post_failed", async () => {
+    const secretWebhook = "https://discord.com/api/webhooks/webhook-id/webhook-token";
+    const firestore = createFirestore(
+      {
+        "guildShares/guild-1/notificationDestinations/discord": createDestination({ webhookUrl: secretWebhook })
+      },
+      {
+        failSet: (path, data) =>
+          path === "guildShares/guild-1/notificationHistories/request-1" && data.status === "sent"
+      }
+    );
+    const discordPosts: DiscordPost[] = [];
+    const logs = createLogs();
+
+    await expect(
+      handleNotificationRequestCreated("request-1", createRequest(), createDependencies(firestore, { discordPosts, logs }))
+    ).rejects.toThrow("set failed");
+
+    const serializedWrites = JSON.stringify(firestore.writes);
+    const serializedLogs = JSON.stringify(logs.entries);
+    expect(discordPosts).toHaveLength(1);
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-1"]).toMatchObject({
+      status: "processing",
+      createdAt: "now-1",
+      updatedAt: "now-1"
+    });
+    expect(firestore.documents["notificationRequests/request-1"]).toBeUndefined();
+    expect(serializedWrites).not.toContain("discord_post_failed");
+    expect(serializedLogs).not.toContain("discord_post_failed");
+    expect(serializedWrites).not.toContain(secretWebhook);
+    expect(serializedLogs).not.toContain(secretWebhook);
+  });
+
   it("does not store raw request payload fields when the request is invalid", async () => {
     const firestore = createFirestore({});
     const logs = createLogs();
@@ -321,6 +354,26 @@ describe("notification dispatch trigger", () => {
     expect(firestore.documents["guildShares/guild-1/notificationHistories/request-1"]).toBeUndefined();
     expect(JSON.stringify(firestore.writes)).not.toContain(rawSecret);
     expect(JSON.stringify(logs.entries)).not.toContain(rawSecret);
+  });
+
+  it("treats guildId containing slash as invalid_request", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild/1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+
+    await handleNotificationRequestCreated(
+      "request-1",
+      createRequest({ guildId: "guild/1" }),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(discordPosts).toEqual([]);
+    expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
+      status: "failed",
+      errorCode: "invalid_request"
+    });
+    expect(firestore.documents["guildShares/guild/1/notificationHistories/request-1"]).toBeUndefined();
   });
 });
 
@@ -426,7 +479,12 @@ function createLogs() {
   };
 }
 
-function createFirestore(documents: Record<string, Record<string, unknown>>) {
+function createFirestore(
+  documents: Record<string, Record<string, unknown>>,
+  options: {
+    readonly failSet?: (path: string, data: Record<string, unknown>) => boolean;
+  } = {}
+) {
   const writes: Array<{
     readonly method: "create" | "set" | "update";
     readonly path: string;
@@ -442,24 +500,6 @@ function createFirestore(documents: Record<string, Record<string, unknown>>) {
     };
   }
 
-  return {
-    documents,
-      writes,
-      doc: createDocumentRef,
-      runTransaction: async <T>(updateFunction: (transaction: TransactionLike) => Promise<T>) =>
-        updateFunction({
-          get: (ref) => ref.get(),
-          create: (ref, data) => {
-            const path = getRefPath(ref);
-            if (documents[path] !== undefined) {
-              throw new Error("already exists");
-            }
-            writes.push({ method: "create", path, data });
-            documents[path] = data;
-          }
-        })
-    };
-
   function getRefPath(ref: unknown): string {
     for (const [path, candidate] of Object.entries(refs)) {
       if (candidate === ref) {
@@ -472,10 +512,14 @@ function createFirestore(documents: Record<string, Record<string, unknown>>) {
   function createDocumentRef(path: string) {
     refs[path] ??= {
       get: async () => createSnapshot(path),
-      set: async (data: Record<string, unknown>, options?: { readonly merge: boolean }) => {
-        writes.push({ method: "set", path, data, options });
+      set: async (data: Record<string, unknown>, setOptions?: { readonly merge: boolean }) => {
+        if (setOptions?.merge === true && options.failSet?.(path, data) === true) {
+          throw new Error("set failed");
+        }
+
+        writes.push({ method: "set", path, data, options: setOptions });
         documents[path] =
-          options?.merge === true && documents[path] !== undefined ? { ...documents[path], ...data } : data;
+          setOptions?.merge === true && documents[path] !== undefined ? { ...documents[path], ...data } : data;
       },
       update: async (data: Record<string, unknown>) => {
         writes.push({ method: "update", path, data });
@@ -484,6 +528,24 @@ function createFirestore(documents: Record<string, Record<string, unknown>>) {
     };
     return refs[path];
   }
+
+  return {
+    documents,
+    writes,
+    doc: createDocumentRef,
+    runTransaction: async <T>(updateFunction: (transaction: TransactionLike) => Promise<T>) =>
+      updateFunction({
+        get: (ref) => ref.get(),
+        create: (ref, data) => {
+          const path = getRefPath(ref);
+          if (documents[path] !== undefined) {
+            throw new Error("already exists");
+          }
+          writes.push({ method: "create", path, data });
+          documents[path] = data;
+        }
+      })
+  };
 }
 
 interface DocumentRefLike {
