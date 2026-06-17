@@ -5,6 +5,7 @@ import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/
 const ACCESS_KEY_RANDOM_LENGTH = 12;
 const ACCESS_KEY_CHARACTERS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const GUILD_SHARES_COLLECTION = "guildShares";
+const FUNCTION_REGION = "asia-northeast1";
 
 interface GuildShareDocument {
   readonly guildOwnerUid?: unknown;
@@ -72,15 +73,15 @@ export interface VerifyGuildShareAccessOutput {
   readonly guildName: string;
 }
 
-export const getOwnerGuildShare = onCall(async (request: CallableRequest) =>
+export const getOwnerGuildShare = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleGetOwnerGuildShare(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
-export const saveOwnerGuildShare = onCall(async (request: CallableRequest) =>
+export const saveOwnerGuildShare = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleSaveOwnerGuildShare(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
-export const verifyGuildShareAccess = onCall(async (request: CallableRequest) =>
+export const verifyGuildShareAccess = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleVerifyGuildShareAccess(request.data, createDefaultDependencies())
 );
 
