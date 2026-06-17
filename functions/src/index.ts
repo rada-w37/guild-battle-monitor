@@ -10,11 +10,13 @@ import {
   saveNotificationDestination,
   saveNotificationRule
 } from "./notificationSettings.js";
+import { dispatchNotificationRequest } from "./notificationDispatch.js";
 
 initializeApp();
 
 export {
   deleteNotificationRule,
+  dispatchNotificationRequest,
   getNotificationSettings,
   getOwnerGuildShare,
   saveNotificationDestination,
