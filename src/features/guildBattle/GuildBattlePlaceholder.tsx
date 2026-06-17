@@ -134,6 +134,7 @@ interface GuildBattlePlaceholderProps {
   readonly headerActions?: ReactNode;
   readonly modeOverride?: AppMode;
   readonly notificationSettings?: ReactNode;
+  readonly notificationSettingsDialog?: ReactNode;
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
   readonly permissionsOverride?: Partial<AppModePermissions>;
   readonly settingsDraftExternal?: SettingsDraftExternal;
@@ -200,6 +201,7 @@ export function GuildBattlePlaceholder({
   headerActions,
   modeOverride,
   notificationSettings,
+  notificationSettingsDialog,
   ownedGuildProfilePersistence,
   permissionsOverride,
   settingsDraftExternal,
@@ -215,6 +217,7 @@ export function GuildBattlePlaceholder({
   const isFirebaseVersion =
     ownedGuildProfilePersistence !== undefined ||
     notificationSettings !== undefined ||
+    notificationSettingsDialog !== undefined ||
     settingsDraftExternal !== undefined ||
     shareSettings !== undefined ||
     loadKoObserverRunMeta !== undefined ||
@@ -1100,6 +1103,7 @@ export function GuildBattlePlaceholder({
             onWorldInputChange={handleGrandBattleWorldInputChange}
           />
         ) : null}
+        {notificationSettingsDialog}
       </section>
     </main>
   );
