@@ -52,6 +52,7 @@ interface NotificationSettingsDialogProps {
   readonly deleteNotificationRule?: typeof deleteNotificationRuleDefault;
   readonly suspendNotificationRule?: typeof suspendNotificationRuleDefault;
   readonly saveNotificationDestination?: typeof saveNotificationDestinationDefault;
+  readonly targetGuildWorld?: number | null;
   readonly onClose: () => void;
 }
 
@@ -75,6 +76,7 @@ export function NotificationSettingsDialog({
   deleteNotificationRule = deleteNotificationRuleDefault,
   suspendNotificationRule = suspendNotificationRuleDefault,
   saveNotificationDestination = saveNotificationDestinationDefault,
+  targetGuildWorld = null,
   onClose
 }: NotificationSettingsDialogProps) {
   const [activeBattleType, setActiveBattleType] = useState<NotificationBattleType>("guildBattle");
@@ -650,11 +652,26 @@ export function NotificationSettingsDialog({
                 </label>
               </div>
 
-              <h4 className="notification-rule-editor__section-title">2 対象</h4>
+              <h4 className="notification-rule-editor__section-title">{"2 \u5bfe\u8c61"}</h4>
               <label className="field">
-                <span className="field__label">対象ギルド <span className="field__label-note">未指定の場合は全ギルドが対象です</span></span>
-                <input className="field__input field__input--wide" disabled value="未指定（全ギルド対象）" />
+                <span className="field__label">
+                  {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
+                  <span className="field__label-note">{"\u672a\u6307\u5b9a\u306e\u5834\u5408\u306f\u5168\u30ae\u30eb\u30c9\u304c\u5bfe\u8c61\u3067\u3059"}</span>
+                </span>
+                <select
+                  className="field__input field__input--wide"
+                  disabled={targetGuildWorld === null}
+                  value=""
+                  onChange={() => {}}
+                >
+                  <option value="">{"\u672a\u6307\u5b9a\uff08\u5168\u30ae\u30eb\u30c9\u5bfe\u8c61\uff09"}</option>
+                </select>
               </label>
+              {targetGuildWorld === null ? (
+                <p className="notification-settings-dialog__note">
+                  {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u3092\u53d6\u5f97\u3059\u308b\u306b\u306f\u3001\u6240\u5c5e\u30ae\u30eb\u30c9\u8a2d\u5b9a\u3067\u30ef\u30fc\u30eb\u30c9\u3092\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
+                </p>
+              ) : null}
 
               <h4 className="notification-rule-editor__section-title">{"3 \u8a73\u7d30\u6761\u4ef6"}</h4>
               <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>

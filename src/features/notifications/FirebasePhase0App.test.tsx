@@ -9,6 +9,7 @@ import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSetti
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
 import type { NotificationDestination, NotificationRule } from "./types";
+import { NotificationSettingsDialog } from "./NotificationSettingsDialog";
 
 vi.mock("../auth/authService", () => ({
   signInWithGoogle: () => Promise.resolve(),
@@ -800,6 +801,88 @@ describe("FirebasePhase0App notification settings dialog", () => {
         (candidate) => candidate.disabled
       )
     ).toBe(true);
+  });
+
+  it("shows target guild default state from the owned guild world", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildSelect = Array.from(document.querySelectorAll<HTMLSelectElement>(".notification-rule-editor select")).find(
+      (candidate) => candidate.textContent?.includes("未指定（全ギルド対象）")
+    );
+    expect(targetGuildSelect).not.toBeUndefined();
+    expect(targetGuildSelect?.disabled).toBe(false);
+    expect(document.body.textContent).toContain("未指定の場合は全ギルドが対象です");
+  });
+
+  it("disables the target guild field when the target guild world is not available", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <NotificationSettingsDialog
+          request={{ guildId: "saved-guild" }}
+          role="guildOwner"
+          targetGuildWorld={null}
+          getNotificationSettings={vi.fn(() => Promise.resolve({ rules: [] }))}
+          saveNotificationRule={vi.fn(() => Promise.resolve(createNotificationRule()))}
+          deleteNotificationRule={vi.fn(() => Promise.resolve())}
+          suspendNotificationRule={vi.fn(() =>
+            Promise.resolve({
+              suspendedAt: "2026-06-20T12:00:00.000Z",
+              expiresAt: "2026-06-20T13:00:00.000Z",
+              suspendedBy: { role: "guildOwner" as const }
+            })
+          )}
+          saveNotificationDestination={vi.fn(() =>
+            Promise.resolve({
+              id: "discord" as const,
+              type: "discord_webhook" as const,
+              enabled: true,
+              webhookUrl: "",
+              defaultUsernameTemplate: ""
+            })
+          )}
+          onClose={() => {}}
+        />
+      );
+      await flushPromises();
+    });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildSelect = Array.from(document.querySelectorAll<HTMLSelectElement>(".notification-rule-editor select")).find(
+      (candidate) => candidate.textContent?.includes("未指定（全ギルド対象）")
+    );
+    expect(targetGuildSelect).not.toBeUndefined();
+    expect(targetGuildSelect?.disabled).toBe(true);
+    expect(document.body.textContent).toContain(
+      "対象ギルド候補を取得するには、所属ギルド設定でワールドを登録してください。"
+    );
   });
 
   it("shows the edit dirty bar and restores the saved rule when discarded", async () => {

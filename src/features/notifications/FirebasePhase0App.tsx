@@ -237,6 +237,7 @@ export function FirebasePhase0App({
             saveNotificationDestination={saveNotificationDestinationForDialog}
             saveNotificationRule={saveNotificationRuleForDialog}
             suspendNotificationRule={suspendNotificationRuleForDialog}
+            targetGuildWorld={notificationSettingsContext.targetGuildWorld}
             onClose={() => setIsNotificationSettingsOpen(false)}
           />
         ) : undefined
@@ -566,7 +567,11 @@ function createNotificationSettingsContext({
   readonly ownedGuildProfile: OwnedGuildProfile | null;
   readonly routeAccessKey: string | null;
   readonly sharedGuild: SharedGuildContext | null;
-}): { readonly request: { readonly guildId: string; readonly accessKey?: string }; readonly role: NotificationSettingsRole } | null {
+}): {
+  readonly request: { readonly guildId: string; readonly accessKey?: string };
+  readonly role: NotificationSettingsRole;
+  readonly targetGuildWorld: number | null;
+} | null {
   if (
     appMode === "owner" &&
     isCompleteOwnedGuildProfile(ownedGuildProfile) &&
@@ -575,14 +580,16 @@ function createNotificationSettingsContext({
   ) {
     return {
       request: { guildId: guildShare.share.guildId },
-      role: "guildOwner"
+      role: "guildOwner",
+      targetGuildWorld: ownedGuildProfile.world
     };
   }
 
   if (sharedGuild?.mode === "admin" && routeAccessKey !== null) {
     return {
       request: { guildId: sharedGuild.guildId, accessKey: routeAccessKey },
-      role: "admin"
+      role: "admin",
+      targetGuildWorld: sharedGuild.world
     };
   }
 
