@@ -127,6 +127,15 @@ interface GetNotificationSettingsOutput {
   readonly destination?: NotificationDestinationOutput;
 }
 
+interface NotificationTemporarySuspensionOutput {
+  readonly suspendedAt: string;
+  readonly expiresAt: string;
+  readonly suspendedBy: {
+    readonly role?: "guildOwner" | "admin";
+    readonly uid?: string;
+  };
+}
+
 interface DocumentSnapshotLike {
   readonly exists: boolean;
   readonly id?: string;
@@ -174,6 +183,10 @@ export const saveNotificationRule = onCall({ region: FUNCTION_REGION }, async (r
 
 export const deleteNotificationRule = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleDeleteNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
+);
+
+export const suspendNotificationRule = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
+  handleSuspendNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
 export const saveNotificationDestination = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
@@ -264,6 +277,41 @@ export async function handleDeleteNotificationRule(
     .delete();
 
   return { ok: true };
+}
+
+export async function handleSuspendNotificationRule(
+  input: unknown,
+  context: CallableContext,
+  dependencies: Dependencies
+): Promise<NotificationTemporarySuspensionOutput> {
+  const payload = readSuspendRuleInput(input);
+  const role = await resolveNotificationSettingsRole(payload, context, dependencies);
+  const ruleRef = dependencies.firestore.doc(
+    `${GUILD_SHARES_COLLECTION}/${payload.guildId}/${NOTIFICATION_RULES_COLLECTION}/${payload.ruleId}`
+  );
+  const currentSnapshot = await ruleRef.get();
+  if (!currentSnapshot.exists) {
+    throw new HttpsError("not-found", "notification_rule_not_found");
+  }
+
+  const now = dependencies.now();
+  const suspendedAt = timestampToIsoString(now);
+  const expiresAt = new Date(Date.parse(suspendedAt) + 60 * 60 * 1000).toISOString();
+  const temporarySuspension: NotificationTemporarySuspensionOutput = {
+    suspendedAt,
+    expiresAt,
+    suspendedBy: context.authUid === null ? { role } : { uid: context.authUid }
+  };
+
+  await ruleRef.set(
+    {
+      temporarySuspension,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  return temporarySuspension;
 }
 
 export async function handleSaveNotificationDestination(
@@ -414,6 +462,14 @@ function readDeleteRuleInput(input: unknown): {
   }
 
   return { ...authorizedInput, ruleId: input.ruleId.trim() };
+}
+
+function readSuspendRuleInput(input: unknown): {
+  readonly guildId: string;
+  readonly accessKey?: string;
+  readonly ruleId: string;
+} {
+  return readDeleteRuleInput(input);
 }
 
 function readSaveDestinationInput(input: unknown): {
@@ -783,6 +839,17 @@ function readNullableNonNegativeInteger(value: unknown): number | null {
   }
 
   return value;
+}
+
+function timestampToIsoString(timestamp: Timestamp): string {
+  const value = timestamp as Timestamp & { readonly toDate?: () => Date };
+  const date = typeof value.toDate === "function" ? value.toDate() : new Date(timestamp as never);
+  const isoString = date.toISOString();
+  if (!ISO_DATE_TIME_PATTERN.test(isoString)) {
+    throw new HttpsError("failed-precondition", "invalid_notification_temporary_suspension_clock");
+  }
+
+  return isoString;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

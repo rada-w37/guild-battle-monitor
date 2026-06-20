@@ -21,6 +21,19 @@ export interface DeleteNotificationRuleRequest extends NotificationSettingsReque
   readonly ruleId: string;
 }
 
+export interface SuspendNotificationRuleRequest extends NotificationSettingsRequest {
+  readonly ruleId: string;
+}
+
+export interface NotificationRuleTemporarySuspension {
+  readonly suspendedAt: string;
+  readonly expiresAt: string;
+  readonly suspendedBy?: {
+    readonly role?: "guildOwner" | "admin";
+    readonly uid?: string;
+  };
+}
+
 export interface SaveNotificationDestinationRequest {
   readonly guildId: string;
   readonly destination: NotificationDestinationInput;
@@ -38,6 +51,13 @@ export async function saveNotificationRule(input: SaveNotificationRuleRequest): 
 
 export async function deleteNotificationRule(input: DeleteNotificationRuleRequest): Promise<void> {
   await callFunction("deleteNotificationRule", input);
+}
+
+export async function suspendNotificationRule(
+  input: SuspendNotificationRuleRequest
+): Promise<NotificationRuleTemporarySuspension> {
+  const result = await callFunction("suspendNotificationRule", input);
+  return createTemporarySuspension(result);
 }
 
 export async function saveNotificationDestination(
@@ -128,6 +148,25 @@ function createMention(data: unknown): NotificationRule["message"]["mention"] {
   }
 
   return { type: "none" };
+}
+
+function createTemporarySuspension(data: unknown): NotificationRuleTemporarySuspension {
+  if (!isPlainObject(data) || typeof data.suspendedAt !== "string" || typeof data.expiresAt !== "string") {
+    throw new Error("notification suspension response is invalid");
+  }
+
+  return {
+    suspendedAt: data.suspendedAt,
+    expiresAt: data.expiresAt,
+    ...(isPlainObject(data.suspendedBy) ? { suspendedBy: createSuspendedBy(data.suspendedBy) } : {})
+  };
+}
+
+function createSuspendedBy(data: Record<string, unknown>): NonNullable<NotificationRuleTemporarySuspension["suspendedBy"]> {
+  return {
+    ...(data.role === "guildOwner" || data.role === "admin" ? { role: data.role } : {}),
+    ...(typeof data.uid === "string" && data.uid.trim().length > 0 ? { uid: data.uid } : {})
+  };
 }
 
 function createNotificationDestination(data: unknown): NotificationDestination {

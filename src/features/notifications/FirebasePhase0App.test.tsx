@@ -829,6 +829,81 @@ describe("FirebasePhase0App notification settings dialog", () => {
     ).toBe(true);
   });
 
+  it("temporarily suspends an existing rule when editing starts", async () => {
+    const suspendNotificationRule = vi.fn(() =>
+      Promise.resolve({
+        suspendedAt: "2026-06-20T12:00:00.000Z",
+        expiresAt: "2026-06-20T13:00:00.000Z",
+        suspendedBy: { uid: "owner-uid" }
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      undefined,
+      undefined,
+      suspendNotificationRule
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    await vi.waitFor(() => {
+      expect(suspendNotificationRule).toHaveBeenCalledWith({
+        guildId: "saved-guild",
+        ruleId: "rule-1"
+      });
+    });
+  });
+
+  it("cancels editing when temporary suspension fails", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.reject(new Error("suspend failed")))
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "通知の一時停止に失敗したため、編集を開始できませんでした。時間をおいて再度お試しください。"
+      );
+    });
+    expect(document.querySelector(".notification-rule-editor__empty-state")).not.toBeNull();
+    expect(document.body.textContent).not.toContain("Rule One Edited");
+  });
+
   it("saves the webhook destination from the notification dialog, not the common settings save button", async () => {
     const saveNotificationDestination = vi.fn((input: {
       readonly guildId: string;
@@ -927,7 +1002,18 @@ async function renderApp(
       ...input.rule
     })
   ),
-  deleteNotificationRule: (input: { readonly ruleId: string }) => Promise<void> = vi.fn(() => Promise.resolve())
+  deleteNotificationRule: (input: { readonly ruleId: string }) => Promise<void> = vi.fn(() => Promise.resolve()),
+  suspendNotificationRule: (input: { readonly ruleId: string }) => Promise<{
+    readonly suspendedAt: string;
+    readonly expiresAt: string;
+    readonly suspendedBy?: { readonly uid?: string; readonly role?: "guildOwner" | "admin" };
+  }> = vi.fn(() =>
+    Promise.resolve({
+      suspendedAt: "2026-06-20T12:00:00.000Z",
+      expiresAt: "2026-06-20T13:00:00.000Z",
+      suspendedBy: { uid: "owner-uid" }
+    })
+  )
 ) {
   const { FirebasePhase0App } = await import("./FirebasePhase0App");
   container = document.createElement("div");
@@ -946,6 +1032,7 @@ async function renderApp(
         loadSnapshot={loadSnapshot}
         saveNotificationDestination={saveNotificationDestination}
         saveNotificationRule={saveNotificationRule}
+        suspendNotificationRule={suspendNotificationRule}
         saveOwnerGuildShare={saveOwnerShare}
         saveOwnedGuildProfile={saveProfile}
         subscribeKoGuildKoTotals={() => () => {}}
@@ -1021,6 +1108,34 @@ async function openNotificationSettings() {
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+  });
+}
+
+async function openFirstNotificationRuleForEdit() {
+  const editButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__actions button");
+  if (!editButton) {
+    throw new Error("notification rule edit button was not found");
+  }
+
+  await act(async () => {
+    editButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+  });
+}
+
+async function editSelectedNotificationRuleName(nextName: string) {
+  const nameInput = Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).find(
+    (candidate) => candidate.type !== "checkbox" && !candidate.disabled
+  );
+  if (!nameInput) {
+    throw new Error("notification rule name input was not found");
+  }
+
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    valueSetter?.call(nameInput, nextName);
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     await flushPromises();
   });
 }

@@ -32,7 +32,8 @@ import {
   deleteNotificationRule,
   getNotificationSettings,
   saveNotificationDestination,
-  saveNotificationRule
+  saveNotificationRule,
+  suspendNotificationRule
 } from "./notificationSettingsFunctionsRepository";
 import type { NotificationSettingsRole } from "./types";
 
@@ -65,6 +66,7 @@ interface FirebasePhase0AppProps {
   readonly verifyGuildShareAccess?: typeof verifyGuildShareAccess;
   readonly saveNotificationDestination?: typeof saveNotificationDestination;
   readonly saveNotificationRule?: typeof saveNotificationRule;
+  readonly suspendNotificationRule?: typeof suspendNotificationRule;
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly subscribeToAuthState?: typeof subscribeToAuthState;
 }
@@ -82,6 +84,7 @@ export function FirebasePhase0App({
   verifyGuildShareAccess: verifyShareAccess = verifyGuildShareAccess,
   saveNotificationDestination: saveNotificationDestinationForDialog = saveNotificationDestination,
   saveNotificationRule: saveNotificationRuleForDialog = saveNotificationRule,
+  suspendNotificationRule: suspendNotificationRuleForDialog = suspendNotificationRule,
   loadSnapshot = loadLocalGvgSnapshot,
   subscribeToAuthState: subscribeAuthState = subscribeToAuthState
 }: FirebasePhase0AppProps = {}) {
@@ -233,6 +236,7 @@ export function FirebasePhase0App({
             role={notificationSettingsContext.role}
             saveNotificationDestination={saveNotificationDestinationForDialog}
             saveNotificationRule={saveNotificationRuleForDialog}
+            suspendNotificationRule={suspendNotificationRuleForDialog}
             onClose={() => setIsNotificationSettingsOpen(false)}
           />
         ) : undefined

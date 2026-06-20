@@ -9,10 +9,12 @@ import {
   getNotificationSettings as getNotificationSettingsDefault,
   saveNotificationDestination as saveNotificationDestinationDefault,
   saveNotificationRule as saveNotificationRuleDefault,
+  suspendNotificationRule as suspendNotificationRuleDefault,
   type DeleteNotificationRuleRequest,
   type NotificationSettingsRequest,
   type SaveNotificationDestinationRequest,
-  type SaveNotificationRuleRequest
+  type SaveNotificationRuleRequest,
+  type SuspendNotificationRuleRequest
 } from "./notificationSettingsFunctionsRepository";
 import {
   createDefaultNotificationRuleV2Draft,
@@ -38,6 +40,7 @@ interface NotificationSettingsDialogProps {
   readonly getNotificationSettings?: typeof getNotificationSettingsDefault;
   readonly saveNotificationRule?: typeof saveNotificationRuleDefault;
   readonly deleteNotificationRule?: typeof deleteNotificationRuleDefault;
+  readonly suspendNotificationRule?: typeof suspendNotificationRuleDefault;
   readonly saveNotificationDestination?: typeof saveNotificationDestinationDefault;
   readonly onClose: () => void;
 }
@@ -60,6 +63,7 @@ export function NotificationSettingsDialog({
   getNotificationSettings = getNotificationSettingsDefault,
   saveNotificationRule = saveNotificationRuleDefault,
   deleteNotificationRule = deleteNotificationRuleDefault,
+  suspendNotificationRule = suspendNotificationRuleDefault,
   saveNotificationDestination = saveNotificationDestinationDefault,
   onClose
 }: NotificationSettingsDialogProps) {
@@ -75,6 +79,8 @@ export function NotificationSettingsDialog({
   const [error, setError] = useState<string | null>(null);
   const [ruleError, setRuleError] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
+  const [suspendedRuleIds, setSuspendedRuleIds] = useState<readonly string[]>([]);
+  const [pendingSuspensionRuleId, setPendingSuspensionRuleId] = useState<string | null>(null);
 
   useEffect(() => {
     let isDisposed = false;
@@ -125,6 +131,66 @@ export function NotificationSettingsDialog({
   const isRuleDraftDirty =
     ruleEditorMode === "editing" && savedRuleDraft !== null && serializeRuleDraft(ruleDraft) !== serializeRuleDraft(savedRuleDraft);
   const shouldShowRuleActionBar = ruleEditorMode === "creating" || isRuleDraftDirty;
+  const isSuspendingSelectedRule = selectedRuleId !== null && pendingSuspensionRuleId === selectedRuleId;
+
+  useEffect(() => {
+    if (
+      !isRuleDraftDirty ||
+      selectedRuleId === null ||
+      pendingSuspensionRuleId === selectedRuleId ||
+      suspendedRuleIds.includes(selectedRuleId)
+    ) {
+      return;
+    }
+
+    let isDisposed = false;
+    const suspendingRuleId = selectedRuleId;
+    setPendingSuspensionRuleId(suspendingRuleId);
+    setError(null);
+
+    void suspendNotificationRule({
+      ...request,
+      ruleId: suspendingRuleId
+    } satisfies SuspendNotificationRuleRequest)
+      .then(() => {
+        if (isDisposed) {
+          return;
+        }
+
+        setSuspendedRuleIds((currentIds) =>
+          currentIds.includes(suspendingRuleId) ? currentIds : [...currentIds, suspendingRuleId]
+        );
+      })
+      .catch(() => {
+        if (isDisposed) {
+          return;
+        }
+
+        setError("通知の一時停止に失敗したため、編集を開始できませんでした。時間をおいて再度お試しください。");
+        setSelectedRuleId(null);
+        setRuleEditorMode("empty");
+        setRuleDraft(createDefaultRuleDraft(activeBattleType));
+        setSavedRuleDraft(null);
+        setRuleError(null);
+      })
+      .finally(() => {
+        if (!isDisposed) {
+          setPendingSuspensionRuleId(null);
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [
+    activeBattleType,
+    isRuleDraftDirty,
+    pendingSuspensionRuleId,
+    request,
+    selectedRuleId,
+    suspendedRuleIds,
+    suspendNotificationRule
+  ]);
 
   function selectBattleType(nextBattleType: NotificationBattleType) {
     setActiveBattleType(nextBattleType);
@@ -132,6 +198,7 @@ export function NotificationSettingsDialog({
     setRuleEditorMode("empty");
     setRuleDraft(createDefaultRuleDraft(nextBattleType));
     setSavedRuleDraft(null);
+    setPendingSuspensionRuleId(null);
     setRuleError(null);
   }
 
@@ -143,6 +210,7 @@ export function NotificationSettingsDialog({
     setSavedRuleDraft(nextDraft);
     setRuleError(null);
     setMessage(null);
+    setPendingSuspensionRuleId(null);
   }
 
   function createNewRule() {
@@ -152,6 +220,7 @@ export function NotificationSettingsDialog({
     setSavedRuleDraft(null);
     setRuleError(null);
     setMessage(null);
+    setPendingSuspensionRuleId(null);
   }
 
   function duplicateRule(rule: NotificationRule) {
@@ -165,6 +234,7 @@ export function NotificationSettingsDialog({
     setSavedRuleDraft(null);
     setRuleError(null);
     setMessage(null);
+    setPendingSuspensionRuleId(null);
   }
 
   function discardRuleChanges() {
@@ -641,7 +711,12 @@ export function NotificationSettingsDialog({
                     <button type="button" onClick={discardRuleChanges}>
                       {ruleEditorMode === "creating" ? "破棄" : "破棄して戻す"}
                     </button>
-                    <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveRule()}>
+                    <button
+                      className="load-form__button"
+                      disabled={status !== "idle" || isSuspendingSelectedRule}
+                      type="button"
+                      onClick={() => void saveRule()}
+                    >
                       {ruleEditorMode === "creating" ? "作成" : "保存"}
                     </button>
                   </div>

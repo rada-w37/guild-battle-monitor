@@ -4,6 +4,7 @@ import {
   handleGetNotificationSettings,
   handleSaveNotificationDestination,
   handleSaveNotificationRule,
+  handleSuspendNotificationRule,
   shouldReadNotificationRuleV2Document,
   validateNotificationRuleV2Input
 } from "./notificationSettings.js";
@@ -229,6 +230,64 @@ describe("notification settings callables", () => {
     expect(firestore.deletes).toEqual(["guildShares/guild-1/notificationRules/rule-1"]);
   });
 
+  it("temporarily suspends an existing rule with a safe owner uid", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/rule-1": createRule()
+    });
+
+    await expect(
+      handleSuspendNotificationRule(
+        { guildId: "guild-1", ruleId: "rule-1" },
+        { authUid: "owner-uid" },
+        createDependencies(firestore, new Date("2026-06-20T12:00:00.000Z") as never)
+      )
+    ).resolves.toEqual({
+      suspendedAt: "2026-06-20T12:00:00.000Z",
+      expiresAt: "2026-06-20T13:00:00.000Z",
+      suspendedBy: { uid: "owner-uid" }
+    });
+
+    expect(firestore.writes).toEqual([
+      {
+        path: "guildShares/guild-1/notificationRules/rule-1",
+        data: {
+          temporarySuspension: {
+            suspendedAt: "2026-06-20T12:00:00.000Z",
+            expiresAt: "2026-06-20T13:00:00.000Z",
+            suspendedBy: { uid: "owner-uid" }
+          },
+          updatedAt: new Date("2026-06-20T12:00:00.000Z")
+        },
+        options: { merge: true }
+      }
+    ]);
+  });
+
+  it("temporarily suspends an existing rule with a safe admin role", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/rule-1": createRule()
+    });
+
+    await expect(
+      handleSuspendNotificationRule(
+        { guildId: "guild-1", accessKey: "a_admin", ruleId: "rule-1" },
+        { authUid: null },
+        createDependencies(firestore, new Date("2026-06-20T12:00:00.000Z") as never)
+      )
+    ).resolves.toMatchObject({
+      suspendedAt: "2026-06-20T12:00:00.000Z",
+      expiresAt: "2026-06-20T13:00:00.000Z",
+      suspendedBy: { role: "admin" }
+    });
+
+    expect(firestore.writes[0].data.temporarySuspension).toMatchObject({
+      suspendedBy: { role: "admin" }
+    });
+    expect(JSON.stringify(firestore.writes[0].data)).not.toContain("a_admin");
+  });
+
   it("accepts v2 notification rule validation with here and everyone mentions", () => {
     expect(validateNotificationRuleV2Input(createRuleV2Input({ mention: { type: "here" } }))).toMatchObject({
       schemaVersion: 2,
@@ -370,12 +429,16 @@ function createDestination(overrides: Record<string, unknown>) {
   };
 }
 
-function createDependencies(firestore: ReturnType<typeof createFirestore>) {
+function createDependencies(firestore: ReturnType<typeof createFirestore>, fixedNow?: never) {
   let nowIndex = 0;
 
   return {
     firestore,
     now: () => {
+      if (fixedNow !== undefined) {
+        return fixedNow;
+      }
+
       nowIndex += 1;
       return `now-${nowIndex}` as never;
     },

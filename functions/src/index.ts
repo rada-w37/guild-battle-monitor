@@ -8,7 +8,8 @@ import {
   deleteNotificationRule,
   getNotificationSettings,
   saveNotificationDestination,
-  saveNotificationRule
+  saveNotificationRule,
+  suspendNotificationRule
 } from "./notificationSettings.js";
 import { dispatchNotificationRequest } from "./notificationDispatch.js";
 
@@ -22,5 +23,6 @@ export {
   saveNotificationDestination,
   saveNotificationRule,
   saveOwnerGuildShare,
+  suspendNotificationRule,
   verifyGuildShareAccess
 };
