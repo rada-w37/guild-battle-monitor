@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import {
   applyNotificationTemplate,
   DEFAULT_NOTIFICATION_USERNAME_TEMPLATE,
@@ -22,7 +22,12 @@ import {
   createNotificationRuleV2DraftFromLegacy,
   type NotificationRuleV2Draft
 } from "./notificationRuleV2Draft";
-import { hasNonAttackingTargetWarning } from "./notificationDetailConditions";
+import {
+  hasNonAttackingTargetWarning,
+  moveDetailConditionNode,
+  type NotificationDetailConditionDragSource,
+  type NotificationDetailConditionDropTarget
+} from "./notificationDetailConditions";
 import type {
   NotificationBattleType,
   NotificationDestination,
@@ -86,6 +91,8 @@ export function NotificationSettingsDialog({
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const [suspendedRuleIds, setSuspendedRuleIds] = useState<readonly string[]>([]);
   const [pendingSuspensionRuleId, setPendingSuspensionRuleId] = useState<string | null>(null);
+  const [dragSource, setDragSource] = useState<NotificationDetailConditionDragSource | null>(null);
+  const [dropTarget, setDropTarget] = useState<NotificationDetailConditionDropTarget | null>(null);
 
   useEffect(() => {
     let isDisposed = false;
@@ -205,6 +212,8 @@ export function NotificationSettingsDialog({
     setRuleDraft(createDefaultRuleDraft(nextBattleType));
     setSavedRuleDraft(null);
     setPendingSuspensionRuleId(null);
+    setDragSource(null);
+    setDropTarget(null);
     setRuleError(null);
   }
 
@@ -217,6 +226,8 @@ export function NotificationSettingsDialog({
     setRuleError(null);
     setMessage(null);
     setPendingSuspensionRuleId(null);
+    setDragSource(null);
+    setDropTarget(null);
   }
 
   function createNewRule() {
@@ -227,6 +238,8 @@ export function NotificationSettingsDialog({
     setRuleError(null);
     setMessage(null);
     setPendingSuspensionRuleId(null);
+    setDragSource(null);
+    setDropTarget(null);
   }
 
   function duplicateRule(rule: NotificationRule) {
@@ -241,6 +254,8 @@ export function NotificationSettingsDialog({
     setRuleError(null);
     setMessage(null);
     setPendingSuspensionRuleId(null);
+    setDragSource(null);
+    setDropTarget(null);
   }
 
   function discardRuleChanges() {
@@ -360,6 +375,43 @@ export function NotificationSettingsDialog({
         bodyTemplate: `${currentDraft.message.bodyTemplate}${variableName}`
       }
     }));
+  }
+
+  function startConditionDrag(event: DragEvent<HTMLElement>, source: NotificationDetailConditionDragSource) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", "notification-condition");
+    setDragSource(source);
+    setDropTarget(null);
+  }
+
+  function updateConditionDropTarget(event: DragEvent<HTMLElement>, target: NotificationDetailConditionDropTarget) {
+    if (dragSource === null || !canDropConditionNode(dragSource, target)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setDropTarget(target);
+  }
+
+  function dropConditionNode(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (dragSource !== null && dropTarget !== null && canDropConditionNode(dragSource, dropTarget)) {
+      setRuleDraft((currentDraft) => ({
+        ...currentDraft,
+        detailConditions: moveDetailConditionNode(currentDraft.detailConditions, dragSource, dropTarget)
+      }));
+    }
+
+    setDragSource(null);
+    setDropTarget(null);
+  }
+
+  function endConditionDrag() {
+    setDragSource(null);
+    setDropTarget(null);
   }
 
   return (
@@ -571,14 +623,34 @@ export function NotificationSettingsDialog({
 
               <h4 className="notification-rule-editor__section-title">{"3 \u8a73\u7d30\u6761\u4ef6"}</h4>
               <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
-              <div className="notification-rule-editor__condition-tree">
+              <div
+                className="notification-rule-editor__condition-tree"
+                onDragOver={(event) =>
+                  updateConditionDropTarget(event, {
+                    scope: "root",
+                    index: ruleDraft.detailConditions.children.length
+                  })
+                }
+                onDrop={dropConditionNode}
+              >
                 {ruleDraft.detailConditions.children.map((conditionNode, nodeIndex) =>
                   conditionNode.type === "group" ? (
-                    <div
-                      className={`notification-rule-editor__condition-group is-${conditionNode.operator.toLowerCase()}`}
-                      key={`group-${nodeIndex}`}
-                    >
-                      <div className="notification-rule-editor__condition-group-header">
+                    <div key={`group-${nodeIndex}`}>
+                      <DropIndicator isActive={isRootDropTarget(dropTarget, nodeIndex)} />
+                      <div
+                        className={`notification-rule-editor__condition-group is-${conditionNode.operator.toLowerCase()}`}
+                        draggable
+                        onDragEnd={endConditionDrag}
+                        onDragStart={(event) => startConditionDrag(event, { scope: "root", index: nodeIndex })}
+                        onDragOver={(event) =>
+                          updateConditionDropTarget(event, {
+                            scope: "root",
+                            index: getDropIndex(event, nodeIndex)
+                          })
+                        }
+                        onDrop={dropConditionNode}
+                      >
+                        <div className="notification-rule-editor__condition-group-header">
                         <select
                           className="notification-rule-editor__condition-group-label"
                           value={conditionNode.operator}
@@ -599,25 +671,69 @@ export function NotificationSettingsDialog({
                           {"\u524a\u9664"}
                         </button>
                       </div>
-                      <div className="notification-rule-editor__condition-list">
+                      <div
+                        className="notification-rule-editor__condition-list"
+                        onDragOver={(event) =>
+                          updateConditionDropTarget(event, {
+                            scope: "group",
+                            groupIndex: nodeIndex,
+                            index: conditionNode.children.length
+                          })
+                        }
+                        onDrop={dropConditionNode}
+                      >
                         {conditionNode.children.map((condition, conditionIndex) => (
-                          <ConditionRow
-                            condition={condition}
-                            key={`group-${nodeIndex}-condition-${conditionIndex}`}
-                            onChange={(nextCondition) =>
-                              setRuleDraft((currentDraft) =>
-                                updateGroupCondition(currentDraft, nodeIndex, conditionIndex, nextCondition)
-                              )
-                            }
-                            onRemove={() =>
-                              setRuleDraft((currentDraft) => removeGroupCondition(currentDraft, nodeIndex, conditionIndex))
-                            }
-                          />
+                          <div key={`group-${nodeIndex}-condition-${conditionIndex}`}>
+                            <DropIndicator isActive={isGroupDropTarget(dropTarget, nodeIndex, conditionIndex)} />
+                            <ConditionRow
+                              condition={condition}
+                              draggable
+                              onChange={(nextCondition) =>
+                                setRuleDraft((currentDraft) =>
+                                  updateGroupCondition(currentDraft, nodeIndex, conditionIndex, nextCondition)
+                                )
+                              }
+                              onDragEnd={endConditionDrag}
+                              onDragOver={(event) =>
+                                updateConditionDropTarget(event, {
+                                  scope: "group",
+                                  groupIndex: nodeIndex,
+                                  index: getDropIndex(event, conditionIndex)
+                                })
+                              }
+                              onDragStart={(event) =>
+                                startConditionDrag(event, {
+                                  scope: "group",
+                                  groupIndex: nodeIndex,
+                                  conditionIndex
+                                })
+                              }
+                              onRemove={() =>
+                                setRuleDraft((currentDraft) => removeGroupCondition(currentDraft, nodeIndex, conditionIndex))
+                              }
+                            />
+                          </div>
                         ))}
+                        <DropIndicator isActive={isGroupDropTarget(dropTarget, nodeIndex, conditionNode.children.length)} />
+                      </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="notification-rule-editor__condition-card" key={`condition-${nodeIndex}`}>
+                    <div key={`condition-${nodeIndex}`}>
+                      <DropIndicator isActive={isRootDropTarget(dropTarget, nodeIndex)} />
+                    <div
+                      className="notification-rule-editor__condition-card"
+                      draggable
+                      onDragEnd={endConditionDrag}
+                      onDragStart={(event) => startConditionDrag(event, { scope: "root", index: nodeIndex })}
+                      onDragOver={(event) =>
+                        updateConditionDropTarget(event, {
+                          scope: "root",
+                          index: getDropIndex(event, nodeIndex)
+                        })
+                      }
+                      onDrop={dropConditionNode}
+                    >
                       <ConditionRow
                         condition={conditionNode}
                         onChange={(nextCondition) =>
@@ -626,8 +742,10 @@ export function NotificationSettingsDialog({
                         onRemove={() => setRuleDraft((currentDraft) => removeRootConditionNode(currentDraft, nodeIndex))}
                       />
                     </div>
+                    </div>
                   )
                 )}
+                <DropIndicator isActive={isRootDropTarget(dropTarget, ruleDraft.detailConditions.children.length)} />
               </div>
               <div className="notification-rule-editor__condition-actions">
                 <button type="button" onClick={() => setRuleDraft(addRootCondition)}>
@@ -812,15 +930,29 @@ function serializeRuleDraft(ruleDraft: RuleDraft): string {
 
 function ConditionRow({
   condition,
+  draggable = false,
   onChange,
+  onDragEnd,
+  onDragOver,
+  onDragStart,
   onRemove
 }: {
   readonly condition: NotificationDetailCondition;
+  readonly draggable?: boolean;
   readonly onChange: (condition: NotificationDetailCondition) => void;
+  readonly onDragEnd?: () => void;
+  readonly onDragOver?: (event: DragEvent<HTMLElement>) => void;
+  readonly onDragStart?: (event: DragEvent<HTMLElement>) => void;
   readonly onRemove: () => void;
 }) {
   return (
-    <div className="notification-rule-editor__condition-row">
+    <div
+      className={draggable ? "notification-rule-editor__condition-row is-draggable" : "notification-rule-editor__condition-row"}
+      draggable={draggable}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragStart={onDragStart}
+    >
       <select
         className="field__input"
         value={condition.field}
@@ -874,6 +1006,10 @@ function ConditionRow({
       </button>
     </div>
   );
+}
+
+function DropIndicator({ isActive }: { readonly isActive: boolean }) {
+  return <div className={isActive ? "notification-rule-editor__drop-indicator is-active" : "notification-rule-editor__drop-indicator"} />;
 }
 
 function addRootCondition(ruleDraft: RuleDraft): RuleDraft {
@@ -1017,6 +1153,34 @@ function getDefaultDetailConditionOperator(
 
 function getDetailConditionFieldLabel(field: NotificationDetailConditionField): string {
   return field === "defenseCount" ? "\u9632\u885b\u6570" : "\u4fb5\u653b\u6570";
+}
+
+function getDropIndex(event: DragEvent<HTMLElement>, itemIndex: number): number {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return event.clientY > rect.top + rect.height / 2 ? itemIndex + 1 : itemIndex;
+}
+
+function canDropConditionNode(
+  source: NotificationDetailConditionDragSource,
+  target: NotificationDetailConditionDropTarget
+): boolean {
+  if (source.scope === "root" && target.scope === "root") {
+    return true;
+  }
+
+  return source.scope === "group" && target.scope === "group" && source.groupIndex === target.groupIndex;
+}
+
+function isRootDropTarget(target: NotificationDetailConditionDropTarget | null, index: number): boolean {
+  return target?.scope === "root" && target.index === index;
+}
+
+function isGroupDropTarget(
+  target: NotificationDetailConditionDropTarget | null,
+  groupIndex: number,
+  index: number
+): boolean {
+  return target?.scope === "group" && target.groupIndex === groupIndex && target.index === index;
 }
 
 function createDefaultDestinationDraft(): DestinationDraft {

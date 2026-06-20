@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasNonAttackingTargetWarning } from "./notificationDetailConditions";
+import { hasNonAttackingTargetWarning, moveDetailConditionNode } from "./notificationDetailConditions";
 import type { NotificationDetailConditionRoot } from "./types";
 
 describe("notification detail condition warning", () => {
@@ -86,6 +86,72 @@ describe("notification detail condition warning", () => {
         ])
       )
     ).toBe(true);
+  });
+});
+
+describe("notification detail condition ordering", () => {
+  it("moves root children to the requested insertion index", () => {
+    const root = createRoot([
+      { type: "condition", field: "defenseCount", operator: "<=", value: 10 },
+      { type: "condition", field: "attackCount", operator: ">=", value: 1 },
+      { type: "condition", field: "defenseCount", operator: "<=", value: 30 }
+    ]);
+
+    expect(
+      moveDetailConditionNode(root, { scope: "root", index: 0 }, { scope: "root", index: 3 }).children
+    ).toEqual([
+      { type: "condition", field: "attackCount", operator: ">=", value: 1 },
+      { type: "condition", field: "defenseCount", operator: "<=", value: 30 },
+      { type: "condition", field: "defenseCount", operator: "<=", value: 10 }
+    ]);
+  });
+
+  it("moves conditions inside the same group", () => {
+    const root = createRoot([
+      {
+        type: "group",
+        operator: "AND",
+        children: [
+          { type: "condition", field: "defenseCount", operator: "<=", value: 30 },
+          { type: "condition", field: "attackCount", operator: ">=", value: 1 },
+          { type: "condition", field: "defenseCount", operator: "<=", value: 10 }
+        ]
+      }
+    ]);
+
+    const movedRoot = moveDetailConditionNode(
+      root,
+      { scope: "group", groupIndex: 0, conditionIndex: 2 },
+      { scope: "group", groupIndex: 0, index: 0 }
+    );
+
+    expect(movedRoot.children[0]).toMatchObject({
+      type: "group",
+      children: [
+        { type: "condition", field: "defenseCount", operator: "<=", value: 10 },
+        { type: "condition", field: "defenseCount", operator: "<=", value: 30 },
+        { type: "condition", field: "attackCount", operator: ">=", value: 1 }
+      ]
+    });
+  });
+
+  it("ignores cross-scope moves", () => {
+    const root = createRoot([
+      { type: "condition", field: "defenseCount", operator: "<=", value: 10 },
+      {
+        type: "group",
+        operator: "AND",
+        children: [{ type: "condition", field: "attackCount", operator: ">=", value: 1 }]
+      }
+    ]);
+
+    expect(
+      moveDetailConditionNode(
+        root,
+        { scope: "root", index: 0 },
+        { scope: "group", groupIndex: 1, index: 0 }
+      )
+    ).toBe(root);
   });
 });
 
