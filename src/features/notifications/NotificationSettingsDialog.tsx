@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   applyNotificationTemplate,
   DEFAULT_NOTIFICATION_USERNAME_TEMPLATE,
@@ -116,6 +116,7 @@ export function NotificationSettingsDialog({
   const [pendingSuspensionRuleId, setPendingSuspensionRuleId] = useState<string | null>(null);
   const [dragSource, setDragSource] = useState<NotificationDetailConditionDragSource | null>(null);
   const [dropTarget, setDropTarget] = useState<NotificationDetailConditionDropTarget | null>(null);
+  const ruleEditorScrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let isDisposed = false;
@@ -472,6 +473,39 @@ export function NotificationSettingsDialog({
     }));
   }
 
+  function scrollRuleEditorToBottom() {
+    const scrollContainer = ruleEditorScrollRef.current;
+    if (scrollContainer === null) {
+      return;
+    }
+
+    const scroll = () => {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    };
+
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(scroll);
+      return;
+    }
+
+    window.setTimeout(scroll, 0);
+  }
+
+  function addRootConditionAndScroll() {
+    setRuleDraft(addRootCondition);
+    scrollRuleEditorToBottom();
+  }
+
+  function addRootConditionGroupAndScroll() {
+    setRuleDraft(addRootConditionGroup);
+    scrollRuleEditorToBottom();
+  }
+
+  function addGroupConditionAndScroll(groupIndex: number) {
+    setRuleDraft((currentDraft) => addGroupCondition(currentDraft, groupIndex));
+    scrollRuleEditorToBottom();
+  }
+
   function startConditionDrag(event: DragEvent<HTMLElement>, source: NotificationDetailConditionDragSource) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", "notification-condition");
@@ -604,7 +638,7 @@ export function NotificationSettingsDialog({
           </div>
 
           <div className="notification-settings-dialog__grid">
-            <section className="notification-settings-dialog__panel">
+            <section className="notification-settings-dialog__panel notification-rule-list-panel">
               <div className="notification-settings-dialog__section-header">
                 <h3>通知ルール一覧</h3>
                 <button className="load-form__button" disabled={isGrandBattlePreparing} type="button" onClick={createNewRule}>
@@ -639,11 +673,14 @@ export function NotificationSettingsDialog({
                         <span className="notification-rule-card__pause-status">保存まで一時停止</span>
                       ) : null}
                     </button>
-                    <div className="notification-rule-card__actions">
-                      <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => selectRule(rule)}>編集</button>
-                      <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => duplicateRule(rule)}>複製</button>
-                      <button type="button" onClick={() => void deleteRule(rule)}>削除</button>
-                    </div>
+                    <details className="notification-rule-card__actions">
+                      <summary aria-label={`${rule.name}の操作`}>...</summary>
+                      <div className="notification-rule-card__actions-menu">
+                        <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => selectRule(rule)}>編集</button>
+                        <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => duplicateRule(rule)}>複製</button>
+                        <button type="button" onClick={() => void deleteRule(rule)}>削除</button>
+                      </div>
+                    </details>
                   </article>
                 ))}
               </div>
@@ -651,7 +688,7 @@ export function NotificationSettingsDialog({
 
             <section className="notification-rule-workspace">
               <div className="notification-rule-workspace__columns">
-            <section className="notification-settings-dialog__panel notification-rule-editor">
+            <section className="notification-settings-dialog__panel notification-rule-editor" ref={ruleEditorScrollRef}>
               {!isRuleEditorVisible ? (
                 isGrandBattlePreparing ? (
                   <div className="notification-rule-editor__empty-state">
@@ -817,7 +854,7 @@ export function NotificationSettingsDialog({
                         </select>
                         <span>{"\u6761\u4ef6\u30b0\u30eb\u30fc\u30d7"}{nodeIndex + 1}</span>
                         <small>{conditionNode.operator === "AND" ? "\u3059\u3079\u3066\u306e\u6761\u4ef6\u306b\u4e00\u81f4" : "\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u306b\u4e00\u81f4"}</small>
-                        <button type="button" onClick={() => setRuleDraft((currentDraft) => addGroupCondition(currentDraft, nodeIndex))}>
+                        <button type="button" onClick={() => addGroupConditionAndScroll(nodeIndex)}>
                           {"\uff0b \u6761\u4ef6\u8ffd\u52a0"}
                         </button>
                         <button type="button" onClick={() => setRuleDraft((currentDraft) => removeRootConditionNode(currentDraft, nodeIndex))}>
@@ -901,10 +938,10 @@ export function NotificationSettingsDialog({
                 <DropIndicator isActive={isRootDropTarget(dropTarget, ruleDraft.detailConditions.children.length)} />
               </div>
               <div className="notification-rule-editor__condition-actions">
-                <button type="button" onClick={() => setRuleDraft(addRootCondition)}>
+                <button type="button" onClick={addRootConditionAndScroll}>
                   {"\uff0b \u6761\u4ef6\u3092\u8ffd\u52a0"}
                 </button>
-                <button type="button" onClick={() => setRuleDraft(addRootConditionGroup)}>
+                <button type="button" onClick={addRootConditionGroupAndScroll}>
                   {"\uff0b \u30b0\u30eb\u30fc\u30d7\u3092\u8ffd\u52a0"}
                 </button>
               </div>
@@ -1037,7 +1074,7 @@ export function NotificationSettingsDialog({
                     <div className="notification-rule-editor__variables" aria-label="利用できる変数">
                       {NOTIFICATION_TEMPLATE_VARIABLES.map((variableName) => (
                         <button key={variableName} type="button" onClick={() => insertVariable(variableName)}>
-                          {variableName}
+                          {createTemplateVariableLabel(variableName)}
                         </button>
                       ))}
                     </div>
@@ -1387,6 +1424,10 @@ function getDefaultDetailConditionOperator(
 
 function getDetailConditionFieldLabel(field: NotificationDetailConditionField): string {
   return field === "defenseCount" ? "\u9632\u885b\u6570" : "\u4fb5\u653b\u6570";
+}
+
+function createTemplateVariableLabel(variableName: string): string {
+  return variableName.startsWith("{") && variableName.endsWith("}") ? variableName.slice(1, -1) : variableName;
 }
 
 function getDropIndex(event: DragEvent<HTMLElement>, itemIndex: number): number {

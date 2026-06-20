@@ -736,6 +736,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       expect(document.body.textContent).toContain("通知ルールを選択してください");
     });
     expect(document.body.textContent).not.toContain("通知ルール編集");
+    expect(document.querySelector(".notification-rule-card__actions summary")?.textContent).toBe("...");
   });
 
   it("uses the same rule editor for new rules after the empty state", async () => {
@@ -764,6 +765,121 @@ describe("FirebasePhase0App notification settings dialog", () => {
     const editorTopbar = document.querySelector(".notification-rule-editor__topbar");
     expect(editorTopbar?.textContent).toContain("通知ルール新規作成");
     expect(editorTopbar?.querySelector<HTMLInputElement>("input[type='checkbox']")?.checked).toBe(true);
+  });
+
+  it("shows template variable labels without braces but inserts braced variables", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const variableButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__variables button"));
+    expect(variableButtons.map((button) => button.textContent)).toEqual([
+      "拠点名",
+      "侵攻ギルド",
+      "防衛数",
+      "侵攻数",
+      "通知時刻",
+      "通知ルール名"
+    ]);
+
+    const baseNameButton = variableButtons.find((button) => button.textContent === "拠点名");
+    const bodyTextarea = document.querySelector<HTMLTextAreaElement>(".notification-rule-editor__textarea");
+    if (!baseNameButton || !bodyTextarea) {
+      throw new Error("variable button or notification body textarea was not found");
+    }
+
+    await act(async () => {
+      baseNameButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(bodyTextarea.value).toContain("{拠点名}");
+  });
+
+  it("scrolls the condition editor to the bottom after adding conditions or groups", async () => {
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+
+    try {
+      await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+      await openNotificationSettings();
+
+      const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+        (candidate) => candidate.textContent === "新規作成"
+      );
+      if (!newRuleButton) {
+        throw new Error("new rule button was not found");
+      }
+
+      await act(async () => {
+        newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      const ruleEditor = document.querySelector<HTMLElement>(".notification-rule-editor");
+      const rootActionButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__condition-actions button"));
+      const addConditionButton = rootActionButtons.find(
+        (candidate) => candidate.textContent === "＋ 条件を追加"
+      );
+      const addGroupButton = rootActionButtons.find(
+        (candidate) => candidate.textContent === "＋ グループを追加"
+      );
+      if (!ruleEditor || !addConditionButton || !addGroupButton) {
+        throw new Error("rule editor or root add button was not found");
+      }
+
+      Object.defineProperty(ruleEditor, "scrollHeight", { configurable: true, value: 1200 });
+
+      await act(async () => {
+        addConditionButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(ruleEditor.scrollTop).toBe(1200);
+
+      ruleEditor.scrollTop = 0;
+      Object.defineProperty(ruleEditor, "scrollHeight", { configurable: true, value: 1400 });
+
+      await act(async () => {
+        addGroupButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(ruleEditor.scrollTop).toBe(1400);
+
+      const addGroupConditionButton = Array.from(
+        document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__condition-group-header button")
+      ).find((candidate) => candidate.textContent === "＋ 条件追加");
+      if (!addGroupConditionButton) {
+        throw new Error("group add condition button was not found");
+      }
+
+      ruleEditor.scrollTop = 0;
+      Object.defineProperty(ruleEditor, "scrollHeight", { configurable: true, value: 1600 });
+
+      await act(async () => {
+        addGroupConditionButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(ruleEditor.scrollTop).toBe(1600);
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    }
   });
 
   it("keeps the Grand Battle tab visible but blocks rule editing while it is preparing", async () => {
