@@ -761,6 +761,47 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).toContain("有効");
   });
 
+  it("keeps the Grand Battle tab visible but blocks rule editing while it is preparing", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ battleType: "grandBattle", id: "gb-rule-1", name: "Grand Rule" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const grandBattleTab = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__tab")).find(
+      (candidate) => candidate.textContent === "Grand Battle"
+    );
+    if (!grandBattleTab) {
+      throw new Error("Grand Battle tab was not found");
+    }
+
+    await act(async () => {
+      grandBattleTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("Grand Battle通知設定は準備中です");
+    expect(document.body.textContent).toContain("Grand Rule");
+    expect(document.body.textContent).not.toContain("通知ルール編集");
+    expect(
+      Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__section-header .load-form__button")).some(
+        (candidate) => candidate.disabled
+      )
+    ).toBe(true);
+  });
+
   it("shows the edit dirty bar and restores the saved rule when discarded", async () => {
     await renderApp(
       "/",

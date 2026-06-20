@@ -139,6 +139,7 @@ export function NotificationSettingsDialog({
   const previewTitle = applyNotificationTemplate(ruleDraft.message.titleTemplate);
   const previewBody = applyNotificationTemplate(ruleDraft.message.bodyTemplate);
   const shouldShowNonAttackingTargetWarning = hasNonAttackingTargetWarning(ruleDraft.detailConditions);
+  const isGrandBattlePreparing = activeBattleType === "grandBattle";
   const isRuleEditorVisible = ruleEditorMode !== "empty";
   const ruleEditorTitle = ruleEditorMode === "creating" ? "通知ルール新規作成" : "通知ルール編集";
   const isRuleDraftDirty =
@@ -218,6 +219,18 @@ export function NotificationSettingsDialog({
   }
 
   function selectRule(rule: NotificationRule) {
+    if (rule.battleType === "grandBattle") {
+      setSelectedRuleId(null);
+      setRuleEditorMode("empty");
+      setRuleDraft(createDefaultRuleDraft(activeBattleType));
+      setSavedRuleDraft(null);
+      setRuleError(null);
+      setMessage(null);
+      setDragSource(null);
+      setDropTarget(null);
+      return;
+    }
+
     const nextDraft = createRuleDraft(rule);
     setSelectedRuleId(rule.id);
     setRuleEditorMode("editing");
@@ -231,6 +244,10 @@ export function NotificationSettingsDialog({
   }
 
   function createNewRule() {
+    if (isGrandBattlePreparing) {
+      return;
+    }
+
     setSelectedRuleId(null);
     setRuleEditorMode("creating");
     setRuleDraft(createDefaultRuleDraft(activeBattleType));
@@ -243,6 +260,10 @@ export function NotificationSettingsDialog({
   }
 
   function duplicateRule(rule: NotificationRule) {
+    if (rule.battleType === "grandBattle" || isGrandBattlePreparing) {
+      return;
+    }
+
     setSelectedRuleId(null);
     setRuleEditorMode("creating");
     setRuleDraft({
@@ -504,7 +525,7 @@ export function NotificationSettingsDialog({
             <section className="notification-settings-dialog__panel">
               <div className="notification-settings-dialog__section-header">
                 <h3>通知ルール一覧</h3>
-                <button className="load-form__button" type="button" onClick={createNewRule}>
+                <button className="load-form__button" disabled={isGrandBattlePreparing} type="button" onClick={createNewRule}>
                   新規ルール追加
                 </button>
               </div>
@@ -518,7 +539,12 @@ export function NotificationSettingsDialog({
                     className={rule.id === selectedRuleId ? "notification-rule-card is-selected" : "notification-rule-card"}
                     key={rule.id}
                   >
-                    <button className="notification-rule-card__main" type="button" onClick={() => selectRule(rule)}>
+                    <button
+                      className="notification-rule-card__main"
+                      disabled={rule.battleType === "grandBattle"}
+                      type="button"
+                      onClick={() => selectRule(rule)}
+                    >
                       <span className="notification-rule-card__title">{rule.name}</span>
                       <span className={rule.enabled ? "notification-rule-card__status is-enabled" : "notification-rule-card__status"}>
                         {rule.enabled ? "有効" : "無効"}
@@ -529,8 +555,8 @@ export function NotificationSettingsDialog({
                       ) : null}
                     </button>
                     <div className="notification-rule-card__actions">
-                      <button type="button" onClick={() => selectRule(rule)}>編集</button>
-                      <button type="button" onClick={() => duplicateRule(rule)}>複製</button>
+                      <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => selectRule(rule)}>編集</button>
+                      <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => duplicateRule(rule)}>複製</button>
                       <button type="button" onClick={() => void deleteRule(rule)}>削除</button>
                     </div>
                   </article>
@@ -540,15 +566,24 @@ export function NotificationSettingsDialog({
 
             <section className="notification-settings-dialog__panel notification-rule-editor">
               {!isRuleEditorVisible ? (
-                <div className="notification-rule-editor__empty-state">
-                  <h3>通知ルールを選択してください</h3>
-                  <p className="notification-settings-dialog__empty">
-                    既存ルールを編集するか、新規作成から通知条件を設定できます。
-                  </p>
-                  <button className="load-form__button" type="button" onClick={createNewRule}>
-                    新規作成
-                  </button>
-                </div>
+                isGrandBattlePreparing ? (
+                  <div className="notification-rule-editor__empty-state">
+                    <h3>{"Grand Battle\u901a\u77e5\u8a2d\u5b9a\u306f\u6e96\u5099\u4e2d\u3067\u3059"}</h3>
+                    <p className="notification-settings-dialog__empty">
+                      {"KOO\u5074\u306eGrand Battle v2\u5224\u5b9a\u5bfe\u5fdc\u5f8c\u306b\u4fdd\u5b58\u3067\u304d\u308b\u3088\u3046\u306b\u3057\u307e\u3059\u3002"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="notification-rule-editor__empty-state">
+                    <h3>{"\u901a\u77e5\u30eb\u30fc\u30eb\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044"}</h3>
+                    <p className="notification-settings-dialog__empty">
+                      {"\u65e2\u5b58\u30eb\u30fc\u30eb\u3092\u7de8\u96c6\u3059\u308b\u304b\u3001\u65b0\u898f\u4f5c\u6210\u304b\u3089\u901a\u77e5\u6761\u4ef6\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059\u3002"}
+                    </p>
+                    <button className="load-form__button" type="button" onClick={createNewRule}>
+                      {"\u65b0\u898f\u4f5c\u6210"}
+                    </button>
+                  </div>
+                )
               ) : (
                 <>
               <div className="notification-settings-dialog__section-header">
