@@ -33,6 +33,7 @@ import {
   getNotificationSettings,
   saveNotificationDestination,
   saveNotificationRule,
+  syncGuildBattleGuildCandidates,
   suspendNotificationRule
 } from "./notificationSettingsFunctionsRepository";
 import type { NotificationSettingsRole } from "./types";
@@ -66,6 +67,7 @@ interface FirebasePhase0AppProps {
   readonly verifyGuildShareAccess?: typeof verifyGuildShareAccess;
   readonly saveNotificationDestination?: typeof saveNotificationDestination;
   readonly saveNotificationRule?: typeof saveNotificationRule;
+  readonly syncGuildBattleGuildCandidates?: typeof syncGuildBattleGuildCandidates;
   readonly suspendNotificationRule?: typeof suspendNotificationRule;
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly subscribeToAuthState?: typeof subscribeToAuthState;
@@ -84,6 +86,7 @@ export function FirebasePhase0App({
   verifyGuildShareAccess: verifyShareAccess = verifyGuildShareAccess,
   saveNotificationDestination: saveNotificationDestinationForDialog = saveNotificationDestination,
   saveNotificationRule: saveNotificationRuleForDialog = saveNotificationRule,
+  syncGuildBattleGuildCandidates: syncGuildBattleGuildCandidatesForDialog = syncGuildBattleGuildCandidates,
   suspendNotificationRule: suspendNotificationRuleForDialog = suspendNotificationRule,
   loadSnapshot = loadLocalGvgSnapshot,
   subscribeToAuthState: subscribeAuthState = subscribeToAuthState
@@ -236,6 +239,7 @@ export function FirebasePhase0App({
             role={notificationSettingsContext.role}
             saveNotificationDestination={saveNotificationDestinationForDialog}
             saveNotificationRule={saveNotificationRuleForDialog}
+            syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidatesForDialog}
             suspendNotificationRule={suspendNotificationRuleForDialog}
             targetGuildWorld={notificationSettingsContext.targetGuildWorld}
             onClose={() => setIsNotificationSettingsOpen(false)}

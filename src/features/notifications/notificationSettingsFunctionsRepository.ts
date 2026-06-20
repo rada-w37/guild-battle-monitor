@@ -39,6 +39,18 @@ export interface SaveNotificationDestinationRequest {
   readonly destination: NotificationDestinationInput;
 }
 
+export interface GuildBattleGuildCandidate {
+  readonly guildId: string;
+  readonly guildName: string;
+  readonly rank: number;
+}
+
+export interface SyncGuildBattleGuildCandidatesOutput {
+  readonly worldId: number;
+  readonly candidates: readonly GuildBattleGuildCandidate[];
+  readonly syncedAt?: unknown;
+}
+
 export async function getNotificationSettings(input: NotificationSettingsRequest): Promise<NotificationSettings> {
   const result = await callFunction("getNotificationSettings", input);
   return createNotificationSettings(result);
@@ -65,6 +77,13 @@ export async function saveNotificationDestination(
 ): Promise<NotificationDestination> {
   const result = await callFunction("saveNotificationDestination", input);
   return createNotificationDestination(result);
+}
+
+export async function syncGuildBattleGuildCandidates(
+  input: NotificationSettingsRequest
+): Promise<SyncGuildBattleGuildCandidatesOutput> {
+  const result = await callFunction("syncGuildBattleGuildCandidates", input);
+  return createSyncGuildBattleGuildCandidatesOutput(result);
 }
 
 async function callFunction(name: string, input: unknown): Promise<unknown> {
@@ -148,6 +167,35 @@ function createMention(data: unknown): NotificationRule["message"]["mention"] {
   }
 
   return { type: "none" };
+}
+
+function createSyncGuildBattleGuildCandidatesOutput(data: unknown): SyncGuildBattleGuildCandidatesOutput {
+  if (!isPlainObject(data) || typeof data.worldId !== "number" || !Array.isArray(data.candidates)) {
+    throw new Error("対象ギルド候補の形が不正です。");
+  }
+
+  return {
+    worldId: data.worldId,
+    candidates: data.candidates.map(createGuildBattleGuildCandidate),
+    syncedAt: data.syncedAt
+  };
+}
+
+function createGuildBattleGuildCandidate(data: unknown): GuildBattleGuildCandidate {
+  if (
+    !isPlainObject(data) ||
+    typeof data.guildId !== "string" ||
+    typeof data.guildName !== "string" ||
+    typeof data.rank !== "number"
+  ) {
+    throw new Error("対象ギルド候補の形が不正です。");
+  }
+
+  return {
+    guildId: data.guildId,
+    guildName: data.guildName,
+    rank: data.rank
+  };
 }
 
 function createTemporarySuspension(data: unknown): NotificationRuleTemporarySuspension {

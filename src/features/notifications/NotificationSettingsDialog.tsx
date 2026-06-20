@@ -9,8 +9,10 @@ import {
   getNotificationSettings as getNotificationSettingsDefault,
   saveNotificationDestination as saveNotificationDestinationDefault,
   saveNotificationRule as saveNotificationRuleDefault,
+  syncGuildBattleGuildCandidates as syncGuildBattleGuildCandidatesDefault,
   suspendNotificationRule as suspendNotificationRuleDefault,
   type DeleteNotificationRuleRequest,
+  type GuildBattleGuildCandidate,
   type NotificationSettingsRequest,
   type SaveNotificationDestinationRequest,
   type SaveNotificationRuleRequest,
@@ -52,6 +54,7 @@ interface NotificationSettingsDialogProps {
   readonly deleteNotificationRule?: typeof deleteNotificationRuleDefault;
   readonly suspendNotificationRule?: typeof suspendNotificationRuleDefault;
   readonly saveNotificationDestination?: typeof saveNotificationDestinationDefault;
+  readonly syncGuildBattleGuildCandidates?: typeof syncGuildBattleGuildCandidatesDefault;
   readonly targetGuildWorld?: number | null;
   readonly onClose: () => void;
 }
@@ -76,6 +79,7 @@ export function NotificationSettingsDialog({
   deleteNotificationRule = deleteNotificationRuleDefault,
   suspendNotificationRule = suspendNotificationRuleDefault,
   saveNotificationDestination = saveNotificationDestinationDefault,
+  syncGuildBattleGuildCandidates = syncGuildBattleGuildCandidatesDefault,
   targetGuildWorld = null,
   onClose
 }: NotificationSettingsDialogProps) {
@@ -91,6 +95,8 @@ export function NotificationSettingsDialog({
   const [error, setError] = useState<string | null>(null);
   const [ruleError, setRuleError] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
+  const [targetGuildCandidates, setTargetGuildCandidates] = useState<readonly GuildBattleGuildCandidate[]>([]);
+  const [targetGuildCandidateStatus, setTargetGuildCandidateStatus] = useState<"idle" | "loading" | "error">("idle");
   const [suspendedRuleIds, setSuspendedRuleIds] = useState<readonly string[]>([]);
   const [pendingSuspensionRuleId, setPendingSuspensionRuleId] = useState<string | null>(null);
   const [dragSource, setDragSource] = useState<NotificationDetailConditionDragSource | null>(null);
@@ -148,6 +154,37 @@ export function NotificationSettingsDialog({
     ruleEditorMode === "editing" && savedRuleDraft !== null && serializeRuleDraft(ruleDraft) !== serializeRuleDraft(savedRuleDraft);
   const shouldShowRuleActionBar = ruleEditorMode === "creating" || isRuleDraftDirty;
   const isSuspendingSelectedRule = selectedRuleId !== null && pendingSuspensionRuleId === selectedRuleId;
+
+  useEffect(() => {
+    if (activeBattleType !== "guildBattle" || targetGuildWorld === null) {
+      setTargetGuildCandidates([]);
+      setTargetGuildCandidateStatus("idle");
+      return;
+    }
+
+    let isDisposed = false;
+    setTargetGuildCandidateStatus("loading");
+
+    void syncGuildBattleGuildCandidates(request)
+      .then((result) => {
+        if (isDisposed) {
+          return;
+        }
+
+        setTargetGuildCandidates(result.candidates);
+        setTargetGuildCandidateStatus("idle");
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setTargetGuildCandidates([]);
+          setTargetGuildCandidateStatus("error");
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [activeBattleType, request, syncGuildBattleGuildCandidates, targetGuildWorld]);
 
   useEffect(() => {
     if (
@@ -660,16 +697,32 @@ export function NotificationSettingsDialog({
                 </span>
                 <select
                   className="field__input field__input--wide"
-                  disabled={targetGuildWorld === null}
-                  value=""
-                  onChange={() => {}}
+                  disabled={targetGuildWorld === null || targetGuildCandidateStatus === "loading"}
+                  value={ruleDraft.targetGuildIds[0] ?? ""}
+                  onChange={(event) => {
+                    const targetGuildId = event.target.value;
+                    setRuleDraft((currentDraft) => ({
+                      ...currentDraft,
+                      targetGuildIds: targetGuildId.length === 0 ? [] : [targetGuildId]
+                    }));
+                  }}
                 >
                   <option value="">{"\u672a\u6307\u5b9a\uff08\u5168\u30ae\u30eb\u30c9\u5bfe\u8c61\uff09"}</option>
+                  {targetGuildCandidates.map((candidate) => (
+                    <option key={candidate.guildId} value={candidate.guildId}>
+                      {candidate.guildName}
+                    </option>
+                  ))}
                 </select>
               </label>
               {targetGuildWorld === null ? (
                 <p className="notification-settings-dialog__note">
                   {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u3092\u53d6\u5f97\u3059\u308b\u306b\u306f\u3001\u6240\u5c5e\u30ae\u30eb\u30c9\u8a2d\u5b9a\u3067\u30ef\u30fc\u30eb\u30c9\u3092\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
+                </p>
+              ) : null}
+              {targetGuildCandidateStatus === "error" ? (
+                <p className="notification-settings-dialog__note">
+                  {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002"}
                 </p>
               ) : null}
 

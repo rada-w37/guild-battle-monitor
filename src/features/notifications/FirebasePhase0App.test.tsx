@@ -829,6 +829,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(targetGuildSelect).not.toBeUndefined();
     expect(targetGuildSelect?.disabled).toBe(false);
     expect(document.body.textContent).toContain("未指定の場合は全ギルドが対象です");
+    expect(document.body.textContent).toContain("Alpha連盟");
   });
 
   it("disables the target guild field when the target guild world is not available", async () => {
@@ -1141,6 +1142,15 @@ async function renderApp(
       expiresAt: "2026-06-20T13:00:00.000Z",
       suspendedBy: { uid: "owner-uid" }
     })
+  ),
+  syncGuildBattleGuildCandidates = vi.fn(() =>
+    Promise.resolve({
+      worldId: 1037,
+      candidates: [
+        { guildId: "guild-a", guildName: "Alpha連盟", rank: 1 },
+        { guildId: "guild-b", guildName: "Bravo隊", rank: 2 }
+      ]
+    })
   )
 ) {
   const { FirebasePhase0App } = await import("./FirebasePhase0App");
@@ -1160,6 +1170,7 @@ async function renderApp(
         loadSnapshot={loadSnapshot}
         saveNotificationDestination={saveNotificationDestination}
         saveNotificationRule={saveNotificationRule}
+        syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidates}
         suspendNotificationRule={suspendNotificationRule}
         saveOwnerGuildShare={saveOwnerShare}
         saveOwnedGuildProfile={saveProfile}
