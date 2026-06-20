@@ -638,6 +638,8 @@ export function NotificationSettingsDialog({
               </div>
             </section>
 
+            <section className="notification-rule-workspace">
+              <div className="notification-rule-workspace__columns">
             <section className="notification-settings-dialog__panel notification-rule-editor">
               {!isRuleEditorVisible ? (
                 isGrandBattlePreparing ? (
@@ -998,7 +1000,7 @@ export function NotificationSettingsDialog({
               </div>
               {ruleError !== null ? <p className="firebase-message firebase-message--error">{ruleError}</p> : null}
               {shouldShowRuleActionBar ? (
-                <div className="notification-rule-editor__action-bar">
+                <div className="notification-rule-editor__action-bar notification-rule-editor__action-bar--inline">
                   <p>
                     {ruleEditorMode === "creating"
                       ? "作成前の通知ルールです。"
@@ -1027,8 +1029,15 @@ export function NotificationSettingsDialog({
               <h3>5 通知プレビュー</h3>
               {isRuleEditorVisible ? (
                 <div className="notification-preview">
-                  <div className="notification-preview__username">{previewUsername}</div>
-                  {previewMention.length > 0 ? <div className="notification-preview__mention">{previewMention}</div> : null}
+                  <div className="notification-preview__header">
+                    <div className="notification-preview__avatar" aria-hidden="true">
+                      Discord
+                    </div>
+                    <div>
+                      <div className="notification-preview__username">{previewUsername}</div>
+                      {previewMention.length > 0 ? <div className="notification-preview__mention">{previewMention}</div> : null}
+                    </div>
+                  </div>
                   <div className="notification-preview__embed">
                     <strong>{previewTitle}</strong>
                     <p>{previewBody}</p>
@@ -1039,6 +1048,30 @@ export function NotificationSettingsDialog({
               )}
               {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
               {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
+            </section>
+              </div>
+              {shouldShowRuleActionBar ? (
+                <div className="notification-rule-workspace__action-bar">
+                  <p>
+                    {ruleEditorMode === "creating"
+                      ? "\u4f5c\u6210\u524d\u306e\u901a\u77e5\u30eb\u30fc\u30eb\u3067\u3059\u3002"
+                      : "\u4fdd\u5b58\u3055\u308c\u3066\u3044\u306a\u3044\u5909\u66f4\u304c\u3042\u308a\u307e\u3059\u3002\u4fdd\u5b58\u307e\u3067\u901a\u77e5\u306f\u4e00\u6642\u505c\u6b62\u3055\u308c\u3066\u3044\u307e\u3059\u3002"}
+                  </p>
+                  <div className="notification-rule-editor__action-buttons">
+                    <button type="button" onClick={discardRuleChanges}>
+                      {ruleEditorMode === "creating" ? "\u7834\u68c4" : "\u7834\u68c4\u3057\u3066\u623b\u3059"}
+                    </button>
+                    <button
+                      className="load-form__button"
+                      disabled={status !== "idle" || isSuspendingSelectedRule}
+                      type="button"
+                      onClick={() => void saveRule()}
+                    >
+                      {ruleEditorMode === "creating" ? "\u4f5c\u6210" : "\u4fdd\u5b58"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </section>
           </div>
         </div>
