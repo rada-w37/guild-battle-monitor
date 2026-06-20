@@ -634,6 +634,20 @@ select {
   justify-content: flex-end;
 }
 
+.notification-rule-editor__topbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.notification-rule-editor__topbar h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .notification-rule-editor__empty-state {
   display: grid;
   min-height: 260px;

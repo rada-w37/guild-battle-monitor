@@ -760,6 +760,10 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).toContain("破棄");
     expect(document.body.textContent).toContain("作成");
     expect(document.body.textContent).toContain("有効");
+
+    const editorTopbar = document.querySelector(".notification-rule-editor__topbar");
+    expect(editorTopbar?.textContent).toContain("通知ルール新規作成");
+    expect(editorTopbar?.querySelector<HTMLInputElement>("input[type='checkbox']")?.checked).toBe(true);
   });
 
   it("keeps the Grand Battle tab visible but blocks rule editing while it is preparing", async () => {

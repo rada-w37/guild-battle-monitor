@@ -588,7 +588,7 @@ export function NotificationSettingsDialog({
                 )
               ) : (
                 <>
-              <div className="notification-settings-dialog__section-header">
+              <div className="notification-rule-editor__topbar">
                 <h3>{ruleEditorTitle}</h3>
                 <div className="notification-rule-editor__header-actions">
                   <label className="notification-settings-dialog__checkbox">
