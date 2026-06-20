@@ -564,6 +564,40 @@ select {
   background: var(--app-surface-muted);
 }
 
+.notification-settings-dialog__destination {
+  width: fit-content;
+  justify-self: end;
+  min-width: min(100%, 300px);
+}
+
+.notification-settings-dialog__destination-summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.notification-settings-dialog__destination-status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--app-text-muted);
+  background: var(--app-surface);
+  font-size: 0.78rem;
+}
+
+.notification-settings-dialog__destination-status.is-enabled {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.notification-settings-dialog__destination-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
 .notification-settings-dialog__section-header {
   display: flex;
   gap: 12px;

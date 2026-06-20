@@ -530,13 +530,20 @@ export function NotificationSettingsDialog({
 
         <div className="notification-settings-dialog__body">
           {canSaveDestination ? (
-            <section className="notification-settings-dialog__destination">
-              <div className="notification-settings-dialog__section-header">
-                <h3>Discord Webhook設定</h3>
-                <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveDestination()}>
-                  保存
-                </button>
-              </div>
+            <details className="notification-settings-dialog__destination">
+              <summary className="notification-settings-dialog__destination-summary">
+                <span>Discord Webhook設定</span>
+                <span className={destinationDraft.enabled ? "notification-settings-dialog__destination-status is-enabled" : "notification-settings-dialog__destination-status"}>
+                  {destinationDraft.enabled ? "有効" : "無効"}
+                </span>
+              </summary>
+              <div className="notification-settings-dialog__destination-body">
+                <div className="notification-settings-dialog__section-header">
+                  <h3>Discord Webhook設定</h3>
+                  <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveDestination()}>
+                    保存
+                  </button>
+                </div>
               <label className="notification-settings-dialog__checkbox">
                 <input
                   checked={destinationDraft.enabled}
@@ -575,7 +582,8 @@ export function NotificationSettingsDialog({
               </label>
               <p className="notification-settings-dialog__note">Webhook URLはguild ownerのみ表示・編集できます。</p>
               {destinationError !== null ? <p className="firebase-message firebase-message--error">{destinationError}</p> : null}
-            </section>
+              </div>
+            </details>
           ) : null}
 
           <div className="notification-settings-dialog__tabs" role="tablist" aria-label="通知対象">
