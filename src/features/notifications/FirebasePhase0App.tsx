@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFirebaseAppCapabilities } from "../../app/appCapabilities";
 import { getFirebasePermissionsOverride, useAppRoute, type AppRoute } from "../../app/appMode";
+import { featureFlags } from "../../config/featureFlags";
 import { signInWithGoogle, signOutCurrentUser, subscribeToAuthState } from "../auth/authService";
 import type { AuthState } from "../auth/types";
 import { createGuildShareUrl } from "../guildBattle/guildShare";
@@ -31,8 +32,10 @@ import { NotificationSettingsDialog } from "./NotificationSettingsDialog";
 import {
   deleteNotificationRule,
   getNotificationSettings,
+  getNotificationSettingsV2,
   saveNotificationDestination,
   saveNotificationRule,
+  saveNotificationRuleV2,
   syncGuildBattleGuildCandidates,
   suspendNotificationRule
 } from "./notificationSettingsFunctionsRepository";
@@ -58,6 +61,7 @@ interface FirebasePhase0AppProps {
   readonly loadOwnedGuildProfile?: typeof loadOwnedGuildProfile;
   readonly getOwnerGuildShare?: typeof getOwnerGuildShare;
   readonly getNotificationSettings?: typeof getNotificationSettings;
+  readonly getNotificationSettingsV2?: typeof getNotificationSettingsV2;
   readonly loadKoObserverRunMeta?: () => Promise<KoObserverRunMeta | null>;
   readonly loadKoGuildKoTotals?: () => Promise<readonly KoGuildKoTotal[]>;
   readonly subscribeKoGuildKoTotals?: KoGuildKoTotalsSubscriber;
@@ -67,16 +71,19 @@ interface FirebasePhase0AppProps {
   readonly verifyGuildShareAccess?: typeof verifyGuildShareAccess;
   readonly saveNotificationDestination?: typeof saveNotificationDestination;
   readonly saveNotificationRule?: typeof saveNotificationRule;
+  readonly saveNotificationRuleV2?: typeof saveNotificationRuleV2;
   readonly syncGuildBattleGuildCandidates?: typeof syncGuildBattleGuildCandidates;
   readonly suspendNotificationRule?: typeof suspendNotificationRule;
   readonly loadSnapshot?: typeof loadLocalGvgSnapshot;
   readonly subscribeToAuthState?: typeof subscribeToAuthState;
+  readonly useNotificationRuleV2?: boolean;
 }
 
 export function FirebasePhase0App({
   loadOwnedGuildProfile: loadProfile = loadOwnedGuildProfile,
   getOwnerGuildShare: getOwnerShare = getOwnerGuildShare,
   getNotificationSettings: getNotificationSettingsForDialog = getNotificationSettings,
+  getNotificationSettingsV2: getNotificationSettingsV2ForDialog = getNotificationSettingsV2,
   loadKoObserverRunMeta: loadKoMeta = loadKoObserverRunMeta,
   loadKoGuildKoTotals: loadKoTotals = loadKoGuildKoTotals,
   subscribeKoGuildKoTotals: subscribeKoTotals = subscribeKoGuildKoTotals,
@@ -86,10 +93,12 @@ export function FirebasePhase0App({
   verifyGuildShareAccess: verifyShareAccess = verifyGuildShareAccess,
   saveNotificationDestination: saveNotificationDestinationForDialog = saveNotificationDestination,
   saveNotificationRule: saveNotificationRuleForDialog = saveNotificationRule,
+  saveNotificationRuleV2: saveNotificationRuleV2ForDialog = saveNotificationRuleV2,
   syncGuildBattleGuildCandidates: syncGuildBattleGuildCandidatesForDialog = syncGuildBattleGuildCandidates,
   suspendNotificationRule: suspendNotificationRuleForDialog = suspendNotificationRule,
   loadSnapshot = loadLocalGvgSnapshot,
-  subscribeToAuthState: subscribeAuthState = subscribeToAuthState
+  subscribeToAuthState: subscribeAuthState = subscribeToAuthState,
+  useNotificationRuleV2 = featureFlags.notificationRuleV2
 }: FirebasePhase0AppProps = {}) {
   const appRoute = useAppRoute();
   const appMode = appRoute?.mode ?? "owner";
@@ -235,13 +244,16 @@ export function FirebasePhase0App({
           <NotificationSettingsDialog
             deleteNotificationRule={deleteNotificationRuleForDialog}
             getNotificationSettings={getNotificationSettingsForDialog}
+            getNotificationSettingsV2={getNotificationSettingsV2ForDialog}
             request={notificationSettingsContext.request}
             role={notificationSettingsContext.role}
             saveNotificationDestination={saveNotificationDestinationForDialog}
             saveNotificationRule={saveNotificationRuleForDialog}
+            saveNotificationRuleV2={saveNotificationRuleV2ForDialog}
             syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidatesForDialog}
             suspendNotificationRule={suspendNotificationRuleForDialog}
             targetGuildWorld={notificationSettingsContext.targetGuildWorld}
+            useRuleV2Storage={useNotificationRuleV2}
             onClose={() => setIsNotificationSettingsOpen(false)}
           />
         ) : undefined

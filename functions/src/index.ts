@@ -7,6 +7,7 @@ import {
 import {
   deleteNotificationRule,
   getNotificationSettings,
+  getNotificationSettingsV2,
   saveNotificationDestination,
   saveNotificationRule,
   saveNotificationRuleV2,
@@ -21,6 +22,7 @@ export {
   deleteNotificationRule,
   dispatchNotificationRequest,
   getNotificationSettings,
+  getNotificationSettingsV2,
   getOwnerGuildShare,
   saveNotificationDestination,
   saveNotificationRule,

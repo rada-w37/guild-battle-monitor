@@ -8,7 +8,8 @@ import type {
   NotificationRuleInput,
   NotificationRuleV2,
   NotificationRuleV2Input,
-  NotificationSettings
+  NotificationSettings,
+  NotificationSettingsV2
 } from "./types";
 
 export interface NotificationSettingsRequest {
@@ -63,6 +64,11 @@ export interface SyncGuildBattleGuildCandidatesOutput {
 export async function getNotificationSettings(input: NotificationSettingsRequest): Promise<NotificationSettings> {
   const result = await callFunction("getNotificationSettings", input);
   return createNotificationSettings(result);
+}
+
+export async function getNotificationSettingsV2(input: NotificationSettingsRequest): Promise<NotificationSettingsV2> {
+  const result = await callFunction("getNotificationSettingsV2", input);
+  return createNotificationSettingsV2(result);
 }
 
 export async function saveNotificationRule(input: SaveNotificationRuleRequest): Promise<NotificationRule> {
@@ -120,6 +126,17 @@ function createNotificationSettings(data: unknown): NotificationSettings {
 
   return {
     rules: data.rules.map(createNotificationRule),
+    ...(data.destination === undefined ? {} : { destination: createNotificationDestination(data.destination) })
+  };
+}
+
+function createNotificationSettingsV2(data: unknown): NotificationSettingsV2 {
+  if (!isPlainObject(data) || !Array.isArray(data.rules)) {
+    throw new Error("notification v2 settings response is invalid");
+  }
+
+  return {
+    rules: data.rules.map(createNotificationRuleV2),
     ...(data.destination === undefined ? {} : { destination: createNotificationDestination(data.destination) })
   };
 }

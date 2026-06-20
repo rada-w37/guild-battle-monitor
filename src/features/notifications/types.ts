@@ -99,4 +99,9 @@ export interface NotificationSettings {
   readonly destination?: NotificationDestination;
 }
 
+export interface NotificationSettingsV2 {
+  readonly rules: readonly NotificationRuleV2[];
+  readonly destination?: NotificationDestination;
+}
+
 export type NotificationSettingsRole = "guildOwner" | "admin";

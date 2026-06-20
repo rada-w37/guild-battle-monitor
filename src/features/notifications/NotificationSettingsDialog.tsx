@@ -7,8 +7,10 @@ import {
 import {
   deleteNotificationRule as deleteNotificationRuleDefault,
   getNotificationSettings as getNotificationSettingsDefault,
+  getNotificationSettingsV2 as getNotificationSettingsV2Default,
   saveNotificationDestination as saveNotificationDestinationDefault,
   saveNotificationRule as saveNotificationRuleDefault,
+  saveNotificationRuleV2 as saveNotificationRuleV2Default,
   syncGuildBattleGuildCandidates as syncGuildBattleGuildCandidatesDefault,
   suspendNotificationRule as suspendNotificationRuleDefault,
   type DeleteNotificationRuleRequest,
@@ -16,6 +18,7 @@ import {
   type NotificationSettingsRequest,
   type SaveNotificationDestinationRequest,
   type SaveNotificationRuleRequest,
+  type SaveNotificationRuleV2Request,
   type SuspendNotificationRuleRequest
 } from "./notificationSettingsFunctionsRepository";
 import {
@@ -38,6 +41,8 @@ import type {
   NotificationDetailConditionGroupOperator,
   NotificationDetailConditionOperator,
   NotificationRule,
+  NotificationRuleV2,
+  NotificationRuleV2Input,
   NotificationSettingsRole
 } from "./types";
 
@@ -50,17 +55,24 @@ interface NotificationSettingsDialogProps {
   readonly request: NotificationSettingsRequest;
   readonly role: NotificationSettingsRole;
   readonly getNotificationSettings?: typeof getNotificationSettingsDefault;
+  readonly getNotificationSettingsV2?: typeof getNotificationSettingsV2Default;
   readonly saveNotificationRule?: typeof saveNotificationRuleDefault;
+  readonly saveNotificationRuleV2?: typeof saveNotificationRuleV2Default;
   readonly deleteNotificationRule?: typeof deleteNotificationRuleDefault;
   readonly suspendNotificationRule?: typeof suspendNotificationRuleDefault;
   readonly saveNotificationDestination?: typeof saveNotificationDestinationDefault;
   readonly syncGuildBattleGuildCandidates?: typeof syncGuildBattleGuildCandidatesDefault;
   readonly targetGuildWorld?: number | null;
+  readonly useRuleV2Storage?: boolean;
   readonly onClose: () => void;
 }
 
 interface RuleDraft extends NotificationRuleV2Draft {
   readonly id?: string;
+}
+
+interface RuleRecord extends RuleDraft {
+  readonly id: string;
 }
 
 interface DestinationDraft {
@@ -75,16 +87,19 @@ export function NotificationSettingsDialog({
   request,
   role,
   getNotificationSettings = getNotificationSettingsDefault,
+  getNotificationSettingsV2 = getNotificationSettingsV2Default,
   saveNotificationRule = saveNotificationRuleDefault,
+  saveNotificationRuleV2 = saveNotificationRuleV2Default,
   deleteNotificationRule = deleteNotificationRuleDefault,
   suspendNotificationRule = suspendNotificationRuleDefault,
   saveNotificationDestination = saveNotificationDestinationDefault,
   syncGuildBattleGuildCandidates = syncGuildBattleGuildCandidatesDefault,
   targetGuildWorld = null,
+  useRuleV2Storage = false,
   onClose
 }: NotificationSettingsDialogProps) {
   const [activeBattleType, setActiveBattleType] = useState<NotificationBattleType>("guildBattle");
-  const [rules, setRules] = useState<readonly NotificationRule[]>([]);
+  const [rules, setRules] = useState<readonly RuleRecord[]>([]);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [ruleEditorMode, setRuleEditorMode] = useState<RuleEditorMode>("empty");
   const [ruleDraft, setRuleDraft] = useState<RuleDraft>(() => createDefaultRuleDraft("guildBattle"));
@@ -108,7 +123,17 @@ export function NotificationSettingsDialog({
     setError(null);
     setMessage(null);
 
-    void getNotificationSettings(request)
+    const settingsPromise = useRuleV2Storage
+      ? getNotificationSettingsV2(request).then((settings) => ({
+          rules: settings.rules.map(createRuleRecordFromV2),
+          destination: settings.destination
+        }))
+      : getNotificationSettings(request).then((settings) => ({
+          rules: settings.rules.map(createRuleRecordFromLegacy),
+          destination: settings.destination
+        }));
+
+    void settingsPromise
       .then((settings) => {
         if (isDisposed) {
           return;
@@ -135,7 +160,7 @@ export function NotificationSettingsDialog({
     return () => {
       isDisposed = true;
     };
-  }, [activeBattleType, getNotificationSettings, request, role]);
+  }, [activeBattleType, getNotificationSettings, getNotificationSettingsV2, request, role, useRuleV2Storage]);
 
   const visibleRules = useMemo(
     () => rules.filter((rule) => rule.battleType === activeBattleType),
@@ -257,7 +282,7 @@ export function NotificationSettingsDialog({
     setRuleError(null);
   }
 
-  function selectRule(rule: NotificationRule) {
+  function selectRule(rule: RuleRecord) {
     if (rule.battleType === "grandBattle") {
       setSelectedRuleId(null);
       setRuleEditorMode("empty");
@@ -298,7 +323,7 @@ export function NotificationSettingsDialog({
     setDropTarget(null);
   }
 
-  function duplicateRule(rule: NotificationRule) {
+  function duplicateRule(rule: RuleRecord) {
     if (rule.battleType === "grandBattle" || isGrandBattlePreparing) {
       return;
     }
@@ -347,11 +372,21 @@ export function NotificationSettingsDialog({
 
     setStatus("saving");
     try {
-      const savedRule = await saveNotificationRule({
-        ...request,
-        ...(selectedRuleId === null ? {} : { ruleId: selectedRuleId }),
-        rule: toRuleInput(ruleDraft)
-      } satisfies SaveNotificationRuleRequest);
+      const savedRule = useRuleV2Storage
+        ? createRuleRecordFromV2(
+            await saveNotificationRuleV2({
+              ...request,
+              ...(selectedRuleId === null ? {} : { ruleId: selectedRuleId }),
+              rule: toRuleV2Input(ruleDraft)
+            } satisfies SaveNotificationRuleV2Request)
+          )
+        : createRuleRecordFromLegacy(
+            await saveNotificationRule({
+              ...request,
+              ...(selectedRuleId === null ? {} : { ruleId: selectedRuleId }),
+              rule: toLegacyRuleInput(ruleDraft)
+            } satisfies SaveNotificationRuleRequest)
+          );
       setRules((currentRules) => {
         const exists = currentRules.some((rule) => rule.id === savedRule.id);
         return exists
@@ -371,7 +406,7 @@ export function NotificationSettingsDialog({
     }
   }
 
-  async function deleteRule(rule: NotificationRule) {
+  async function deleteRule(rule: RuleRecord) {
     if (!window.confirm(`通知ルール「${rule.name}」を削除しますか？`)) {
       return;
     }
@@ -588,7 +623,7 @@ export function NotificationSettingsDialog({
                       <span className={rule.enabled ? "notification-rule-card__status is-enabled" : "notification-rule-card__status"}>
                         {rule.enabled ? "有効" : "無効"}
                       </span>
-                      <span className="notification-rule-card__summary">{createConditionSummary(rule)}</span>
+                      <span className="notification-rule-card__summary">{createRuleConditionSummary(rule)}</span>
                       {rule.id === selectedRuleId && isRuleDraftDirty ? (
                         <span className="notification-rule-card__pause-status">保存まで一時停止</span>
                       ) : null}
@@ -1018,15 +1053,57 @@ function createDefaultRuleDraft(battleType: NotificationBattleType): RuleDraft {
   };
 }
 
-function createRuleDraft(rule: NotificationRule): RuleDraft {
+function createRuleRecordFromLegacy(rule: NotificationRule): RuleRecord {
   return {
     id: rule.id,
     ...createNotificationRuleV2DraftFromLegacy(rule, 0)
   };
 }
 
-function toRuleInput(ruleDraft: RuleDraft) {
+function createRuleRecordFromV2(rule: NotificationRuleV2): RuleRecord {
+  return {
+    ...rule,
+    message: {
+      ...rule.message,
+      mention: { ...rule.message.mention }
+    },
+    schedule: { ...rule.schedule },
+    targetGuildIds: [...rule.targetGuildIds],
+    detailConditions: {
+      ...rule.detailConditions,
+      children: rule.detailConditions.children.map((node) =>
+        node.type === "condition" ? { ...node } : { ...node, children: node.children.map((condition) => ({ ...condition })) }
+      )
+    }
+  };
+}
+
+function createRuleDraft(rule: RuleRecord): RuleDraft {
+  return {
+    ...rule,
+    id: rule.id,
+    message: {
+      ...rule.message,
+      mention: { ...rule.message.mention }
+    },
+    schedule: { ...rule.schedule },
+    targetGuildIds: [...rule.targetGuildIds],
+    detailConditions: {
+      ...rule.detailConditions,
+      children: rule.detailConditions.children.map((node) =>
+        node.type === "condition" ? { ...node } : { ...node, children: node.children.map((condition) => ({ ...condition })) }
+      )
+    }
+  };
+}
+
+function toLegacyRuleInput(ruleDraft: RuleDraft) {
   return createLegacyNotificationRuleInputFromV2Draft(ruleDraft);
+}
+
+function toRuleV2Input(ruleDraft: RuleDraft): NotificationRuleV2Input {
+  const { id: _id, ...input } = ruleDraft;
+  return input;
 }
 
 function serializeRuleDraft(ruleDraft: RuleDraft): string {
@@ -1408,8 +1485,12 @@ function createMentionPreview(mention: NotificationRule["message"]["mention"]): 
   return "";
 }
 
-function createConditionSummary(rule: NotificationRule): string {
-  const defense = rule.conditions.defenseCountMax === null ? "防御未指定" : `防御${rule.conditions.defenseCountMax}以下`;
-  const attack = rule.conditions.attackCountMin === null ? "侵攻未指定" : `侵攻${rule.conditions.attackCountMin}以上`;
-  return `${rule.conditions.startTime} / ${defense} / ${attack}`;
+function createRuleConditionSummary(rule: RuleRecord): string {
+  const firstGroup = rule.detailConditions.children.find((child) => child.type === "group");
+  const conditions = firstGroup?.type === "group" ? firstGroup.children : [];
+  const defenseCondition = conditions.find((condition) => condition.field === "defenseCount" && condition.operator === "<=");
+  const attackCondition = conditions.find((condition) => condition.field === "attackCount" && condition.operator === ">=");
+  const defense = defenseCondition === undefined ? "\u9632\u885b\u672a\u6307\u5b9a" : `\u9632\u885b${defenseCondition.value}\u4ee5\u4e0b`;
+  const attack = attackCondition === undefined ? "\u4fb5\u653b\u672a\u6307\u5b9a" : `\u4fb5\u653b${attackCondition.value}\u4ee5\u4e0a`;
+  return `${rule.schedule.startTime} / ${defense} / ${attack}`;
 }

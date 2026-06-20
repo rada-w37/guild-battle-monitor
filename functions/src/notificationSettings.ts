@@ -134,6 +134,11 @@ interface GetNotificationSettingsOutput {
   readonly destination?: NotificationDestinationOutput;
 }
 
+interface GetNotificationSettingsV2Output {
+  readonly rules: readonly NotificationRuleV2Output[];
+  readonly destination?: NotificationDestinationOutput;
+}
+
 interface NotificationTemporarySuspensionOutput {
   readonly suspendedAt: string;
   readonly expiresAt: string;
@@ -184,6 +189,10 @@ export const getNotificationSettings = onCall({ region: FUNCTION_REGION }, async
   handleGetNotificationSettings(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
+export const getNotificationSettingsV2 = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
+  handleGetNotificationSettingsV2(request.data, createCallableContext(request), createDefaultDependencies())
+);
+
 export const saveNotificationRule = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleSaveNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
 );
@@ -225,6 +234,37 @@ export async function handleGetNotificationSettings(
   const rules = rulesSnapshot.docs.map((ruleSnapshot) =>
     readNotificationRuleDocument(ruleSnapshot.id ?? "", ruleSnapshot.data())
   );
+
+  if (role !== "guildOwner") {
+    return { rules };
+  }
+
+  const destinationSnapshot = await getDestinationRef(dependencies.firestore, payload.guildId).get();
+  const destination = destinationSnapshot.exists
+    ? readNotificationDestinationDocument(destinationSnapshot.data())
+    : undefined;
+
+  return destination === undefined ? { rules } : { rules, destination };
+}
+
+export async function handleGetNotificationSettingsV2(
+  input: unknown,
+  context: CallableContext,
+  dependencies: Dependencies
+): Promise<GetNotificationSettingsV2Output> {
+  const payload = readAuthorizedInput(input);
+  const role = await resolveNotificationSettingsRole(payload, context, dependencies);
+  const rulesSnapshot = await dependencies.firestore
+    .collection(`${GUILD_SHARES_COLLECTION}/${payload.guildId}/${NOTIFICATION_RULES_COLLECTION}`)
+    .get();
+  const rules = rulesSnapshot.docs.flatMap((ruleSnapshot) => {
+    const data = ruleSnapshot.data();
+    if (!shouldReadNotificationRuleV2Document(data)) {
+      return [];
+    }
+
+    return [readNotificationRuleV2Document(ruleSnapshot.id ?? "", data)];
+  });
 
   if (role !== "guildOwner") {
     return { rules };
@@ -881,6 +921,24 @@ function readNotificationRuleDocument(id: string, data: Record<string, unknown> 
   }
 
   const rule = readNotificationRuleInput(data);
+  const createdByRole =
+    data.createdByRole === "guildOwner" || data.createdByRole === "admin" ? data.createdByRole : undefined;
+
+  return {
+    id,
+    ...rule,
+    ...(createdByRole === undefined ? {} : { createdByRole }),
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt
+  };
+}
+
+function readNotificationRuleV2Document(id: string, data: Record<string, unknown> | undefined): NotificationRuleV2Output {
+  if (data === undefined) {
+    throw new HttpsError("failed-precondition", "invalid_notification_rule_v2");
+  }
+
+  const rule = readNotificationRuleV2Input(data);
   const createdByRole =
     data.createdByRole === "guildOwner" || data.createdByRole === "admin" ? data.createdByRole : undefined;
 

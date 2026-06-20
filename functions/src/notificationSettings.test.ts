@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   handleDeleteNotificationRule,
   handleGetNotificationSettings,
+  handleGetNotificationSettingsV2,
   handleSaveNotificationDestination,
   handleSaveNotificationRule,
   handleSaveNotificationRuleV2,
@@ -57,6 +58,40 @@ describe("notification settings callables", () => {
           name: "Admin Rule"
         })
       ]
+    });
+  });
+
+  it("returns only schemaVersion 2 rules from the v2 settings path", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/legacy-rule": createRule({ name: "Legacy Rule" }),
+      "guildShares/guild-1/notificationRules/v2-rule": {
+        ...createRuleV2Input({ name: "V2 Rule", targetGuildIds: ["guild-a"] }),
+        createdAt: "created-at",
+        createdByRole: "guildOwner",
+        updatedAt: "updated-at"
+      },
+      "guildShares/guild-1/notificationDestinations/discord": createDestination({
+        enabled: true,
+        webhookUrl: "https://discord.com/api/webhooks/123/token"
+      })
+    });
+
+    await expect(
+      handleGetNotificationSettingsV2({ guildId: "guild-1" }, { authUid: "owner-uid" }, createDependencies(firestore))
+    ).resolves.toMatchObject({
+      rules: [
+        {
+          id: "v2-rule",
+          schemaVersion: 2,
+          name: "V2 Rule",
+          targetGuildIds: ["guild-a"]
+        }
+      ],
+      destination: {
+        id: "discord",
+        type: "discord_webhook"
+      }
     });
   });
 

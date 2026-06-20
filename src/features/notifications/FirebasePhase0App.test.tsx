@@ -8,7 +8,7 @@ import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSettingsStorage";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
-import type { NotificationDestination, NotificationRule } from "./types";
+import type { NotificationDestination, NotificationRule, NotificationRuleV2, NotificationRuleV2Input } from "./types";
 import { NotificationSettingsDialog } from "./NotificationSettingsDialog";
 
 vi.mock("../auth/authService", () => ({
@@ -832,6 +832,80 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).toContain("Alpha連盟");
   });
 
+  it("uses v2 notification rule storage only when the feature path is enabled", async () => {
+    const getNotificationSettings = vi.fn(() => Promise.resolve({ rules: [] }));
+    const getNotificationSettingsV2 = vi.fn(() => Promise.resolve({ rules: [] }));
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "legacy-rule",
+        ...input.rule
+      })
+    );
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "v2-rule",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      getNotificationSettings,
+      undefined,
+      saveNotificationRule,
+      undefined,
+      undefined,
+      undefined,
+      getNotificationSettingsV2,
+      saveNotificationRuleV2,
+      true
+    );
+    await openNotificationSettings();
+
+    expect(getNotificationSettings).not.toHaveBeenCalled();
+    expect(getNotificationSettingsV2).toHaveBeenCalledWith({ guildId: "saved-guild" });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRule).not.toHaveBeenCalled();
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        schemaVersion: 2,
+        targetGuildIds: [],
+        detailConditions: expect.objectContaining({ operator: "OR" })
+      })
+    });
+  });
+
   it("disables the target guild field when the target guild world is not available", async () => {
     container = document.createElement("div");
     document.body.append(container);
@@ -1151,7 +1225,18 @@ async function renderApp(
         { guildId: "guild-b", guildName: "Bravo隊", rank: 2 }
       ]
     })
-  )
+  ),
+  getNotificationSettingsV2: (input: { readonly guildId: string; readonly accessKey?: string }) => Promise<{
+    readonly rules: readonly NotificationRuleV2[];
+    readonly destination?: NotificationDestination;
+  }> = vi.fn(() => Promise.resolve({ rules: [] })),
+  saveNotificationRuleV2: (input: { readonly rule: NotificationRuleV2Input }) => Promise<NotificationRuleV2> = vi.fn((input) =>
+    Promise.resolve({
+      id: "saved-rule-v2",
+      ...input.rule
+    })
+  ),
+  useNotificationRuleV2 = false
 ) {
   const { FirebasePhase0App } = await import("./FirebasePhase0App");
   container = document.createElement("div");
@@ -1163,6 +1248,7 @@ async function renderApp(
       <FirebasePhase0App
         getOwnerGuildShare={getOwnerShare}
         getNotificationSettings={getNotificationSettings}
+        getNotificationSettingsV2={getNotificationSettingsV2}
         deleteNotificationRule={deleteNotificationRule}
         loadKoGuildKoTotals={() => Promise.resolve([])}
         loadKoObserverRunMeta={() => Promise.resolve(null)}
@@ -1170,6 +1256,7 @@ async function renderApp(
         loadSnapshot={loadSnapshot}
         saveNotificationDestination={saveNotificationDestination}
         saveNotificationRule={saveNotificationRule}
+        saveNotificationRuleV2={saveNotificationRuleV2}
         syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidates}
         suspendNotificationRule={suspendNotificationRule}
         saveOwnerGuildShare={saveOwnerShare}
@@ -1179,6 +1266,7 @@ async function renderApp(
           onStateChanged(authState);
           return () => {};
         }}
+        useNotificationRuleV2={useNotificationRuleV2}
         verifyGuildShareAccess={verifyShareAccess}
       />
     </AppModeProvider>
