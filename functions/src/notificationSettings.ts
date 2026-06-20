@@ -109,6 +109,13 @@ interface NotificationRuleOutput extends NotificationRuleInput {
   readonly updatedAt?: unknown;
 }
 
+interface NotificationRuleV2Output extends NotificationRuleV2Input {
+  readonly id: string;
+  readonly createdByRole?: "guildOwner" | "admin";
+  readonly createdAt?: unknown;
+  readonly updatedAt?: unknown;
+}
+
 interface NotificationDestinationInput {
   readonly enabled: boolean;
   readonly webhookUrl: string;
@@ -181,6 +188,10 @@ export const saveNotificationRule = onCall({ region: FUNCTION_REGION }, async (r
   handleSaveNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
+export const saveNotificationRuleV2 = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
+  handleSaveNotificationRuleV2(request.data, createCallableContext(request), createDefaultDependencies())
+);
+
 export const deleteNotificationRule = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleDeleteNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
 );
@@ -251,6 +262,49 @@ export async function handleSaveNotificationRule(
       ...payload.rule.message,
       mention: { ...payload.rule.message.mention }
     },
+    ...createdMetadata,
+    updatedAt: now
+  };
+
+  await ruleRef.set(document, { merge: false });
+
+  return {
+    id: ruleRef.id,
+    ...payload.rule,
+    ...createdMetadata,
+    updatedAt: now
+  };
+}
+
+export async function handleSaveNotificationRuleV2(
+  input: unknown,
+  context: CallableContext,
+  dependencies: Dependencies
+): Promise<NotificationRuleV2Output> {
+  const payload = readSaveRuleV2Input(input);
+  const role = await resolveNotificationSettingsRole(payload, context, dependencies);
+  const collectionRef = dependencies.firestore.collection(
+    `${GUILD_SHARES_COLLECTION}/${payload.guildId}/${NOTIFICATION_RULES_COLLECTION}`
+  );
+  const ruleRef =
+    payload.ruleId === undefined ? collectionRef.doc(dependencies.createRuleId()) : collectionRef.doc(payload.ruleId);
+  const currentSnapshot = await ruleRef.get();
+  const now = dependencies.now();
+  const createdMetadata = currentSnapshot.exists
+    ? readCreatedMetadata(currentSnapshot.data())
+    : { createdAt: now, createdByRole: role };
+  const document = {
+    ...payload.rule,
+    schedule: { ...payload.rule.schedule },
+    targetGuildIds: [...payload.rule.targetGuildIds],
+    detailConditions: cloneDetailConditionRoot(payload.rule.detailConditions),
+    message: {
+      ...payload.rule.message,
+      mention: { ...payload.rule.message.mention }
+    },
+    ...(payload.rule.temporarySuspension === undefined
+      ? {}
+      : { temporarySuspension: cloneTemporarySuspension(payload.rule.temporarySuspension) }),
     ...createdMetadata,
     updatedAt: now
   };
@@ -448,6 +502,25 @@ function readSaveRuleInput(input: unknown): {
     ...authorizedInput,
     ...(ruleId === undefined ? {} : { ruleId }),
     rule: readNotificationRuleInput(input.rule)
+  };
+}
+
+function readSaveRuleV2Input(input: unknown): {
+  readonly guildId: string;
+  readonly accessKey?: string;
+  readonly ruleId?: string;
+  readonly rule: NotificationRuleV2Input;
+} {
+  const authorizedInput = readAuthorizedInput(input);
+  if (!isPlainObject(input) || !isPlainObject(input.rule)) {
+    throw new HttpsError("invalid-argument", "invalid_notification_rule_v2");
+  }
+
+  const ruleId = typeof input.ruleId === "string" && input.ruleId.trim().length > 0 ? input.ruleId.trim() : undefined;
+  return {
+    ...authorizedInput,
+    ...(ruleId === undefined ? {} : { ruleId }),
+    rule: readNotificationRuleV2Input(input.rule)
   };
 }
 
@@ -696,6 +769,35 @@ function readSuspendedBy(data: unknown): NonNullable<NonNullable<NotificationRul
   return {
     ...(role === undefined ? {} : { role }),
     ...(uid === undefined ? {} : { uid })
+  };
+}
+
+function cloneDetailConditionRoot(
+  root: NotificationRuleV2Input["detailConditions"]
+): NotificationRuleV2Input["detailConditions"] {
+  return {
+    operator: "OR",
+    children: root.children.map((child) =>
+      child.type === "condition"
+        ? { ...child }
+        : {
+            type: "group",
+            operator: child.operator,
+            children: child.children.map((condition) => ({ ...condition }))
+          }
+    )
+  };
+}
+
+function cloneTemporarySuspension(
+  temporarySuspension: NonNullable<NotificationRuleV2Input["temporarySuspension"]>
+): NonNullable<NotificationRuleV2Input["temporarySuspension"]> {
+  return {
+    suspendedAt: temporarySuspension.suspendedAt,
+    expiresAt: temporarySuspension.expiresAt,
+    ...(temporarySuspension.suspendedBy === undefined
+      ? {}
+      : { suspendedBy: { ...temporarySuspension.suspendedBy } })
   };
 }
 

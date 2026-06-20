@@ -4,6 +4,7 @@ import {
   handleGetNotificationSettings,
   handleSaveNotificationDestination,
   handleSaveNotificationRule,
+  handleSaveNotificationRuleV2,
   handleSuspendNotificationRule,
   shouldReadNotificationRuleV2Document,
   validateNotificationRuleV2Input
@@ -158,6 +159,118 @@ describe("notification settings callables", () => {
       updatedAt: "now-1"
     });
     expect(firestore.writes[0].data).not.toHaveProperty("updatedByRole");
+  });
+
+  it("saves a v2 rule with server-managed metadata", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            targetGuildIds: ["guild-a"],
+            sortOrder: 3
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      id: "generated-rule",
+      schemaVersion: 2,
+      sortOrder: 3,
+      targetGuildIds: ["guild-a"],
+      createdByRole: "guildOwner",
+      createdAt: "now-1",
+      updatedAt: "now-1"
+    });
+
+    expect(firestore.writes).toEqual([
+      expect.objectContaining({
+        path: "guildShares/guild-1/notificationRules/generated-rule",
+        data: expect.objectContaining({
+          schemaVersion: 2,
+          sortOrder: 3,
+          targetGuildIds: ["guild-a"],
+          createdAt: "now-1",
+          createdByRole: "guildOwner",
+          updatedAt: "now-1"
+        }),
+        options: { merge: false }
+      })
+    ]);
+    expect(firestore.writes[0].data).not.toHaveProperty("id");
+  });
+
+  it("updates a v2 rule while preserving created metadata", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/rule-v2": {
+        ...createRuleV2Input(),
+        createdAt: "created-before",
+        createdByRole: "admin",
+        updatedAt: "updated-before"
+      }
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          accessKey: "a_admin",
+          ruleId: "rule-v2",
+          rule: createRuleV2Input({ name: "Updated V2" })
+        },
+        { authUid: null },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      id: "rule-v2",
+      name: "Updated V2",
+      createdAt: "created-before",
+      createdByRole: "admin",
+      updatedAt: "now-1"
+    });
+
+    expect(firestore.writes[0].data).toMatchObject({
+      name: "Updated V2",
+      createdAt: "created-before",
+      createdByRole: "admin",
+      updatedAt: "now-1"
+    });
+  });
+
+  it("rejects invalid v2 rules through the save callable", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            detailConditions: {
+              operator: "AND",
+              children: [
+                {
+                  type: "group",
+                  operator: "AND",
+                  children: [{ type: "condition", field: "attackCount", operator: ">=", value: 1 }]
+                }
+              ]
+            }
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+
+    expect(firestore.writes).toEqual([]);
   });
 
   it("allows an empty webhook URL only when destination is disabled", async () => {
@@ -379,6 +492,9 @@ function createRuleInput() {
 
 function createRuleV2Input(
   overrides: {
+    readonly name?: string;
+    readonly sortOrder?: number;
+    readonly targetGuildIds?: readonly string[];
     readonly mention?: { readonly type: string; readonly customText?: string };
     readonly detailConditions?: Record<string, unknown>;
     readonly temporarySuspension?: Record<string, unknown>;
@@ -387,14 +503,14 @@ function createRuleV2Input(
   return {
     schemaVersion: 2,
     battleType: "guildBattle",
-    name: "見落とし防止",
+    name: overrides.name ?? "\u898b\u843d\u3068\u3057\u9632\u6b62",
     enabled: true,
-    sortOrder: 0,
+    sortOrder: overrides.sortOrder ?? 0,
     schedule: {
       startTime: "21:00",
       endTime: null
     },
-    targetGuildIds: [],
+    targetGuildIds: overrides.targetGuildIds ?? [],
     detailConditions: overrides.detailConditions ?? {
       operator: "OR",
       children: [

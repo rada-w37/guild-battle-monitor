@@ -1,9 +1,13 @@
 import { loadFirebaseServices } from "../../lib/firebase";
 import type {
   NotificationDestination,
+  NotificationDetailCondition,
+  NotificationDetailConditionGroup,
   NotificationDestinationInput,
   NotificationRule,
   NotificationRuleInput,
+  NotificationRuleV2,
+  NotificationRuleV2Input,
   NotificationSettings
 } from "./types";
 
@@ -15,6 +19,11 @@ export interface NotificationSettingsRequest {
 export interface SaveNotificationRuleRequest extends NotificationSettingsRequest {
   readonly ruleId?: string;
   readonly rule: NotificationRuleInput;
+}
+
+export interface SaveNotificationRuleV2Request extends NotificationSettingsRequest {
+  readonly ruleId?: string;
+  readonly rule: NotificationRuleV2Input;
 }
 
 export interface DeleteNotificationRuleRequest extends NotificationSettingsRequest {
@@ -59,6 +68,11 @@ export async function getNotificationSettings(input: NotificationSettingsRequest
 export async function saveNotificationRule(input: SaveNotificationRuleRequest): Promise<NotificationRule> {
   const result = await callFunction("saveNotificationRule", input);
   return createNotificationRule(result);
+}
+
+export async function saveNotificationRuleV2(input: SaveNotificationRuleV2Request): Promise<NotificationRuleV2> {
+  const result = await callFunction("saveNotificationRuleV2", input);
+  return createNotificationRuleV2(result);
 }
 
 export async function deleteNotificationRule(input: DeleteNotificationRuleRequest): Promise<void> {
@@ -167,6 +181,114 @@ function createMention(data: unknown): NotificationRule["message"]["mention"] {
   }
 
   return { type: "none" };
+}
+
+function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
+  if (
+    !isPlainObject(data) ||
+    typeof data.id !== "string" ||
+    data.schemaVersion !== 2 ||
+    (data.battleType !== "guildBattle" && data.battleType !== "grandBattle") ||
+    typeof data.name !== "string" ||
+    typeof data.enabled !== "boolean" ||
+    typeof data.sortOrder !== "number" ||
+    !isPlainObject(data.schedule) ||
+    !Array.isArray(data.targetGuildIds) ||
+    !isPlainObject(data.detailConditions) ||
+    !isPlainObject(data.message)
+  ) {
+    throw new Error("notification v2 rule response is invalid");
+  }
+
+  return {
+    id: data.id,
+    schemaVersion: 2,
+    battleType: data.battleType,
+    name: data.name,
+    enabled: data.enabled,
+    sortOrder: data.sortOrder,
+    schedule: {
+      startTime: typeof data.schedule.startTime === "string" ? data.schedule.startTime : "",
+      ...(typeof data.schedule.endTime === "string" || data.schedule.endTime === null
+        ? { endTime: data.schedule.endTime }
+        : {})
+    },
+    targetGuildIds: data.targetGuildIds.filter((guildId): guildId is string => typeof guildId === "string"),
+    detailConditions: createDetailConditionRoot(data.detailConditions),
+    message: {
+      usernameTemplate: typeof data.message.usernameTemplate === "string" ? data.message.usernameTemplate : "",
+      mention: createMention(data.message.mention),
+      titleTemplate: typeof data.message.titleTemplate === "string" ? data.message.titleTemplate : "",
+      bodyTemplate: typeof data.message.bodyTemplate === "string" ? data.message.bodyTemplate : ""
+    },
+    ...(isPlainObject(data.temporarySuspension)
+      ? { temporarySuspension: createTemporarySuspension(data.temporarySuspension) }
+      : {}),
+    ...(data.createdByRole === "guildOwner" || data.createdByRole === "admin"
+      ? { createdByRole: data.createdByRole }
+      : {}),
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt
+  };
+}
+
+function createDetailConditionRoot(data: Record<string, unknown>): NotificationRuleV2["detailConditions"] {
+  if (data.operator !== "OR" || !Array.isArray(data.children)) {
+    return { operator: "OR", children: [] };
+  }
+
+  const children: Array<NotificationDetailCondition | NotificationDetailConditionGroup> = [];
+  for (const child of data.children) {
+    if (!isPlainObject(child)) {
+      continue;
+    }
+
+    if (child.type === "condition") {
+      const condition = createDetailCondition(child);
+      if (condition !== null) {
+        children.push(condition);
+      }
+      continue;
+    }
+
+    if (child.type === "group" && (child.operator === "AND" || child.operator === "OR") && Array.isArray(child.children)) {
+      children.push({
+        type: "group",
+        operator: child.operator,
+        children: child.children.flatMap((condition) => {
+          if (!isPlainObject(condition)) {
+            return [];
+          }
+
+          const nextCondition = createDetailCondition(condition);
+          return nextCondition === null ? [] : [nextCondition];
+        })
+      });
+    }
+  }
+
+  return {
+    operator: "OR",
+    children
+  };
+}
+
+function createDetailCondition(data: Record<string, unknown>): NotificationDetailCondition | null {
+  if (
+    data.type !== "condition" ||
+    (data.field !== "defenseCount" && data.field !== "attackCount") ||
+    (data.operator !== "<=" && data.operator !== ">=") ||
+    typeof data.value !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    type: "condition",
+    field: data.field,
+    operator: data.operator,
+    value: data.value
+  };
 }
 
 function createSyncGuildBattleGuildCandidatesOutput(data: unknown): SyncGuildBattleGuildCandidatesOutput {
