@@ -755,7 +755,78 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
 
     expect(document.body.textContent).toContain("通知ルール新規作成");
+    expect(document.body.textContent).toContain("作成前の通知ルールです。");
+    expect(document.body.textContent).toContain("破棄");
+    expect(document.body.textContent).toContain("作成");
     expect(document.body.textContent).toContain("有効");
+  });
+
+  it("shows the edit dirty bar and restores the saved rule when discarded", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const editButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions button")).find(
+      (candidate) => candidate.textContent === "編集"
+    );
+    if (!editButton) {
+      throw new Error("notification rule edit button was not found");
+    }
+
+    await act(async () => {
+      editButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const nameInput = Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).find(
+      (candidate) => candidate.value === "終盤アラート"
+    );
+    if (!nameInput) {
+      throw new Error("notification rule name input was not found");
+    }
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(nameInput, "変更中アラート");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
+    expect(document.body.textContent).toContain("保存まで一時停止");
+
+    const discardButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "破棄して戻す"
+    );
+    if (!discardButton) {
+      throw new Error("discard rule changes button was not found");
+    }
+
+    await act(async () => {
+      discardButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).not.toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
+    expect(
+      Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).some(
+        (candidate) => candidate.value === "終盤アラート"
+      )
+    ).toBe(true);
   });
 
   it("saves the webhook destination from the notification dialog, not the common settings save button", async () => {

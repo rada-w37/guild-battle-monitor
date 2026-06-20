@@ -68,6 +68,7 @@ export function NotificationSettingsDialog({
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [ruleEditorMode, setRuleEditorMode] = useState<RuleEditorMode>("empty");
   const [ruleDraft, setRuleDraft] = useState<RuleDraft>(() => createDefaultRuleDraft("guildBattle"));
+  const [savedRuleDraft, setSavedRuleDraft] = useState<RuleDraft | null>(null);
   const [destinationDraft, setDestinationDraft] = useState<DestinationDraft>(createDefaultDestinationDraft());
   const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
   const [message, setMessage] = useState<string | null>(null);
@@ -91,6 +92,7 @@ export function NotificationSettingsDialog({
         setSelectedRuleId(null);
         setRuleEditorMode("empty");
         setRuleDraft(createDefaultRuleDraft(activeBattleType));
+        setSavedRuleDraft(null);
 
         if (role === "guildOwner") {
           setDestinationDraft(createDestinationDraft(settings.destination));
@@ -120,19 +122,25 @@ export function NotificationSettingsDialog({
   const previewBody = applyNotificationTemplate(ruleDraft.message.bodyTemplate);
   const isRuleEditorVisible = ruleEditorMode !== "empty";
   const ruleEditorTitle = ruleEditorMode === "creating" ? "通知ルール新規作成" : "通知ルール編集";
+  const isRuleDraftDirty =
+    ruleEditorMode === "editing" && savedRuleDraft !== null && serializeRuleDraft(ruleDraft) !== serializeRuleDraft(savedRuleDraft);
+  const shouldShowRuleActionBar = ruleEditorMode === "creating" || isRuleDraftDirty;
 
   function selectBattleType(nextBattleType: NotificationBattleType) {
     setActiveBattleType(nextBattleType);
     setSelectedRuleId(null);
     setRuleEditorMode("empty");
     setRuleDraft(createDefaultRuleDraft(nextBattleType));
+    setSavedRuleDraft(null);
     setRuleError(null);
   }
 
   function selectRule(rule: NotificationRule) {
+    const nextDraft = createRuleDraft(rule);
     setSelectedRuleId(rule.id);
     setRuleEditorMode("editing");
-    setRuleDraft(createRuleDraft(rule));
+    setRuleDraft(nextDraft);
+    setSavedRuleDraft(nextDraft);
     setRuleError(null);
     setMessage(null);
   }
@@ -141,6 +149,7 @@ export function NotificationSettingsDialog({
     setSelectedRuleId(null);
     setRuleEditorMode("creating");
     setRuleDraft(createDefaultRuleDraft(activeBattleType));
+    setSavedRuleDraft(null);
     setRuleError(null);
     setMessage(null);
   }
@@ -153,8 +162,26 @@ export function NotificationSettingsDialog({
       id: undefined,
       name: `${rule.name} コピー`
     });
+    setSavedRuleDraft(null);
     setRuleError(null);
     setMessage(null);
+  }
+
+  function discardRuleChanges() {
+    setRuleError(null);
+    setMessage(null);
+
+    if (ruleEditorMode === "creating") {
+      setSelectedRuleId(null);
+      setRuleEditorMode("empty");
+      setRuleDraft(createDefaultRuleDraft(activeBattleType));
+      setSavedRuleDraft(null);
+      return;
+    }
+
+    if (savedRuleDraft !== null) {
+      setRuleDraft(savedRuleDraft);
+    }
   }
 
   async function saveRule() {
@@ -182,7 +209,9 @@ export function NotificationSettingsDialog({
       });
       setSelectedRuleId(savedRule.id);
       setRuleEditorMode("editing");
-      setRuleDraft(createRuleDraft(savedRule));
+      const nextDraft = createRuleDraft(savedRule);
+      setRuleDraft(nextDraft);
+      setSavedRuleDraft(nextDraft);
       setMessage("通知ルールを保存しました。");
     } catch {
       setError("通知ルールの保存に失敗しました。");
@@ -209,6 +238,7 @@ export function NotificationSettingsDialog({
       setSelectedRuleId(null);
       setRuleEditorMode("empty");
       setRuleDraft(createDefaultRuleDraft(activeBattleType));
+      setSavedRuleDraft(null);
       setMessage("通知ルールを削除しました。");
     } catch {
       setError("通知ルールの削除に失敗しました。");
@@ -366,6 +396,9 @@ export function NotificationSettingsDialog({
                         {rule.enabled ? "有効" : "無効"}
                       </span>
                       <span className="notification-rule-card__summary">{createConditionSummary(rule)}</span>
+                      {rule.id === selectedRuleId && isRuleDraftDirty ? (
+                        <span className="notification-rule-card__pause-status">保存まで一時停止</span>
+                      ) : null}
                     </button>
                     <div className="notification-rule-card__actions">
                       <button type="button" onClick={() => selectRule(rule)}>編集</button>
@@ -404,9 +437,6 @@ export function NotificationSettingsDialog({
                     />
                     有効
                   </label>
-                  <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveRule()}>
-                    {ruleEditorMode === "creating" ? "作成" : "保存"}
-                  </button>
                 </div>
               </div>
               <h4 className="notification-rule-editor__section-title">1 基本設定</h4>
@@ -600,6 +630,23 @@ export function NotificationSettingsDialog({
                 ))}
               </div>
               {ruleError !== null ? <p className="firebase-message firebase-message--error">{ruleError}</p> : null}
+              {shouldShowRuleActionBar ? (
+                <div className="notification-rule-editor__action-bar">
+                  <p>
+                    {ruleEditorMode === "creating"
+                      ? "作成前の通知ルールです。"
+                      : "保存されていない変更があります。保存まで通知は一時停止されています。"}
+                  </p>
+                  <div className="notification-rule-editor__action-buttons">
+                    <button type="button" onClick={discardRuleChanges}>
+                      {ruleEditorMode === "creating" ? "破棄" : "破棄して戻す"}
+                    </button>
+                    <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveRule()}>
+                      {ruleEditorMode === "creating" ? "作成" : "保存"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
                 </>
               )}
             </section>
@@ -643,6 +690,10 @@ function createRuleDraft(rule: NotificationRule): RuleDraft {
 
 function toRuleInput(ruleDraft: RuleDraft) {
   return createLegacyNotificationRuleInputFromV2Draft(ruleDraft);
+}
+
+function serializeRuleDraft(ruleDraft: RuleDraft): string {
+  return JSON.stringify(ruleDraft);
 }
 
 function createDefaultDestinationDraft(): DestinationDraft {

@@ -700,6 +700,42 @@ select {
   color: #15803d;
 }
 
+.notification-rule-editor__action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.notification-rule-editor__action-bar p {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 0.9rem;
+}
+
+.notification-rule-editor__action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.notification-rule-editor__action-buttons button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 6px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  cursor: pointer;
+}
+
 .notification-rule-card {
   display: grid;
   gap: 8px;
@@ -746,6 +782,13 @@ select {
 .notification-rule-card__summary {
   color: var(--app-text-muted);
   font-size: 0.84rem;
+}
+
+.notification-rule-card__pause-status {
+  width: fit-content;
+  color: #c2410c;
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 
 .notification-rule-card__actions {
