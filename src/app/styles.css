@@ -982,6 +982,26 @@ select {
   gap: 6px;
 }
 
+.notification-rule-editor__legacy-discord-fields {
+  display: none;
+}
+
+.notification-rule-editor__variables-block {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-rule-editor__variables-block h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.notification-rule-preview-panel__divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--app-border);
+}
+
 .notification-preview {
   display: grid;
   gap: 8px;

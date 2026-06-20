@@ -907,6 +907,7 @@ export function NotificationSettingsDialog({
                   {"\u9632\u885b\u914d\u7f6e\u5fd8\u308c\u691c\u77e5\u306a\u3069\u3092\u76ee\u7684\u3068\u3059\u308b\u5834\u5408\u306f\u3001\u3053\u306e\u307e\u307e\u3067\u554f\u984c\u3042\u308a\u307e\u305b\u3093\u3002"}
                 </div>
               ) : null}
+              <div className="notification-rule-editor__legacy-discord-fields">
               <h4 className="notification-rule-editor__section-title">4 Discord通知内容</h4>
               <label className="field">
                 <span className="field__label">Discord表示名</span>
@@ -1001,6 +1002,7 @@ export function NotificationSettingsDialog({
                   </button>
                 ))}
               </div>
+              </div>
               {ruleError !== null ? <p className="firebase-message firebase-message--error">{ruleError}</p> : null}
               {shouldShowRuleActionBar ? (
                 <div className="notification-rule-editor__action-bar notification-rule-editor__action-bar--inline">
@@ -1029,6 +1031,108 @@ export function NotificationSettingsDialog({
             </section>
 
             <section className="notification-settings-dialog__panel notification-rule-preview-panel">
+              {isRuleEditorVisible ? (
+                <>
+                  <h3>{"4 Discord\u901a\u77e5\u5185\u5bb9"}</h3>
+                  <label className="field">
+                    <span className="field__label">{"Discord\u8868\u793a\u540d\uff08Webhook\u540d\uff09"}</span>
+                    <input
+                      className="field__input field__input--wide"
+                      value={ruleDraft.message.usernameTemplate}
+                      onChange={(event) => {
+                        const usernameTemplate = event.target.value;
+                        setRuleDraft((currentDraft) => ({
+                          ...currentDraft,
+                          message: { ...currentDraft.message, usernameTemplate }
+                        }));
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field__label">{"\u30e1\u30f3\u30b7\u30e7\u30f3\u5148"}</span>
+                    <select
+                      className="field__input field__input--wide"
+                      value={ruleDraft.message.mention.type}
+                      onChange={(event) => {
+                        const mentionType = event.target.value;
+                        setRuleDraft((currentDraft) => ({
+                          ...currentDraft,
+                          message: {
+                            ...currentDraft.message,
+                            mention:
+                              mentionType === "custom"
+                                ? { type: "custom", customText: "" }
+                                : { type: mentionType as "none" | "here" | "everyone" }
+                          }
+                        }));
+                      }}
+                    >
+                      <option value="none">{"\u306a\u3057"}</option>
+                      <option value="here">@here</option>
+                      <option value="everyone">@everyone</option>
+                      <option value="custom">{"\u30ab\u30b9\u30bf\u30e0"}</option>
+                    </select>
+                  </label>
+                  {ruleDraft.message.mention.type === "custom" ? (
+                    <label className="field">
+                      <span className="field__label">{"\u30ab\u30b9\u30bf\u30e0\u30e1\u30f3\u30b7\u30e7\u30f3"}</span>
+                      <input
+                        className="field__input field__input--wide"
+                        value={ruleDraft.message.mention.customText ?? ""}
+                        onChange={(event) => {
+                          const customText = event.target.value;
+                          setRuleDraft((currentDraft) => ({
+                            ...currentDraft,
+                            message: {
+                              ...currentDraft.message,
+                              mention: { type: "custom", customText }
+                            }
+                          }));
+                        }}
+                      />
+                    </label>
+                  ) : null}
+                  <label className="field">
+                    <span className="field__label">{"\u901a\u77e5\u30bf\u30a4\u30c8\u30eb"}</span>
+                    <input
+                      className="field__input field__input--wide"
+                      value={ruleDraft.message.titleTemplate}
+                      onChange={(event) => {
+                        const titleTemplate = event.target.value;
+                        setRuleDraft((currentDraft) => ({
+                          ...currentDraft,
+                          message: { ...currentDraft.message, titleTemplate }
+                        }));
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field__label">{"\u901a\u77e5\u672c\u6587"}</span>
+                    <textarea
+                      className="field__input field__input--wide notification-rule-editor__textarea"
+                      value={ruleDraft.message.bodyTemplate}
+                      onChange={(event) => {
+                        const bodyTemplate = event.target.value;
+                        setRuleDraft((currentDraft) => ({
+                          ...currentDraft,
+                          message: { ...currentDraft.message, bodyTemplate }
+                        }));
+                      }}
+                    />
+                  </label>
+                  <div className="notification-rule-editor__variables-block">
+                    <h4>{"\u5229\u7528\u3067\u304d\u308b\u5909\u6570"}</h4>
+                    <div className="notification-rule-editor__variables" aria-label="利用できる変数">
+                      {NOTIFICATION_TEMPLATE_VARIABLES.map((variableName) => (
+                        <button key={variableName} type="button" onClick={() => insertVariable(variableName)}>
+                          {variableName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="notification-rule-preview-panel__divider" />
+                </>
+              ) : null}
               <h3>5 通知プレビュー</h3>
               {isRuleEditorVisible ? (
                 <div className="notification-preview">
