@@ -622,6 +622,28 @@ select {
   gap: 10px;
 }
 
+.notification-rule-editor__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.notification-rule-editor__empty-state {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.notification-rule-editor__empty-state h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
 .notification-rule-card {
   display: grid;
   gap: 8px;

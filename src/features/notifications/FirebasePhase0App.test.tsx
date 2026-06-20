@@ -712,6 +712,52 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.querySelector("input[type='url']")).toBeNull();
   });
 
+  it("opens notification settings without selecting the first existing rule", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("通知ルールを選択してください");
+    });
+    expect(document.body.textContent).not.toContain("通知ルール編集");
+  });
+
+  it("uses the same rule editor for new rules after the empty state", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("通知ルール新規作成");
+    expect(document.body.textContent).toContain("有効");
+  });
+
   it("saves the webhook destination from the notification dialog, not the common settings save button", async () => {
     const saveNotificationDestination = vi.fn((input: {
       readonly guildId: string;
@@ -1056,6 +1102,27 @@ function createShare(guildId: string): GuildShare {
     guildId,
     adminAccessKey: "a_admin",
     guestAccessKey: "g_guest"
+  };
+}
+
+function createNotificationRule(overrides: Partial<NotificationRule> = {}): NotificationRule {
+  return {
+    id: "rule-1",
+    battleType: "guildBattle",
+    name: "見落とし防止",
+    enabled: true,
+    conditions: {
+      startTime: "21:00",
+      defenseCountMax: 20,
+      attackCountMin: 15
+    },
+    message: {
+      usernameTemplate: "ギルバト監視BOT - {拠点名}",
+      mention: { type: "here" },
+      titleTemplate: "⚠ {拠点名}が攻撃されています！",
+      bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
+    },
+    ...overrides
   };
 }
 

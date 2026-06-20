@@ -48,6 +48,7 @@ interface DestinationDraft {
 }
 
 const DEFAULT_RULE_NAME = "見落とし防止";
+type RuleEditorMode = "empty" | "creating" | "editing";
 
 export function NotificationSettingsDialog({
   request,
@@ -61,6 +62,7 @@ export function NotificationSettingsDialog({
   const [activeBattleType, setActiveBattleType] = useState<NotificationBattleType>("guildBattle");
   const [rules, setRules] = useState<readonly NotificationRule[]>([]);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [ruleEditorMode, setRuleEditorMode] = useState<RuleEditorMode>("empty");
   const [ruleDraft, setRuleDraft] = useState<RuleDraft>(() => createDefaultRuleDraft("guildBattle"));
   const [destinationDraft, setDestinationDraft] = useState<DestinationDraft>(createDefaultDestinationDraft());
   const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
@@ -82,9 +84,9 @@ export function NotificationSettingsDialog({
         }
 
         setRules(settings.rules);
-        const firstRule = settings.rules.find((rule) => rule.battleType === activeBattleType) ?? null;
-        setSelectedRuleId(firstRule?.id ?? null);
-        setRuleDraft(firstRule === null ? createDefaultRuleDraft(activeBattleType) : createRuleDraft(firstRule));
+        setSelectedRuleId(null);
+        setRuleEditorMode("empty");
+        setRuleDraft(createDefaultRuleDraft(activeBattleType));
 
         if (role === "guildOwner") {
           setDestinationDraft(createDestinationDraft(settings.destination));
@@ -112,17 +114,20 @@ export function NotificationSettingsDialog({
   const previewUsername = applyNotificationTemplate(ruleDraft.message.usernameTemplate);
   const previewTitle = applyNotificationTemplate(ruleDraft.message.titleTemplate);
   const previewBody = applyNotificationTemplate(ruleDraft.message.bodyTemplate);
+  const isRuleEditorVisible = ruleEditorMode !== "empty";
+  const ruleEditorTitle = ruleEditorMode === "creating" ? "通知ルール新規作成" : "通知ルール編集";
 
   function selectBattleType(nextBattleType: NotificationBattleType) {
-    const nextRule = rules.find((rule) => rule.battleType === nextBattleType) ?? null;
     setActiveBattleType(nextBattleType);
-    setSelectedRuleId(nextRule?.id ?? null);
-    setRuleDraft(nextRule === null ? createDefaultRuleDraft(nextBattleType) : createRuleDraft(nextRule));
+    setSelectedRuleId(null);
+    setRuleEditorMode("empty");
+    setRuleDraft(createDefaultRuleDraft(nextBattleType));
     setRuleError(null);
   }
 
   function selectRule(rule: NotificationRule) {
     setSelectedRuleId(rule.id);
+    setRuleEditorMode("editing");
     setRuleDraft(createRuleDraft(rule));
     setRuleError(null);
     setMessage(null);
@@ -130,6 +135,7 @@ export function NotificationSettingsDialog({
 
   function createNewRule() {
     setSelectedRuleId(null);
+    setRuleEditorMode("creating");
     setRuleDraft(createDefaultRuleDraft(activeBattleType));
     setRuleError(null);
     setMessage(null);
@@ -137,6 +143,7 @@ export function NotificationSettingsDialog({
 
   function duplicateRule(rule: NotificationRule) {
     setSelectedRuleId(null);
+    setRuleEditorMode("creating");
     setRuleDraft({
       ...createRuleDraft(rule),
       id: undefined,
@@ -170,6 +177,7 @@ export function NotificationSettingsDialog({
           : [...currentRules, savedRule];
       });
       setSelectedRuleId(savedRule.id);
+      setRuleEditorMode("editing");
       setRuleDraft(createRuleDraft(savedRule));
       setMessage("通知ルールを保存しました。");
     } catch {
@@ -193,10 +201,10 @@ export function NotificationSettingsDialog({
         ruleId: rule.id
       } satisfies DeleteNotificationRuleRequest);
       const nextRules = rules.filter((currentRule) => currentRule.id !== rule.id);
-      const nextRule = nextRules.find((currentRule) => currentRule.battleType === activeBattleType) ?? null;
       setRules(nextRules);
-      setSelectedRuleId(nextRule?.id ?? null);
-      setRuleDraft(nextRule === null ? createDefaultRuleDraft(activeBattleType) : createRuleDraft(nextRule));
+      setSelectedRuleId(null);
+      setRuleEditorMode("empty");
+      setRuleDraft(createDefaultRuleDraft(activeBattleType));
       setMessage("通知ルールを削除しました。");
     } catch {
       setError("通知ルールの削除に失敗しました。");
@@ -366,11 +374,36 @@ export function NotificationSettingsDialog({
             </section>
 
             <section className="notification-settings-dialog__panel notification-rule-editor">
+              {!isRuleEditorVisible ? (
+                <div className="notification-rule-editor__empty-state">
+                  <h3>通知ルールを選択してください</h3>
+                  <p className="notification-settings-dialog__empty">
+                    既存ルールを編集するか、新規作成から通知条件を設定できます。
+                  </p>
+                  <button className="load-form__button" type="button" onClick={createNewRule}>
+                    新規作成
+                  </button>
+                </div>
+              ) : (
+                <>
               <div className="notification-settings-dialog__section-header">
-                <h3>通知ルール編集</h3>
-                <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveRule()}>
-                  保存
-                </button>
+                <h3>{ruleEditorTitle}</h3>
+                <div className="notification-rule-editor__header-actions">
+                  <label className="notification-settings-dialog__checkbox">
+                    <input
+                      checked={ruleDraft.enabled}
+                      type="checkbox"
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        setRuleDraft((currentDraft) => ({ ...currentDraft, enabled }));
+                      }}
+                    />
+                    有効
+                  </label>
+                  <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveRule()}>
+                    {ruleEditorMode === "creating" ? "作成" : "保存"}
+                  </button>
+                </div>
               </div>
               <label className="field">
                 <span className="field__label">通知ルール名</span>
@@ -382,17 +415,6 @@ export function NotificationSettingsDialog({
                     setRuleDraft((currentDraft) => ({ ...currentDraft, name }));
                   }}
                 />
-              </label>
-              <label className="notification-settings-dialog__checkbox">
-                <input
-                  checked={ruleDraft.enabled}
-                  type="checkbox"
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    setRuleDraft((currentDraft) => ({ ...currentDraft, enabled }));
-                  }}
-                />
-                有効
               </label>
               <div className="notification-rule-editor__conditions">
                 <label className="field">
@@ -543,18 +565,24 @@ export function NotificationSettingsDialog({
                 ))}
               </div>
               {ruleError !== null ? <p className="firebase-message firebase-message--error">{ruleError}</p> : null}
+                </>
+              )}
             </section>
 
             <section className="notification-settings-dialog__panel">
               <h3>通知プレビュー</h3>
-              <div className="notification-preview">
-                <div className="notification-preview__username">{previewUsername}</div>
-                {previewMention.length > 0 ? <div className="notification-preview__mention">{previewMention}</div> : null}
-                <div className="notification-preview__embed">
-                  <strong>{previewTitle}</strong>
-                  <p>{previewBody}</p>
+              {isRuleEditorVisible ? (
+                <div className="notification-preview">
+                  <div className="notification-preview__username">{previewUsername}</div>
+                  {previewMention.length > 0 ? <div className="notification-preview__mention">{previewMention}</div> : null}
+                  <div className="notification-preview__embed">
+                    <strong>{previewTitle}</strong>
+                    <p>{previewBody}</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="notification-settings-dialog__empty">ルールを選択するとプレビューできます。</p>
+              )}
               {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
               {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
             </section>

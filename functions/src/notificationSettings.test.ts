@@ -3,7 +3,9 @@ import {
   handleDeleteNotificationRule,
   handleGetNotificationSettings,
   handleSaveNotificationDestination,
-  handleSaveNotificationRule
+  handleSaveNotificationRule,
+  shouldReadNotificationRuleV2Document,
+  validateNotificationRuleV2Input
 } from "./notificationSettings.js";
 
 describe("notification settings callables", () => {
@@ -226,6 +228,57 @@ describe("notification settings callables", () => {
 
     expect(firestore.deletes).toEqual(["guildShares/guild-1/notificationRules/rule-1"]);
   });
+
+  it("accepts v2 notification rule validation with here and everyone mentions", () => {
+    expect(validateNotificationRuleV2Input(createRuleV2Input({ mention: { type: "here" } }))).toMatchObject({
+      schemaVersion: 2,
+      message: { mention: { type: "here" } }
+    });
+
+    expect(validateNotificationRuleV2Input(createRuleV2Input({ mention: { type: "everyone" } }))).toMatchObject({
+      schemaVersion: 2,
+      message: { mention: { type: "everyone" } }
+    });
+  });
+
+  it("prepares v2 document filtering without switching the get settings path", () => {
+    expect(shouldReadNotificationRuleV2Document(createRuleV2Input())).toBe(true);
+    expect(shouldReadNotificationRuleV2Document(createRule())).toBe(false);
+    expect(shouldReadNotificationRuleV2Document(undefined)).toBe(false);
+  });
+
+  it("rejects v2 rules when the root detail condition operator is not OR", () => {
+    expect(() =>
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          detailConditions: {
+            operator: "AND",
+            children: [
+              {
+                type: "group",
+                operator: "AND",
+                children: [{ type: "condition", field: "defenseCount", operator: "<=", value: 30 }]
+              }
+            ]
+          }
+        })
+      )
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+  });
+
+  it("rejects v2 temporary suspension without a safe role or uid", () => {
+    expect(() =>
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          temporarySuspension: {
+            suspendedAt: "2026-06-20T12:00:00.000Z",
+            expiresAt: "2026-06-20T13:00:00.000Z",
+            suspendedBy: {}
+          }
+        })
+      )
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+  });
 });
 
 function createShare() {
@@ -262,6 +315,49 @@ function createRuleInput() {
       titleTemplate: "⚠ {拠点名}が攻撃されています！",
       bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
     }
+  };
+}
+
+function createRuleV2Input(
+  overrides: {
+    readonly mention?: { readonly type: string; readonly customText?: string };
+    readonly detailConditions?: Record<string, unknown>;
+    readonly temporarySuspension?: Record<string, unknown>;
+  } = {}
+) {
+  return {
+    schemaVersion: 2,
+    battleType: "guildBattle",
+    name: "見落とし防止",
+    enabled: true,
+    sortOrder: 0,
+    schedule: {
+      startTime: "21:00",
+      endTime: null
+    },
+    targetGuildIds: [],
+    detailConditions: overrides.detailConditions ?? {
+      operator: "OR",
+      children: [
+        {
+          type: "group",
+          operator: "AND",
+          children: [
+            { type: "condition", field: "defenseCount", operator: "<=", value: 30 },
+            { type: "condition", field: "attackCount", operator: ">=", value: 1 }
+          ]
+        }
+      ]
+    },
+    message: {
+      usernameTemplate: "ギルバト監視BOT - {拠点名}",
+      mention: overrides.mention ?? { type: "none" },
+      titleTemplate: "⚠ {拠点名}が攻撃されています！",
+      bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
+    },
+    ...(overrides.temporarySuspension === undefined
+      ? {}
+      : { temporarySuspension: overrides.temporarySuspension })
   };
 }
 

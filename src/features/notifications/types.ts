@@ -2,6 +2,28 @@ export type NotificationBattleType = "guildBattle" | "grandBattle";
 
 export type NotificationMentionType = "none" | "here" | "everyone" | "custom";
 
+export type NotificationDetailConditionField = "defenseCount" | "attackCount";
+export type NotificationDetailConditionOperator = "<=" | ">=";
+export type NotificationDetailConditionGroupOperator = "AND" | "OR";
+
+export interface NotificationDetailCondition {
+  readonly type: "condition";
+  readonly field: NotificationDetailConditionField;
+  readonly operator: NotificationDetailConditionOperator;
+  readonly value: number;
+}
+
+export interface NotificationDetailConditionGroup {
+  readonly type: "group";
+  readonly operator: NotificationDetailConditionGroupOperator;
+  readonly children: readonly NotificationDetailCondition[];
+}
+
+export interface NotificationDetailConditionRoot {
+  readonly operator: "OR";
+  readonly children: readonly (NotificationDetailCondition | NotificationDetailConditionGroup)[];
+}
+
 export interface NotificationRule {
   readonly id: string;
   readonly battleType: NotificationBattleType;
@@ -27,6 +49,35 @@ export interface NotificationRule {
 }
 
 export type NotificationRuleInput = Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt">;
+
+export interface NotificationRuleV2 {
+  readonly id: string;
+  readonly schemaVersion: 2;
+  readonly battleType: NotificationBattleType;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+  readonly schedule: {
+    readonly startTime: string;
+    readonly endTime?: string | null;
+  };
+  readonly targetGuildIds: readonly string[];
+  readonly detailConditions: NotificationDetailConditionRoot;
+  readonly message: NotificationRule["message"];
+  readonly temporarySuspension?: {
+    readonly suspendedAt: string;
+    readonly expiresAt: string;
+    readonly suspendedBy?: {
+      readonly role?: "guildOwner" | "admin";
+      readonly uid?: string;
+    };
+  };
+  readonly createdByRole?: "guildOwner" | "admin";
+  readonly createdAt?: unknown;
+  readonly updatedAt?: unknown;
+}
+
+export type NotificationRuleV2Input = Omit<NotificationRuleV2, "id" | "createdAt" | "createdByRole" | "updatedAt">;
 
 export interface NotificationDestination {
   readonly id: "discord";
