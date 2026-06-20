@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   applyNotificationTemplate,
-  DEFAULT_NOTIFICATION_BODY_TEMPLATE,
-  DEFAULT_NOTIFICATION_TITLE_TEMPLATE,
   DEFAULT_NOTIFICATION_USERNAME_TEMPLATE,
   NOTIFICATION_TEMPLATE_VARIABLES
 } from "./notificationTemplates";
@@ -16,11 +14,18 @@ import {
   type SaveNotificationDestinationRequest,
   type SaveNotificationRuleRequest
 } from "./notificationSettingsFunctionsRepository";
+import {
+  createDefaultNotificationRuleV2Draft,
+  createLegacyNotificationRuleInputFromV2Draft,
+  createNotificationRuleV2DraftFromLegacy,
+  type NotificationRuleV2Draft
+} from "./notificationRuleV2Draft";
 import type {
   NotificationBattleType,
   NotificationDestination,
+  NotificationDetailConditionField,
+  NotificationDetailConditionOperator,
   NotificationRule,
-  NotificationRuleInput,
   NotificationSettingsRole
 } from "./types";
 
@@ -37,7 +42,7 @@ interface NotificationSettingsDialogProps {
   readonly onClose: () => void;
 }
 
-interface RuleDraft extends NotificationRuleInput {
+interface RuleDraft extends NotificationRuleV2Draft {
   readonly id?: string;
 }
 
@@ -47,7 +52,6 @@ interface DestinationDraft {
   readonly defaultUsernameTemplate: string;
 }
 
-const DEFAULT_RULE_NAME = "見落とし防止";
 type RuleEditorMode = "empty" | "creating" | "editing";
 
 export function NotificationSettingsDialog({
@@ -405,6 +409,7 @@ export function NotificationSettingsDialog({
                   </button>
                 </div>
               </div>
+              <h4 className="notification-rule-editor__section-title">1 基本設定</h4>
               <label className="field">
                 <span className="field__label">通知ルール名</span>
                 <input
@@ -422,55 +427,85 @@ export function NotificationSettingsDialog({
                   <input
                     className="field__input"
                     placeholder="21:00"
-                    value={ruleDraft.conditions.startTime}
+                    value={ruleDraft.schedule.startTime}
                     onChange={(event) => {
                       const startTime = event.target.value;
                       setRuleDraft((currentDraft) => ({
                         ...currentDraft,
-                        conditions: { ...currentDraft.conditions, startTime }
+                        schedule: { ...currentDraft.schedule, startTime }
                       }));
                     }}
                   />
                 </label>
                 <label className="field">
-                  <span className="field__label">防御数条件</span>
+                  <span className="field__label">終了時刻（任意）</span>
                   <input
                     className="field__input"
-                    inputMode="numeric"
-                    placeholder="以下"
-                    value={ruleDraft.conditions.defenseCountMax ?? ""}
+                    placeholder="未設定"
+                    value={ruleDraft.schedule.endTime ?? ""}
                     onChange={(event) => {
-                      const defenseCountMax = parseOptionalInteger(event.target.value);
+                      const endTime = event.target.value.trim();
                       setRuleDraft((currentDraft) => ({
                         ...currentDraft,
-                        conditions: {
-                          ...currentDraft.conditions,
-                          defenseCountMax
-                        }
-                      }));
-                    }}
-                  />
-                </label>
-                <label className="field">
-                  <span className="field__label">侵攻数条件</span>
-                  <input
-                    className="field__input"
-                    inputMode="numeric"
-                    placeholder="以上"
-                    value={ruleDraft.conditions.attackCountMin ?? ""}
-                    onChange={(event) => {
-                      const attackCountMin = parseOptionalInteger(event.target.value);
-                      setRuleDraft((currentDraft) => ({
-                        ...currentDraft,
-                        conditions: {
-                          ...currentDraft.conditions,
-                          attackCountMin
+                        schedule: {
+                          ...currentDraft.schedule,
+                          endTime: endTime.length === 0 ? null : endTime
                         }
                       }));
                     }}
                   />
                 </label>
               </div>
+
+              <h4 className="notification-rule-editor__section-title">2 対象</h4>
+              <label className="field">
+                <span className="field__label">対象ギルド <span className="field__label-note">未指定の場合は全ギルドが対象です</span></span>
+                <input className="field__input field__input--wide" disabled value="未指定（全ギルド対象）" />
+              </label>
+
+              <h4 className="notification-rule-editor__section-title">3 詳細条件</h4>
+              <p className="notification-settings-dialog__note">いずれかの条件ブロックに一致</p>
+              <div className="notification-rule-editor__condition-group">
+                <div className="notification-rule-editor__condition-group-header">
+                  <span className="notification-rule-editor__condition-group-label is-and">AND</span>
+                  <span>条件グループ1</span>
+                  <small>すべての条件に一致</small>
+                  <button type="button">＋ 条件追加</button>
+                </div>
+                <div className="notification-rule-editor__conditions">
+                  <label className="field">
+                    <span className="field__label">防御数</span>
+                    <input
+                      className="field__input"
+                      inputMode="numeric"
+                      placeholder="以下"
+                      value={getDetailConditionValue(ruleDraft, "defenseCount") ?? ""}
+                      onChange={(event) => {
+                        const value = parseOptionalInteger(event.target.value);
+                        setRuleDraft((currentDraft) => updateDetailConditionValue(currentDraft, "defenseCount", "<=", value));
+                      }}
+                    />
+                  </label>
+                <label className="field">
+                  <span className="field__label">侵攻数</span>
+                  <input
+                    className="field__input"
+                    inputMode="numeric"
+                    placeholder="以上"
+                    value={getDetailConditionValue(ruleDraft, "attackCount") ?? ""}
+                    onChange={(event) => {
+                      const value = parseOptionalInteger(event.target.value);
+                      setRuleDraft((currentDraft) => updateDetailConditionValue(currentDraft, "attackCount", ">=", value));
+                    }}
+                  />
+                </label>
+                </div>
+              </div>
+              <div className="notification-rule-editor__condition-actions">
+                <button type="button">＋ 条件を追加</button>
+                <button type="button">＋ グループを追加</button>
+              </div>
+              <h4 className="notification-rule-editor__section-title">4 Discord通知内容</h4>
               <label className="field">
                 <span className="field__label">Discord表示名</span>
                 <input
@@ -569,8 +604,8 @@ export function NotificationSettingsDialog({
               )}
             </section>
 
-            <section className="notification-settings-dialog__panel">
-              <h3>通知プレビュー</h3>
+            <section className="notification-settings-dialog__panel notification-rule-preview-panel">
+              <h3>5 通知プレビュー</h3>
               {isRuleEditorVisible ? (
                 <div className="notification-preview">
                   <div className="notification-preview__username">{previewUsername}</div>
@@ -595,48 +630,19 @@ export function NotificationSettingsDialog({
 
 function createDefaultRuleDraft(battleType: NotificationBattleType): RuleDraft {
   return {
-    battleType,
-    name: DEFAULT_RULE_NAME,
-    enabled: true,
-    conditions: {
-      startTime: "21:00",
-      defenseCountMax: 20,
-      attackCountMin: 15
-    },
-    message: {
-      usernameTemplate: DEFAULT_NOTIFICATION_USERNAME_TEMPLATE,
-      mention: { type: "here" },
-      titleTemplate: DEFAULT_NOTIFICATION_TITLE_TEMPLATE,
-      bodyTemplate: DEFAULT_NOTIFICATION_BODY_TEMPLATE
-    }
+    ...createDefaultNotificationRuleV2Draft(battleType, 0)
   };
 }
 
 function createRuleDraft(rule: NotificationRule): RuleDraft {
   return {
     id: rule.id,
-    battleType: rule.battleType,
-    name: rule.name,
-    enabled: rule.enabled,
-    conditions: { ...rule.conditions },
-    message: {
-      ...rule.message,
-      mention: { ...rule.message.mention }
-    }
+    ...createNotificationRuleV2DraftFromLegacy(rule, 0)
   };
 }
 
-function toRuleInput(ruleDraft: RuleDraft): NotificationRuleInput {
-  return {
-    battleType: ruleDraft.battleType,
-    name: ruleDraft.name,
-    enabled: ruleDraft.enabled,
-    conditions: { ...ruleDraft.conditions },
-    message: {
-      ...ruleDraft.message,
-      mention: { ...ruleDraft.message.mention }
-    }
-  };
+function toRuleInput(ruleDraft: RuleDraft) {
+  return createLegacyNotificationRuleInputFromV2Draft(ruleDraft);
 }
 
 function createDefaultDestinationDraft(): DestinationDraft {
@@ -660,13 +666,21 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
     return "通知ルール名を入力してください。";
   }
 
-  if (!START_TIME_PATTERN.test(ruleDraft.conditions.startTime)) {
+  if (!START_TIME_PATTERN.test(ruleDraft.schedule.startTime)) {
     return "開始時刻はHH:mm形式で入力してください。";
   }
 
   if (
-    !isNullableNonNegativeInteger(ruleDraft.conditions.defenseCountMax) ||
-    !isNullableNonNegativeInteger(ruleDraft.conditions.attackCountMin)
+    ruleDraft.schedule.endTime !== undefined &&
+    ruleDraft.schedule.endTime !== null &&
+    !START_TIME_PATTERN.test(ruleDraft.schedule.endTime)
+  ) {
+    return "終了時刻はHH:mm形式で入力してください。";
+  }
+
+  if (
+    !isNullableNonNegativeInteger(getDetailConditionValue(ruleDraft, "defenseCount")) ||
+    !isNullableNonNegativeInteger(getDetailConditionValue(ruleDraft, "attackCount"))
   ) {
     return "防御数条件と侵攻数条件は0以上の整数で入力してください。";
   }
@@ -687,6 +701,58 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
   }
 
   return null;
+}
+
+function getDetailConditionValue(ruleDraft: RuleDraft, field: NotificationDetailConditionField): number | null {
+  const firstGroup = ruleDraft.detailConditions.children.find((child) => child.type === "group");
+  if (firstGroup?.type !== "group") {
+    return null;
+  }
+
+  const operator: NotificationDetailConditionOperator = field === "defenseCount" ? "<=" : ">=";
+  return firstGroup.children.find((condition) => condition.field === field && condition.operator === operator)?.value ?? null;
+}
+
+function updateDetailConditionValue(
+  ruleDraft: RuleDraft,
+  field: NotificationDetailConditionField,
+  operator: NotificationDetailConditionOperator,
+  value: number | null
+): RuleDraft {
+  const nextChildren = ruleDraft.detailConditions.children.map((child) => {
+    if (child.type !== "group") {
+      return child;
+    }
+
+    const existingCondition = child.children.find(
+      (condition) => condition.field === field && condition.operator === operator
+    );
+    const filteredChildren = child.children.filter(
+      (condition) => !(condition.field === field && condition.operator === operator)
+    );
+
+    return {
+      ...child,
+      children:
+        value === null
+          ? filteredChildren
+          : [
+              ...filteredChildren,
+              {
+                ...(existingCondition ?? { type: "condition" as const, field, operator }),
+                value
+              }
+            ]
+    };
+  });
+
+  return {
+    ...ruleDraft,
+    detailConditions: {
+      ...ruleDraft.detailConditions,
+      children: nextChildren
+    }
+  };
 }
 
 function validateDestinationDraft(destinationDraft: DestinationDraft): string | null {

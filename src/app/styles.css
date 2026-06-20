@@ -611,9 +611,13 @@ select {
 
 .notification-settings-dialog__grid {
   display: grid;
-  grid-template-columns: minmax(220px, 0.85fr) minmax(320px, 1.2fr) minmax(260px, 0.95fr);
+  grid-template-columns: minmax(240px, 0.8fr) minmax(620px, 2fr);
   gap: 14px;
   align-items: start;
+}
+
+.notification-rule-preview-panel {
+  grid-column: 2;
 }
 
 .notification-rule-list,
@@ -642,6 +646,58 @@ select {
 .notification-rule-editor__empty-state h3 {
   margin: 0;
   font-size: 1.05rem;
+}
+
+.notification-rule-editor__section-title {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+}
+
+.field__label-note {
+  margin-left: 8px;
+  color: var(--app-text-muted);
+  font-weight: 400;
+}
+
+.notification-rule-editor__condition-group {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--app-border);
+  border-left: 4px solid #22c55e;
+  border-radius: 8px;
+  background: var(--app-surface);
+}
+
+.notification-rule-editor__condition-group-header,
+.notification-rule-editor__condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.notification-rule-editor__condition-group-header button,
+.notification-rule-editor__condition-actions button {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 6px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  cursor: pointer;
+}
+
+.notification-rule-editor__condition-group-header button {
+  margin-left: auto;
+}
+
+.notification-rule-editor__condition-group-label {
+  font-weight: 700;
+}
+
+.notification-rule-editor__condition-group-label.is-and {
+  color: #15803d;
 }
 
 .notification-rule-card {
