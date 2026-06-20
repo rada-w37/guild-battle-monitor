@@ -898,7 +898,7 @@ select {
 
 .notification-rule-card__main {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   padding: 0;
   border: 0;
   color: inherit;
@@ -907,17 +907,29 @@ select {
   cursor: pointer;
 }
 
+.notification-rule-card__heading {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
 .notification-rule-card__title {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-rule-card__time {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  font-size: 0.84rem;
 }
 
 .notification-rule-card__status {
-  width: fit-content;
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: var(--app-text-muted);
-  background: var(--app-surface-muted);
-  font-size: 0.78rem;
+  display: none;
 }
 
 .notification-rule-card__status.is-enabled {
@@ -926,8 +938,7 @@ select {
 }
 
 .notification-rule-card__summary {
-  color: var(--app-text-muted);
-  font-size: 0.84rem;
+  display: none;
 }
 
 .notification-rule-card__pause-status {

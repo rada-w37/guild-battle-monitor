@@ -619,7 +619,10 @@ export function NotificationSettingsDialog({
                       type="button"
                       onClick={() => selectRule(rule)}
                     >
-                      <span className="notification-rule-card__title">{rule.name}</span>
+                      <span className="notification-rule-card__heading">
+                        <span className="notification-rule-card__title">{rule.name}</span>
+                        <span className="notification-rule-card__time">{createRuleScheduleSummary(rule)}</span>
+                      </span>
                       <span className={rule.enabled ? "notification-rule-card__status is-enabled" : "notification-rule-card__status"}>
                         {rule.enabled ? "有効" : "無効"}
                       </span>
@@ -1516,6 +1519,13 @@ function createMentionPreview(mention: NotificationRule["message"]["mention"]): 
   }
 
   return "";
+}
+
+function createRuleScheduleSummary(rule: RuleRecord): string {
+  const endTime = rule.schedule.endTime;
+  return typeof endTime === "string" && endTime.length > 0
+    ? `${rule.schedule.startTime}\u301c${endTime}`
+    : `${rule.schedule.startTime}\u301c`;
 }
 
 function createRuleConditionSummary(rule: RuleRecord): string {
