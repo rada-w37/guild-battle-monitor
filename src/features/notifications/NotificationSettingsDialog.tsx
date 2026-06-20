@@ -22,10 +22,13 @@ import {
   createNotificationRuleV2DraftFromLegacy,
   type NotificationRuleV2Draft
 } from "./notificationRuleV2Draft";
+import { hasNonAttackingTargetWarning } from "./notificationDetailConditions";
 import type {
   NotificationBattleType,
   NotificationDestination,
+  NotificationDetailCondition,
   NotificationDetailConditionField,
+  NotificationDetailConditionGroupOperator,
   NotificationDetailConditionOperator,
   NotificationRule,
   NotificationSettingsRole
@@ -33,6 +36,8 @@ import type {
 
 const DISCORD_WEBHOOK_URL_PATTERN = /^https:\/\/discord(?:app)?\.com\/api\/webhooks\/[^/\s]+\/[^/\s]+$/;
 const START_TIME_PATTERN = /^\d{2}:\d{2}$/;
+const DETAIL_CONDITION_FIELDS: readonly NotificationDetailConditionField[] = ["defenseCount", "attackCount"];
+const DETAIL_CONDITION_OPERATORS: readonly NotificationDetailConditionOperator[] = ["<=", ">="];
 
 interface NotificationSettingsDialogProps {
   readonly request: NotificationSettingsRequest;
@@ -126,6 +131,7 @@ export function NotificationSettingsDialog({
   const previewUsername = applyNotificationTemplate(ruleDraft.message.usernameTemplate);
   const previewTitle = applyNotificationTemplate(ruleDraft.message.titleTemplate);
   const previewBody = applyNotificationTemplate(ruleDraft.message.bodyTemplate);
+  const shouldShowNonAttackingTargetWarning = hasNonAttackingTargetWarning(ruleDraft.detailConditions);
   const isRuleEditorVisible = ruleEditorMode !== "empty";
   const ruleEditorTitle = ruleEditorMode === "creating" ? "通知ルール新規作成" : "通知ルール編集";
   const isRuleDraftDirty =
@@ -563,48 +569,81 @@ export function NotificationSettingsDialog({
                 <input className="field__input field__input--wide" disabled value="未指定（全ギルド対象）" />
               </label>
 
-              <h4 className="notification-rule-editor__section-title">3 詳細条件</h4>
-              <p className="notification-settings-dialog__note">いずれかの条件ブロックに一致</p>
-              <div className="notification-rule-editor__condition-group">
-                <div className="notification-rule-editor__condition-group-header">
-                  <span className="notification-rule-editor__condition-group-label is-and">AND</span>
-                  <span>条件グループ1</span>
-                  <small>すべての条件に一致</small>
-                  <button type="button">＋ 条件追加</button>
-                </div>
-                <div className="notification-rule-editor__conditions">
-                  <label className="field">
-                    <span className="field__label">防御数</span>
-                    <input
-                      className="field__input"
-                      inputMode="numeric"
-                      placeholder="以下"
-                      value={getDetailConditionValue(ruleDraft, "defenseCount") ?? ""}
-                      onChange={(event) => {
-                        const value = parseOptionalInteger(event.target.value);
-                        setRuleDraft((currentDraft) => updateDetailConditionValue(currentDraft, "defenseCount", "<=", value));
-                      }}
-                    />
-                  </label>
-                <label className="field">
-                  <span className="field__label">侵攻数</span>
-                  <input
-                    className="field__input"
-                    inputMode="numeric"
-                    placeholder="以上"
-                    value={getDetailConditionValue(ruleDraft, "attackCount") ?? ""}
-                    onChange={(event) => {
-                      const value = parseOptionalInteger(event.target.value);
-                      setRuleDraft((currentDraft) => updateDetailConditionValue(currentDraft, "attackCount", ">=", value));
-                    }}
-                  />
-                </label>
-                </div>
+              <h4 className="notification-rule-editor__section-title">{"3 \u8a73\u7d30\u6761\u4ef6"}</h4>
+              <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
+              <div className="notification-rule-editor__condition-tree">
+                {ruleDraft.detailConditions.children.map((conditionNode, nodeIndex) =>
+                  conditionNode.type === "group" ? (
+                    <div
+                      className={`notification-rule-editor__condition-group is-${conditionNode.operator.toLowerCase()}`}
+                      key={`group-${nodeIndex}`}
+                    >
+                      <div className="notification-rule-editor__condition-group-header">
+                        <select
+                          className="notification-rule-editor__condition-group-label"
+                          value={conditionNode.operator}
+                          onChange={(event) => {
+                            const operator = event.target.value as NotificationDetailConditionGroupOperator;
+                            setRuleDraft((currentDraft) => updateConditionGroupOperator(currentDraft, nodeIndex, operator));
+                          }}
+                        >
+                          <option value="AND">AND</option>
+                          <option value="OR">OR</option>
+                        </select>
+                        <span>{"\u6761\u4ef6\u30b0\u30eb\u30fc\u30d7"}{nodeIndex + 1}</span>
+                        <small>{conditionNode.operator === "AND" ? "\u3059\u3079\u3066\u306e\u6761\u4ef6\u306b\u4e00\u81f4" : "\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u306b\u4e00\u81f4"}</small>
+                        <button type="button" onClick={() => setRuleDraft((currentDraft) => addGroupCondition(currentDraft, nodeIndex))}>
+                          {"\uff0b \u6761\u4ef6\u8ffd\u52a0"}
+                        </button>
+                        <button type="button" onClick={() => setRuleDraft((currentDraft) => removeRootConditionNode(currentDraft, nodeIndex))}>
+                          {"\u524a\u9664"}
+                        </button>
+                      </div>
+                      <div className="notification-rule-editor__condition-list">
+                        {conditionNode.children.map((condition, conditionIndex) => (
+                          <ConditionRow
+                            condition={condition}
+                            key={`group-${nodeIndex}-condition-${conditionIndex}`}
+                            onChange={(nextCondition) =>
+                              setRuleDraft((currentDraft) =>
+                                updateGroupCondition(currentDraft, nodeIndex, conditionIndex, nextCondition)
+                              )
+                            }
+                            onRemove={() =>
+                              setRuleDraft((currentDraft) => removeGroupCondition(currentDraft, nodeIndex, conditionIndex))
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="notification-rule-editor__condition-card" key={`condition-${nodeIndex}`}>
+                      <ConditionRow
+                        condition={conditionNode}
+                        onChange={(nextCondition) =>
+                          setRuleDraft((currentDraft) => updateRootCondition(currentDraft, nodeIndex, nextCondition))
+                        }
+                        onRemove={() => setRuleDraft((currentDraft) => removeRootConditionNode(currentDraft, nodeIndex))}
+                      />
+                    </div>
+                  )
+                )}
               </div>
               <div className="notification-rule-editor__condition-actions">
-                <button type="button">＋ 条件を追加</button>
-                <button type="button">＋ グループを追加</button>
+                <button type="button" onClick={() => setRuleDraft(addRootCondition)}>
+                  {"\uff0b \u6761\u4ef6\u3092\u8ffd\u52a0"}
+                </button>
+                <button type="button" onClick={() => setRuleDraft(addRootConditionGroup)}>
+                  {"\uff0b \u30b0\u30eb\u30fc\u30d7\u3092\u8ffd\u52a0"}
+                </button>
               </div>
+              {shouldShowNonAttackingTargetWarning ? (
+                <div className="notification-rule-editor__condition-warning">
+                  {"\u653b\u6483\u4e2d\u3067\u306a\u3044\u62e0\u70b9\u3082\u901a\u77e5\u5bfe\u8c61\u306b\u306a\u308b\u6761\u4ef6\u304c\u3042\u308a\u307e\u3059\u3002"}
+                  <br />
+                  {"\u9632\u885b\u914d\u7f6e\u5fd8\u308c\u691c\u77e5\u306a\u3069\u3092\u76ee\u7684\u3068\u3059\u308b\u5834\u5408\u306f\u3001\u3053\u306e\u307e\u307e\u3067\u554f\u984c\u3042\u308a\u307e\u305b\u3093\u3002"}
+                </div>
+              ) : null}
               <h4 className="notification-rule-editor__section-title">4 Discord通知内容</h4>
               <label className="field">
                 <span className="field__label">Discord表示名</span>
@@ -771,6 +810,215 @@ function serializeRuleDraft(ruleDraft: RuleDraft): string {
   return JSON.stringify(ruleDraft);
 }
 
+function ConditionRow({
+  condition,
+  onChange,
+  onRemove
+}: {
+  readonly condition: NotificationDetailCondition;
+  readonly onChange: (condition: NotificationDetailCondition) => void;
+  readonly onRemove: () => void;
+}) {
+  return (
+    <div className="notification-rule-editor__condition-row">
+      <select
+        className="field__input"
+        value={condition.field}
+        onChange={(event) => {
+          const field = event.target.value as NotificationDetailConditionField;
+          onChange({
+            ...condition,
+            field,
+            operator: getDefaultDetailConditionOperator(field),
+            value: field === "defenseCount" ? 30 : 1
+          });
+        }}
+      >
+        {DETAIL_CONDITION_FIELDS.map((field) => (
+          <option key={field} value={field}>
+            {getDetailConditionFieldLabel(field)}
+          </option>
+        ))}
+      </select>
+      <select
+        className="field__input"
+        value={condition.operator}
+        onChange={(event) =>
+          onChange({
+            ...condition,
+            operator: event.target.value as NotificationDetailConditionOperator
+          })
+        }
+      >
+        {DETAIL_CONDITION_OPERATORS.map((operator) => (
+          <option key={operator} value={operator}>
+            {operator}
+          </option>
+        ))}
+      </select>
+      <input
+        className="field__input"
+        inputMode="numeric"
+        min={0}
+        type="number"
+        value={condition.value}
+        onChange={(event) => {
+          onChange({
+            ...condition,
+            value: Math.max(0, parseOptionalInteger(event.target.value) ?? 0)
+          });
+        }}
+      />
+      <button type="button" onClick={onRemove}>
+        {"\u524a\u9664"}
+      </button>
+    </div>
+  );
+}
+
+function addRootCondition(ruleDraft: RuleDraft): RuleDraft {
+  return {
+    ...ruleDraft,
+    detailConditions: {
+      ...ruleDraft.detailConditions,
+      children: [...ruleDraft.detailConditions.children, createDefaultDetailCondition("defenseCount")]
+    }
+  };
+}
+
+function addRootConditionGroup(ruleDraft: RuleDraft): RuleDraft {
+  return {
+    ...ruleDraft,
+    detailConditions: {
+      ...ruleDraft.detailConditions,
+      children: [
+        ...ruleDraft.detailConditions.children,
+        {
+          type: "group",
+          operator: "AND",
+          children: [
+            createDefaultDetailCondition("defenseCount"),
+            createDefaultDetailCondition("attackCount")
+          ]
+        }
+      ]
+    }
+  };
+}
+
+function addGroupCondition(ruleDraft: RuleDraft, groupIndex: number): RuleDraft {
+  return updateConditionGroup(ruleDraft, groupIndex, (group) => ({
+    ...group,
+    children: [...group.children, createDefaultDetailCondition("defenseCount")]
+  }));
+}
+
+function updateConditionGroupOperator(
+  ruleDraft: RuleDraft,
+  groupIndex: number,
+  operator: NotificationDetailConditionGroupOperator
+): RuleDraft {
+  return updateConditionGroup(ruleDraft, groupIndex, (group) => ({ ...group, operator }));
+}
+
+function updateGroupCondition(
+  ruleDraft: RuleDraft,
+  groupIndex: number,
+  conditionIndex: number,
+  condition: NotificationDetailCondition
+): RuleDraft {
+  return updateConditionGroup(ruleDraft, groupIndex, (group) => ({
+    ...group,
+    children: group.children.map((currentCondition, currentIndex) =>
+      currentIndex === conditionIndex ? condition : currentCondition
+    )
+  }));
+}
+
+function removeGroupCondition(ruleDraft: RuleDraft, groupIndex: number, conditionIndex: number): RuleDraft {
+  return updateConditionGroup(ruleDraft, groupIndex, (group) => ({
+    ...group,
+    children: group.children.filter((_, currentIndex) => currentIndex !== conditionIndex)
+  }));
+}
+
+function updateRootCondition(ruleDraft: RuleDraft, nodeIndex: number, condition: NotificationDetailCondition): RuleDraft {
+  return {
+    ...ruleDraft,
+    detailConditions: {
+      ...ruleDraft.detailConditions,
+      children: ruleDraft.detailConditions.children.map((currentNode, currentIndex) =>
+        currentIndex === nodeIndex ? condition : currentNode
+      )
+    }
+  };
+}
+
+function removeRootConditionNode(ruleDraft: RuleDraft, nodeIndex: number): RuleDraft {
+  const nextChildren = ruleDraft.detailConditions.children.filter((_, currentIndex) => currentIndex !== nodeIndex);
+  return {
+    ...ruleDraft,
+    detailConditions: {
+      ...ruleDraft.detailConditions,
+      children: nextChildren.length === 0 ? [createDefaultConditionGroup()] : nextChildren
+    }
+  };
+}
+
+function updateConditionGroup(
+  ruleDraft: RuleDraft,
+  groupIndex: number,
+  update: (group: Extract<RuleDraft["detailConditions"]["children"][number], { readonly type: "group" }>) =>
+    Extract<RuleDraft["detailConditions"]["children"][number], { readonly type: "group" }>
+): RuleDraft {
+  return {
+    ...ruleDraft,
+    detailConditions: {
+      ...ruleDraft.detailConditions,
+      children: ruleDraft.detailConditions.children.map((currentNode, currentIndex) => {
+        if (currentIndex !== groupIndex || currentNode.type !== "group") {
+          return currentNode;
+        }
+
+        const nextGroup = update(currentNode);
+        return nextGroup.children.length === 0
+          ? { ...nextGroup, children: [createDefaultDetailCondition("defenseCount")] }
+          : nextGroup;
+      })
+    }
+  };
+}
+
+function createDefaultConditionGroup(): RuleDraft["detailConditions"]["children"][number] {
+  return {
+    type: "group",
+    operator: "AND",
+    children: [
+      createDefaultDetailCondition("defenseCount"),
+      createDefaultDetailCondition("attackCount")
+    ]
+  };
+}
+
+function createDefaultDetailCondition(field: NotificationDetailConditionField): NotificationDetailCondition {
+  return {
+    type: "condition",
+    field,
+    operator: getDefaultDetailConditionOperator(field),
+    value: field === "defenseCount" ? 30 : 1
+  };
+}
+
+function getDefaultDetailConditionOperator(
+  field: NotificationDetailConditionField
+): NotificationDetailConditionOperator {
+  return field === "defenseCount" ? "<=" : ">=";
+}
+
+function getDetailConditionFieldLabel(field: NotificationDetailConditionField): string {
+  return field === "defenseCount" ? "\u9632\u885b\u6570" : "\u4fb5\u653b\u6570";
+}
+
 function createDefaultDestinationDraft(): DestinationDraft {
   return {
     enabled: false,
@@ -804,11 +1052,8 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
     return "終了時刻はHH:mm形式で入力してください。";
   }
 
-  if (
-    !isNullableNonNegativeInteger(getDetailConditionValue(ruleDraft, "defenseCount")) ||
-    !isNullableNonNegativeInteger(getDetailConditionValue(ruleDraft, "attackCount"))
-  ) {
-    return "防御数条件と侵攻数条件は0以上の整数で入力してください。";
+  if (!isValidDetailConditionRoot(ruleDraft.detailConditions)) {
+    return "\u8a73\u7d30\u6761\u4ef6\u306f0\u4ee5\u4e0a\u306e\u6574\u6570\u3067\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
   }
 
   if (
@@ -829,56 +1074,25 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
   return null;
 }
 
-function getDetailConditionValue(ruleDraft: RuleDraft, field: NotificationDetailConditionField): number | null {
-  const firstGroup = ruleDraft.detailConditions.children.find((child) => child.type === "group");
-  if (firstGroup?.type !== "group") {
-    return null;
-  }
-
-  const operator: NotificationDetailConditionOperator = field === "defenseCount" ? "<=" : ">=";
-  return firstGroup.children.find((condition) => condition.field === field && condition.operator === operator)?.value ?? null;
+function isValidDetailConditionRoot(detailConditions: RuleDraft["detailConditions"]): boolean {
+  return (
+    detailConditions.operator === "OR" &&
+    detailConditions.children.length > 0 &&
+    detailConditions.children.every((node) =>
+      node.type === "condition"
+        ? isValidDetailCondition(node)
+        : node.children.length > 0 && node.children.every(isValidDetailCondition)
+    )
+  );
 }
 
-function updateDetailConditionValue(
-  ruleDraft: RuleDraft,
-  field: NotificationDetailConditionField,
-  operator: NotificationDetailConditionOperator,
-  value: number | null
-): RuleDraft {
-  const nextChildren = ruleDraft.detailConditions.children.map((child) => {
-    if (child.type !== "group") {
-      return child;
-    }
-
-    const existingCondition = child.children.find(
-      (condition) => condition.field === field && condition.operator === operator
-    );
-    const filteredChildren = child.children.filter(
-      (condition) => !(condition.field === field && condition.operator === operator)
-    );
-
-    return {
-      ...child,
-      children:
-        value === null
-          ? filteredChildren
-          : [
-              ...filteredChildren,
-              {
-                ...(existingCondition ?? { type: "condition" as const, field, operator }),
-                value
-              }
-            ]
-    };
-  });
-
-  return {
-    ...ruleDraft,
-    detailConditions: {
-      ...ruleDraft.detailConditions,
-      children: nextChildren
-    }
-  };
+function isValidDetailCondition(condition: NotificationDetailCondition): boolean {
+  return (
+    DETAIL_CONDITION_FIELDS.includes(condition.field) &&
+    DETAIL_CONDITION_OPERATORS.includes(condition.operator) &&
+    Number.isSafeInteger(condition.value) &&
+    condition.value >= 0
+  );
 }
 
 function validateDestinationDraft(destinationDraft: DestinationDraft): string | null {
