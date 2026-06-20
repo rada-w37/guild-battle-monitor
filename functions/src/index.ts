@@ -12,6 +12,7 @@ import {
   suspendNotificationRule
 } from "./notificationSettings.js";
 import { dispatchNotificationRequest } from "./notificationDispatch.js";
+import { syncGuildBattleGuildCandidates } from "./guildBattleGuildCandidates.js";
 
 initializeApp();
 
@@ -23,6 +24,7 @@ export {
   saveNotificationDestination,
   saveNotificationRule,
   saveOwnerGuildShare,
+  syncGuildBattleGuildCandidates,
   suspendNotificationRule,
   verifyGuildShareAccess
 };
