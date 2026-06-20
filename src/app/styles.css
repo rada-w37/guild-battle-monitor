@@ -1016,10 +1016,6 @@ select {
   gap: 6px;
 }
 
-.notification-rule-editor__legacy-discord-fields {
-  display: none;
-}
-
 .notification-rule-editor__variables-block {
   display: grid;
   gap: 8px;
