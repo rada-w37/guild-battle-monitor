@@ -822,6 +822,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
         rule: expect.objectContaining({ enabled: false })
       });
     });
+    expect(document.body.textContent).not.toContain("通知ルールを保存しました。");
   });
 
   it("uses the same rule editor for new rules after the empty state", async () => {
@@ -1365,13 +1366,214 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const targetGuildSelect = Array.from(document.querySelectorAll<HTMLSelectElement>(".notification-rule-editor select")).find(
-      (candidate) => candidate.textContent?.includes("未指定（全ギルド対象）")
-    );
-    expect(targetGuildSelect).not.toBeUndefined();
-    expect(targetGuildSelect?.disabled).toBe(false);
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(targetGuildModeRadios).toHaveLength(2);
+    expect(targetGuildModeRadios[0]?.checked).toBe(true);
+    expect(targetGuildModeRadios[1]?.checked).toBe(false);
     expect(document.body.textContent).toContain("未指定の場合は全ギルドが対象です");
     expect(document.body.textContent).toContain("Alpha連盟");
+    expect(document.querySelector<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input")?.disabled).toBe(true);
+  });
+
+  it("saves multiple target guilds from the target guild checklist", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <NotificationSettingsDialog
+          request={{ guildId: "saved-guild" }}
+          role="guildOwner"
+          targetGuildWorld={37}
+          useRuleV2Storage
+          getNotificationSettings={vi.fn(() => Promise.resolve({ rules: [] }))}
+          getNotificationSettingsV2={vi.fn(() => Promise.resolve({ rules: [] }))}
+          saveNotificationRule={vi.fn(() => Promise.resolve(createNotificationRule()))}
+          saveNotificationRuleV2={saveNotificationRuleV2}
+          deleteNotificationRule={vi.fn(() => Promise.resolve())}
+          suspendNotificationRule={vi.fn(() =>
+            Promise.resolve({
+              suspendedAt: "2026-06-20T12:00:00.000Z",
+              expiresAt: "2026-06-20T13:00:00.000Z",
+              suspendedBy: { role: "guildOwner" as const }
+            })
+          )}
+          saveNotificationDestination={vi.fn(() =>
+            Promise.resolve({
+              id: "discord" as const,
+              type: "discord_webhook" as const,
+              enabled: true,
+              webhookUrl: "",
+              defaultUsernameTemplate: ""
+            })
+          )}
+          syncGuildBattleGuildCandidates={vi.fn(() =>
+            Promise.resolve({
+              worldId: 1037,
+              candidates: [
+                { guildId: "guild-a", guildName: "Alpha連盟", rank: 1 },
+                { guildId: "guild-b", guildName: "Bravo隊", rank: 2 }
+              ]
+            })
+          )}
+          onClose={() => {}}
+        />
+      );
+      await flushPromises();
+    });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    await act(async () => {
+      targetGuildModeRadios[1]?.click();
+      await flushPromises();
+    });
+
+    const targetGuildCheckboxes = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input");
+    await act(async () => {
+      targetGuildCheckboxes[0]?.click();
+      targetGuildCheckboxes[1]?.click();
+      await flushPromises();
+    });
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        targetGuildIds: ["guild-a", "guild-b"]
+      })
+    });
+    expect(saveNotificationRuleV2.mock.calls[0]?.[0].rule).not.toHaveProperty("targetGuildSelectionMode");
+  });
+
+  it("blocks saving when specific target guild mode has no checked guilds", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      saveNotificationRuleV2,
+      true
+    );
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    await act(async () => {
+      targetGuildModeRadios[1]?.click();
+      await flushPromises();
+    });
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("対象ギルドを1件以上選択してください。");
+  });
+
+  it("restores selected target guilds and keeps out-of-candidate ids visible", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRuleV2({ id: "v2-rule", name: "指定通知", targetGuildIds: ["guild-a", "guild-z"] })]
+        })
+      ),
+      undefined,
+      true
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(targetGuildModeRadios[0]?.checked).toBe(false);
+    expect(targetGuildModeRadios[1]?.checked).toBe(true);
+
+    const checkedTargetGuilds = Array.from(
+      document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input")
+    ).filter((candidate) => candidate.checked);
+    expect(checkedTargetGuilds).toHaveLength(2);
+    expect(document.body.textContent).toContain("Alpha連盟");
+    expect(document.body.textContent).toContain("guild-z（現在Stock上位16位外）");
   });
 
   it("uses v2 notification rule storage only when the feature path is enabled", async () => {
@@ -1499,11 +1701,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const targetGuildSelect = Array.from(document.querySelectorAll<HTMLSelectElement>(".notification-rule-editor select")).find(
-      (candidate) => candidate.textContent?.includes("未指定（全ギルド対象）")
-    );
-    expect(targetGuildSelect).not.toBeUndefined();
-    expect(targetGuildSelect?.disabled).toBe(true);
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(targetGuildModeRadios[0]?.checked).toBe(true);
+    expect(targetGuildModeRadios[1]?.disabled).toBe(true);
     expect(document.body.textContent).toContain(
       "対象ギルド候補を取得するには、所属ギルド設定でワールドを登録してください。"
     );
@@ -2155,6 +2355,42 @@ function createNotificationRule(overrides: Partial<NotificationRule> = {}): Noti
       startTime: "21:00",
       defenseCountMax: 20,
       attackCountMin: 15
+    },
+    message: {
+      usernameTemplate: "ギルバト監視BOT - {拠点名}",
+      mention: { type: "here" },
+      titleTemplate: "⚠ {拠点名}が攻撃されています！",
+      bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
+    },
+    ...overrides
+  };
+}
+
+function createNotificationRuleV2(overrides: Partial<NotificationRuleV2> = {}): NotificationRuleV2 {
+  return {
+    id: "v2-rule",
+    schemaVersion: 2,
+    battleType: "guildBattle",
+    name: "見落とし防止",
+    enabled: true,
+    sortOrder: 0,
+    schedule: {
+      startTime: "21:00",
+      endTime: null
+    },
+    targetGuildIds: [],
+    detailConditions: {
+      operator: "OR",
+      children: [
+        {
+          type: "group",
+          operator: "AND",
+          children: [
+            { type: "condition", field: "defenseCount", operator: "<=", value: 30 },
+            { type: "condition", field: "attackCount", operator: ">=", value: 1 }
+          ]
+        }
+      ]
     },
     message: {
       usernameTemplate: "ギルバト監視BOT - {拠点名}",

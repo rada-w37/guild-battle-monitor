@@ -77,6 +77,7 @@ interface NotificationSettingsDialogProps {
 
 interface RuleDraft extends NotificationRuleV2Draft {
   readonly id?: string;
+  readonly targetGuildSelectionMode: "all" | "specific";
 }
 
 interface RuleRecord extends RuleDraft {
@@ -257,6 +258,10 @@ export function NotificationSettingsDialog({
     pendingDiscardAction === null
       ? null
       : createDiscardConfirmationContent(pendingDiscardAction, ruleEditorMode, pendingDiscardTargetRule);
+  const targetGuildOptions = useMemo(
+    () => createTargetGuildOptions(targetGuildCandidates, ruleDraft.targetGuildIds),
+    [ruleDraft.targetGuildIds, targetGuildCandidates]
+  );
 
   useEffect(() => {
     if (pendingDiscardAction === null) {
@@ -652,9 +657,8 @@ export function NotificationSettingsDialog({
             } satisfies SaveNotificationRuleRequest)
           );
       setRules((currentRules) => currentRules.map((currentRule) => (currentRule.id === savedRule.id ? savedRule : currentRule)));
-      setMessage("通知ルールを保存しました。");
     } catch {
-      setError("通知ルールの保存に失敗しました。");
+      setError("通知ルールの有効状態を更新できませんでした。");
     } finally {
       setStatus("idle");
     }
@@ -1115,31 +1119,70 @@ export function NotificationSettingsDialog({
                 <span>2</span>
                 {"\u5bfe\u8c61"}
               </h4>
-              <label className="field">
-                <span className="field__label">
+              <fieldset className="notification-rule-editor__target-guilds">
+                <legend className="field__label">
                   {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
                   <span className="field__label-note">{"\u672a\u6307\u5b9a\u306e\u5834\u5408\u306f\u5168\u30ae\u30eb\u30c9\u304c\u5bfe\u8c61\u3067\u3059"}</span>
-                </span>
-                <select
-                  className="field__input field__input--wide"
-                  disabled={targetGuildWorld === null || targetGuildCandidateStatus === "loading"}
-                  value={ruleDraft.targetGuildIds[0] ?? ""}
-                  onChange={(event) => {
-                    const targetGuildId = event.target.value;
-                    setRuleDraft((currentDraft) => ({
-                      ...currentDraft,
-                      targetGuildIds: targetGuildId.length === 0 ? [] : [targetGuildId]
-                    }));
-                  }}
+                </legend>
+                <label className="notification-rule-editor__target-guild-radio">
+                  <input
+                    checked={ruleDraft.targetGuildSelectionMode === "all"}
+                    type="radio"
+                    name="notification-target-guild-mode"
+                    onChange={() =>
+                      setRuleDraft((currentDraft) => ({
+                        ...currentDraft,
+                        targetGuildSelectionMode: "all",
+                        targetGuildIds: []
+                      }))
+                    }
+                  />
+                  {"\u5168\u30ae\u30eb\u30c9"}
+                </label>
+                <label className="notification-rule-editor__target-guild-radio">
+                  <input
+                    checked={ruleDraft.targetGuildSelectionMode === "specific"}
+                    disabled={targetGuildWorld === null && ruleDraft.targetGuildIds.length === 0}
+                    type="radio"
+                    name="notification-target-guild-mode"
+                    onChange={() =>
+                      setRuleDraft((currentDraft) => ({
+                        ...currentDraft,
+                        targetGuildSelectionMode: "specific"
+                      }))
+                    }
+                  />
+                  {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
+                </label>
+                <div
+                  className="notification-rule-editor__target-guild-list"
+                  aria-disabled={ruleDraft.targetGuildSelectionMode !== "specific"}
                 >
-                  <option value="">{"\u672a\u6307\u5b9a\uff08\u5168\u30ae\u30eb\u30c9\u5bfe\u8c61\uff09"}</option>
-                  {targetGuildCandidates.map((candidate) => (
-                    <option key={candidate.guildId} value={candidate.guildId}>
-                      {candidate.guildName}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {targetGuildOptions.length === 0 ? (
+                    <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
+                  ) : (
+                    targetGuildOptions.map((candidate) => (
+                      <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
+                        <input
+                          checked={ruleDraft.targetGuildIds.includes(candidate.guildId)}
+                          disabled={ruleDraft.targetGuildSelectionMode !== "specific"}
+                          type="checkbox"
+                          onChange={(event) => {
+                            const isChecked = event.target.checked;
+                            setRuleDraft((currentDraft) => ({
+                              ...currentDraft,
+                              targetGuildIds: isChecked
+                                ? addTargetGuildId(currentDraft.targetGuildIds, candidate.guildId)
+                                : currentDraft.targetGuildIds.filter((guildId) => guildId !== candidate.guildId)
+                            }));
+                          }}
+                        />
+                        {candidate.guildName}
+                      </label>
+                    ))
+                  )}
+                </div>
+              </fieldset>
               {targetGuildWorld === null ? (
                 <p className="notification-settings-dialog__note">
                   {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u3092\u53d6\u5f97\u3059\u308b\u306b\u306f\u3001\u6240\u5c5e\u30ae\u30eb\u30c9\u8a2d\u5b9a\u3067\u30ef\u30fc\u30eb\u30c9\u3092\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
@@ -1512,7 +1555,8 @@ export function NotificationSettingsDialog({
 
 function createDefaultRuleDraft(battleType: NotificationBattleType): RuleDraft {
   return {
-    ...createDefaultNotificationRuleV2Draft(battleType, 0)
+    ...createDefaultNotificationRuleV2Draft(battleType, 0),
+    targetGuildSelectionMode: "all"
   };
 }
 
@@ -1526,7 +1570,8 @@ function createNewRuleDraft(battleType: NotificationBattleType): RuleDraft {
 function createRuleRecordFromLegacy(rule: NotificationRule): RuleRecord {
   return {
     id: rule.id,
-    ...createNotificationRuleV2DraftFromLegacy(rule, 0)
+    ...createNotificationRuleV2DraftFromLegacy(rule, 0),
+    targetGuildSelectionMode: "all"
   };
 }
 
@@ -1539,6 +1584,7 @@ function createRuleRecordFromV2(rule: NotificationRuleV2): RuleRecord {
     },
     schedule: { ...rule.schedule },
     targetGuildIds: [...rule.targetGuildIds],
+    targetGuildSelectionMode: rule.targetGuildIds.length > 0 ? "specific" : "all",
     detailConditions: {
       ...rule.detailConditions,
       children: rule.detailConditions.children.map((node) =>
@@ -1570,6 +1616,7 @@ function createRuleDraft(rule: RuleRecord): RuleDraft {
     },
     schedule: { ...rule.schedule },
     targetGuildIds: [...rule.targetGuildIds],
+    targetGuildSelectionMode: rule.targetGuildSelectionMode,
     detailConditions: {
       ...rule.detailConditions,
       children: rule.detailConditions.children.map((node) =>
@@ -1580,16 +1627,37 @@ function createRuleDraft(rule: RuleRecord): RuleDraft {
 }
 
 function toLegacyRuleInput(ruleDraft: RuleDraft) {
-  return createLegacyNotificationRuleInputFromV2Draft(ruleDraft);
+  const { targetGuildSelectionMode: _targetGuildSelectionMode, ...draft } = ruleDraft;
+  return createLegacyNotificationRuleInputFromV2Draft(draft);
 }
 
 function toRuleV2Input(ruleDraft: RuleDraft): NotificationRuleV2Input {
-  const { id: _id, ...input } = ruleDraft;
+  const { id: _id, targetGuildSelectionMode: _targetGuildSelectionMode, ...input } = ruleDraft;
   return input;
 }
 
 function serializeRuleDraft(ruleDraft: RuleDraft): string {
   return JSON.stringify(ruleDraft);
+}
+
+function addTargetGuildId(targetGuildIds: readonly string[], targetGuildId: string): readonly string[] {
+  return targetGuildIds.includes(targetGuildId) ? targetGuildIds : [...targetGuildIds, targetGuildId];
+}
+
+function createTargetGuildOptions(
+  candidates: readonly GuildBattleGuildCandidate[],
+  selectedGuildIds: readonly string[]
+): readonly GuildBattleGuildCandidate[] {
+  const candidateIds = new Set(candidates.map((candidate) => candidate.guildId));
+  const missingSelectedCandidates = selectedGuildIds
+    .filter((guildId) => !candidateIds.has(guildId))
+    .map((guildId) => ({
+      guildId,
+      guildName: `${guildId}\uff08\u73fe\u5728Stock\u4e0a\u4f4d16\u4f4d\u5916\uff09`,
+      rank: 0
+    }));
+
+  return [...candidates, ...missingSelectedCandidates];
 }
 
 function ConditionRow({
@@ -2011,6 +2079,10 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
     !START_TIME_PATTERN.test(ruleDraft.schedule.endTime)
   ) {
     return "終了時刻はHH:mm形式で入力してください。";
+  }
+
+  if (ruleDraft.battleType === "guildBattle" && ruleDraft.targetGuildSelectionMode === "specific" && ruleDraft.targetGuildIds.length === 0) {
+    return "対象ギルドを1件以上選択してください。";
   }
 
   if (!isValidDetailConditionRoot(ruleDraft.detailConditions)) {
