@@ -67,13 +67,61 @@ describe("guild battle guild candidate sync callable", () => {
     expect(firestore.readCollections).toEqual([]);
   });
 
-  it("keeps the previous database state when ranking data is invalid", async () => {
+  it("uses the owner configured world when share metadata is stale", async () => {
+    const firestore = createFirestore({
+      "guildShares/own-guild": createShare({ world: 1 })
+    });
+    const fetcher = vi.fn(() => Promise.resolve(createJsonResponse({ rankings: { stock: createRankingEntries(16) } })));
+
+    await expect(
+      handleSyncGuildBattleGuildCandidates(
+        { guildId: "own-guild", world: 37 },
+        { authUid: "owner-uid" },
+        createDependencies(firestore, fetcher)
+      )
+    ).resolves.toMatchObject({ worldId: 1037 });
+
+    expect(fetcher).toHaveBeenCalledWith("https://api.mentemori.icu/1037/guild_ranking/latest");
+  });
+
+  it("returns the previous database candidates without updating when ranking data is invalid", async () => {
     const firestore = createFirestore({
       "guildShares/own-guild": createShare({ world: 37 }),
       "guildShares/own-guild/guildBattleGuildCandidates/old-guild": {
         guildId: "old-guild",
-        guildName: "Old Guild"
+        guildName: "Old Guild",
+        rank: 1
+      },
+      "guildShares/own-guild/guildBattleGuildCandidateSyncStatuses/latest": {
+        worldId: 1037,
+        candidateGuildIds: ["old-guild"],
+        syncedAt: "old-sync"
       }
+    });
+    const fetcher = vi.fn(() => Promise.resolve(createJsonResponse({ data: { rankings: { stock: [] } } })));
+
+    const result = await handleSyncGuildBattleGuildCandidates(
+      { guildId: "own-guild" },
+      { authUid: "owner-uid" },
+      createDependencies(firestore, fetcher)
+    );
+
+    expect(result).toEqual({
+      worldId: 1037,
+      candidates: [{ guildId: "old-guild", guildName: "Old Guild", rank: 1 }],
+      syncedAt: "old-sync"
+    });
+    expect(firestore.writes).toEqual([]);
+    expect(firestore.documents["guildShares/own-guild/guildBattleGuildCandidates/old-guild"]).toEqual({
+      guildId: "old-guild",
+      guildName: "Old Guild",
+      rank: 1
+    });
+  });
+
+  it("rejects invalid ranking data when no previous candidates exist", async () => {
+    const firestore = createFirestore({
+      "guildShares/own-guild": createShare({ world: 37 })
     });
     const fetcher = vi.fn(() => Promise.resolve(createJsonResponse({ data: { rankings: { stock: [] } } })));
 
@@ -86,10 +134,6 @@ describe("guild battle guild candidate sync callable", () => {
     ).rejects.toMatchObject({ code: "failed-precondition" });
 
     expect(firestore.writes).toEqual([]);
-    expect(firestore.documents["guildShares/own-guild/guildBattleGuildCandidates/old-guild"]).toEqual({
-      guildId: "old-guild",
-      guildName: "Old Guild"
-    });
   });
 });
 

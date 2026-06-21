@@ -20,7 +20,7 @@ interface GuildShareDocument {
 interface GuildShareRecord {
   readonly guildOwnerUid: string | null;
   readonly adminAccessKey: string | null;
-  readonly world: number;
+  readonly world: number | null;
 }
 
 interface GuildBattleGuildCandidate {
@@ -32,12 +32,12 @@ interface GuildBattleGuildCandidate {
 interface SyncGuildBattleGuildCandidatesOutput {
   readonly worldId: number;
   readonly candidates: readonly GuildBattleGuildCandidate[];
-  readonly syncedAt: unknown;
+  readonly syncedAt?: unknown;
 }
 
 interface DocumentSnapshotLike {
   readonly exists: boolean;
-  data(): GuildShareDocument | undefined;
+  data(): Record<string, unknown> | undefined;
 }
 
 interface DocumentReferenceLike {
@@ -95,10 +95,23 @@ export async function handleSyncGuildBattleGuildCandidates(
   context: CallableContext,
   dependencies: Dependencies
 ): Promise<SyncGuildBattleGuildCandidatesOutput> {
-  const payload = readAuthorizedInput(input);
+  const payload = readSyncInput(input);
   const share = await resolveNotificationSettingsShare(payload, context, dependencies);
-  const worldId = WORLD_ID_BASE + share.world;
-  const candidates = await fetchGuildBattleGuildCandidates(worldId, dependencies);
+  const world = resolveSyncWorld(payload, share, context);
+  const worldId = WORLD_ID_BASE + world;
+  let candidates: readonly GuildBattleGuildCandidate[];
+
+  try {
+    candidates = await fetchGuildBattleGuildCandidates(worldId, dependencies);
+  } catch (error) {
+    const storedCandidates = await loadStoredGuildBattleGuildCandidates(payload.guildId, dependencies);
+    if (storedCandidates !== null) {
+      return storedCandidates;
+    }
+
+    throw error;
+  }
+
   const syncedAt = dependencies.now();
   const batch = dependencies.firestore.batch();
 
@@ -234,6 +247,71 @@ function readPositiveIntegerField(data: Record<string, unknown>, keys: readonly 
   return null;
 }
 
+async function loadStoredGuildBattleGuildCandidates(
+  guildId: string,
+  dependencies: Dependencies
+): Promise<SyncGuildBattleGuildCandidatesOutput | null> {
+  const statusSnapshot = await dependencies.firestore
+    .doc(
+      `${GUILD_SHARES_COLLECTION}/${guildId}/${GUILD_BATTLE_GUILD_CANDIDATE_SYNC_STATUSES_COLLECTION}/${GUILD_BATTLE_CANDIDATE_SYNC_STATUS_ID}`
+    )
+    .get();
+  if (!statusSnapshot.exists) {
+    return null;
+  }
+
+  const status = statusSnapshot.data();
+  if (
+    status === undefined ||
+    typeof status.worldId !== "number" ||
+    !Number.isInteger(status.worldId) ||
+    !Array.isArray(status.candidateGuildIds)
+  ) {
+    return null;
+  }
+
+  const candidateGuildIds = status.candidateGuildIds.filter(
+    (candidateGuildId): candidateGuildId is string => typeof candidateGuildId === "string" && candidateGuildId.trim().length > 0
+  );
+  const candidates: GuildBattleGuildCandidate[] = [];
+
+  for (const candidateGuildId of candidateGuildIds) {
+    const candidateSnapshot = await dependencies.firestore
+      .doc(`${GUILD_SHARES_COLLECTION}/${guildId}/${GUILD_BATTLE_GUILD_CANDIDATES_COLLECTION}/${candidateGuildId}`)
+      .get();
+    const candidate = candidateSnapshot.exists ? readStoredGuildBattleGuildCandidate(candidateSnapshot.data()) : null;
+    if (candidate !== null) {
+      candidates.push(candidate);
+    }
+  }
+
+  return candidates.length === 0
+    ? null
+    : {
+        worldId: status.worldId,
+        candidates,
+        syncedAt: status.syncedAt
+      };
+}
+
+function readStoredGuildBattleGuildCandidate(data: Record<string, unknown> | undefined): GuildBattleGuildCandidate | null {
+  if (
+    data === undefined ||
+    typeof data.guildId !== "string" ||
+    typeof data.guildName !== "string" ||
+    typeof data.rank !== "number" ||
+    !Number.isInteger(data.rank)
+  ) {
+    return null;
+  }
+
+  return {
+    guildId: data.guildId,
+    guildName: data.guildName,
+    rank: data.rank
+  };
+}
+
 async function resolveNotificationSettingsShare(
   payload: { readonly guildId: string; readonly accessKey?: string },
   context: CallableContext,
@@ -259,18 +337,15 @@ async function loadGuildShare(guildId: string, dependencies: Dependencies): Prom
   }
 
   const data = snapshot.data();
-  if (
-    data === undefined ||
-    typeof data.world !== "number" ||
-    !Number.isInteger(data.world)
-  ) {
+  if (data === undefined) {
     throw new HttpsError("failed-precondition", "invalid_guild_share");
   }
 
+  const world = typeof data.world === "number" && Number.isInteger(data.world) ? data.world : null;
   return {
     guildOwnerUid: typeof data.guildOwnerUid === "string" ? data.guildOwnerUid : null,
     adminAccessKey: typeof data.adminAccessKey === "string" ? data.adminAccessKey : null,
-    world: data.world
+    world
   };
 }
 
@@ -278,6 +353,34 @@ function readAuthorizedInput(input: unknown): { readonly guildId: string; readon
   const guildId = readGuildId(input);
   const accessKey = isPlainObject(input) && typeof input.accessKey === "string" ? input.accessKey.trim() : undefined;
   return accessKey === undefined || accessKey.length === 0 ? { guildId } : { guildId, accessKey };
+}
+
+function readSyncInput(input: unknown): { readonly guildId: string; readonly accessKey?: string; readonly world?: number } {
+  const authorizedInput = readAuthorizedInput(input);
+  const world =
+    isPlainObject(input) &&
+    typeof input.world === "number" &&
+    Number.isInteger(input.world) &&
+    input.world > 0
+      ? input.world
+      : undefined;
+  return world === undefined ? authorizedInput : { ...authorizedInput, world };
+}
+
+function resolveSyncWorld(
+  payload: { readonly world?: number },
+  share: GuildShareRecord,
+  context: CallableContext
+): number {
+  if (context.authUid !== null && share.guildOwnerUid === context.authUid && payload.world !== undefined) {
+    return payload.world;
+  }
+
+  if (share.world !== null) {
+    return share.world;
+  }
+
+  throw new HttpsError("failed-precondition", "invalid_guild_share");
 }
 
 function readGuildId(input: unknown): string {

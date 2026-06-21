@@ -248,7 +248,6 @@ export function NotificationSettingsDialog({
   const isRuleDraftDirty =
     ruleEditorMode === "editing" && savedRuleDraft !== null && serializeRuleDraft(ruleDraft) !== serializeRuleDraft(savedRuleDraft);
   const shouldShowRuleActionBar = ruleEditorMode === "creating" || isRuleDraftDirty;
-  const isSuspendingSelectedRule = selectedRuleId !== null && pendingSuspensionRuleId === selectedRuleId;
   const selectedRuleListId = ruleEditorMode === "creating" ? DRAFT_RULE_ID : selectedRuleId;
   const pendingDiscardTargetRule =
     pendingDiscardAction !== null && "ruleId" in pendingDiscardAction
@@ -287,7 +286,7 @@ export function NotificationSettingsDialog({
     let isDisposed = false;
     setTargetGuildCandidateStatus("loading");
 
-    void syncGuildBattleGuildCandidates(request)
+    void syncGuildBattleGuildCandidates({ ...request, world: targetGuildWorld })
       .then((result) => {
         if (isDisposed) {
           return;
@@ -791,6 +790,15 @@ export function NotificationSettingsDialog({
     setDropTarget((currentTarget) => (isSameDropTarget(currentTarget, target) ? currentTarget : target));
   }
 
+  function updateConditionEndDropTarget(event: DragEvent<HTMLElement>, target: NotificationDetailConditionDropTarget) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (event.clientY < rect.bottom - CONDITION_DROP_HYSTERESIS_PX) {
+      return;
+    }
+
+    updateConditionDropTarget(event, target);
+  }
+
   function dropConditionNode(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     event.stopPropagation();
@@ -839,12 +847,6 @@ export function NotificationSettingsDialog({
                 </span>
               </summary>
               <div className="notification-settings-dialog__destination-body">
-                <div className="notification-settings-dialog__section-header">
-                  <h3>Discord Webhook設定</h3>
-                  <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveDestination()}>
-                    保存
-                  </button>
-                </div>
               <label className="notification-settings-dialog__checkbox">
                 <input
                   checked={destinationDraft.enabled}
@@ -881,7 +883,11 @@ export function NotificationSettingsDialog({
                   }}
                 />
               </label>
-              <p className="notification-settings-dialog__note">Webhook URLはguild ownerのみ表示・編集できます。</p>
+              <div className="notification-settings-dialog__destination-actions">
+                <button className="load-form__button" disabled={status !== "idle"} type="button" onClick={() => void saveDestination()}>
+                  保存
+                </button>
+              </div>
               {destinationError !== null ? <p className="firebase-message firebase-message--error">{destinationError}</p> : null}
               </div>
             </details>
@@ -996,7 +1002,13 @@ export function NotificationSettingsDialog({
               </div>
             </section>
 
-            <section className="notification-settings-dialog__panel notification-rule-workspace">
+            <section
+              className={
+                isRuleEditorVisible
+                  ? "notification-settings-dialog__panel notification-rule-workspace"
+                  : "notification-settings-dialog__panel notification-rule-workspace is-empty"
+              }
+            >
               {isRuleEditorVisible ? (
                 <div className="notification-rule-workspace__topbar">
                   <h3>{ruleEditorTitle}</h3>
@@ -1019,7 +1031,13 @@ export function NotificationSettingsDialog({
                   </div>
                 </div>
               ) : null}
-              <div className="notification-rule-workspace__columns">
+              <div
+                className={
+                  isRuleEditorVisible
+                    ? "notification-rule-workspace__columns"
+                    : "notification-rule-workspace__columns is-empty"
+                }
+              >
             <section className="notification-rule-workspace__pane notification-rule-editor" ref={ruleEditorScrollRef}>
               {!isRuleEditorVisible ? (
                 isGrandBattlePreparing ? (
@@ -1141,7 +1159,7 @@ export function NotificationSettingsDialog({
               <div
                 className="notification-rule-editor__condition-tree"
                 onDragOver={(event) =>
-                  updateConditionDropTarget(event, {
+                  updateConditionEndDropTarget(event, {
                     scope: "root",
                     index: ruleDraft.detailConditions.children.length
                   })
@@ -1200,7 +1218,7 @@ export function NotificationSettingsDialog({
                       <div
                         className="notification-rule-editor__condition-list"
                         onDragOver={(event) =>
-                          updateConditionDropTarget(event, {
+                          updateConditionEndDropTarget(event, {
                             scope: "group",
                             groupIndex: nodeIndex,
                             index: conditionNode.children.length
@@ -1277,11 +1295,11 @@ export function NotificationSettingsDialog({
                 <DropIndicator isActive={isRootDropTarget(dropTarget, ruleDraft.detailConditions.children.length)} />
               </div>
               <div className="notification-rule-editor__condition-actions">
-                <button type="button" onClick={addRootConditionAndScroll}>
-                  {"\uff0b \u6761\u4ef6\u3092\u8ffd\u52a0"}
-                </button>
                 <button type="button" onClick={addRootConditionGroupAndScroll}>
                   {"\uff0b \u30b0\u30eb\u30fc\u30d7\u3092\u8ffd\u52a0"}
+                </button>
+                <button type="button" onClick={addRootConditionAndScroll}>
+                  {"\uff0b \u6761\u4ef6\u3092\u8ffd\u52a0"}
                 </button>
               </div>
               {shouldShowNonAttackingTargetWarning ? (
@@ -1296,8 +1314,8 @@ export function NotificationSettingsDialog({
               )}
             </section>
 
+            {isRuleEditorVisible ? (
             <section className="notification-rule-workspace__pane notification-rule-preview-panel">
-              {isRuleEditorVisible ? (
                 <>
                   <h3 className="notification-settings-dialog__numbered-heading">
                     <span>4</span>
@@ -1401,12 +1419,10 @@ export function NotificationSettingsDialog({
                   </div>
                   <div className="notification-rule-preview-panel__divider" />
                 </>
-              ) : null}
               <h3 className="notification-settings-dialog__numbered-heading">
                 <span>5</span>
                 通知プレビュー
               </h3>
-              {isRuleEditorVisible ? (
                 <div className="notification-preview">
                   <div className="notification-preview__header">
                     <div className="notification-preview__avatar" aria-hidden="true">
@@ -1422,12 +1438,15 @@ export function NotificationSettingsDialog({
                     <p>{previewBody}</p>
                   </div>
                 </div>
-              ) : (
-                <p className="notification-settings-dialog__empty">ルールを選択するとプレビューできます。</p>
-              )}
               {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
               {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
             </section>
+              ) : (
+                <>
+                  {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
+                  {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
+                </>
+              )}
               </div>
               {shouldShowRuleActionBar ? (
                 <div className="notification-rule-workspace__action-bar">
@@ -1442,7 +1461,7 @@ export function NotificationSettingsDialog({
                     </button>
                     <button
                       className="load-form__button"
-                      disabled={status !== "idle" || isSuspendingSelectedRule}
+                      disabled={status !== "idle"}
                       type="button"
                       onClick={() => void saveRule()}
                     >

@@ -631,8 +631,15 @@ select {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
+  min-height: 44px;
   cursor: pointer;
   font-weight: 700;
+}
+
+.notification-settings-dialog__destination-summary::marker,
+.notification-settings-dialog__destination-summary::-webkit-details-marker {
+  display: none;
+  content: "";
 }
 
 .notification-settings-dialog__destination-status {
@@ -652,6 +659,11 @@ select {
   display: grid;
   gap: 12px;
   padding-top: 12px;
+}
+
+.notification-settings-dialog__destination-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .notification-settings-dialog__section-header {
@@ -709,18 +721,26 @@ select {
 
 .notification-rule-workspace {
   display: grid;
-  gap: 10px;
+  gap: 14px;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
 }
 
+.notification-rule-workspace.is-empty {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .notification-rule-workspace__columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
-  gap: 12px;
+  gap: 14px;
   align-items: stretch;
   min-height: 0;
+}
+
+.notification-rule-workspace__columns.is-empty {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .notification-settings-dialog__grid > .notification-settings-dialog__panel {
@@ -757,7 +777,7 @@ select {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-surface);
@@ -925,6 +945,7 @@ select {
 }
 
 .notification-rule-editor__condition-tree {
+  position: relative;
   display: grid;
   gap: 10px;
 }
@@ -1018,29 +1039,39 @@ select {
 }
 
 .notification-rule-editor__condition-list {
+  position: relative;
   display: grid;
   gap: 8px;
   padding-left: 18px;
 }
 
 .notification-rule-editor__drop-indicator {
+  position: relative;
+  z-index: 1;
   height: 0;
   border-radius: 999px;
   pointer-events: none;
-  transition: height 0.12s ease, margin 0.12s ease, background 0.12s ease;
 }
 
 .notification-rule-editor__drop-indicator.is-active {
-  position: relative;
+  height: 0;
+}
+
+.notification-rule-editor__drop-indicator.is-active::before {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
   height: 4px;
-  margin: 4px 0;
+  border-radius: 999px;
   background: var(--app-primary);
+  content: "";
 }
 
 .notification-rule-editor__drop-indicator.is-active::after {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 0;
   padding: 2px 8px;
   border-radius: 999px;
   color: #fff;

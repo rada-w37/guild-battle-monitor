@@ -61,6 +61,10 @@ export interface SyncGuildBattleGuildCandidatesOutput {
   readonly syncedAt?: unknown;
 }
 
+export interface SyncGuildBattleGuildCandidatesRequest extends NotificationSettingsRequest {
+  readonly world?: number;
+}
+
 export async function getNotificationSettings(input: NotificationSettingsRequest): Promise<NotificationSettings> {
   const result = await callFunction("getNotificationSettings", input);
   return createNotificationSettings(result);
@@ -100,7 +104,7 @@ export async function saveNotificationDestination(
 }
 
 export async function syncGuildBattleGuildCandidates(
-  input: NotificationSettingsRequest
+  input: SyncGuildBattleGuildCandidatesRequest
 ): Promise<SyncGuildBattleGuildCandidatesOutput> {
   const result = await callFunction("syncGuildBattleGuildCandidates", input);
   return createSyncGuildBattleGuildCandidatesOutput(result);

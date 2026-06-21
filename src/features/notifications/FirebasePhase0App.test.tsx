@@ -699,6 +699,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
       expect(document.querySelector(".notification-settings-dialog")).not.toBeNull();
     });
     expect(document.body.textContent).toContain("Discord Webhook設定");
+    expect(document.body.textContent?.match(/Discord Webhook設定/g)).toHaveLength(1);
+    expect(document.body.textContent).not.toContain("Webhook URLはguild ownerのみ表示・編集できます。");
     expect(document.querySelector("input[type='url']")).not.toBeNull();
   });
 
@@ -736,8 +738,43 @@ describe("FirebasePhase0App notification settings dialog", () => {
       expect(document.body.textContent).toContain("通知ルールを選択してください");
     });
     expect(document.body.textContent).not.toContain("通知ルール編集");
+    expect(document.body.textContent).not.toContain("通知プレビュー");
+    expect(document.querySelector(".notification-rule-preview-panel")).toBeNull();
+    expect(document.querySelector(".notification-rule-workspace__columns.is-empty")).not.toBeNull();
     expect(document.querySelector(".notification-rule-card__actions-trigger")?.textContent).toBe("...");
     expect(document.querySelector<HTMLInputElement>(".notification-rule-card__enabled input")?.checked).toBe(true);
+  });
+
+  it("syncs target guild candidates with the configured owned guild world", async () => {
+    const syncGuildBattleGuildCandidates = vi.fn(() =>
+      Promise.resolve({
+        worldId: 1037,
+        candidates: [{ guildId: "guild-a", guildName: "Alpha連盟", rank: 1 }]
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      syncGuildBattleGuildCandidates
+    );
+    await openNotificationSettings();
+
+    await vi.waitFor(() => {
+      expect(syncGuildBattleGuildCandidates).toHaveBeenCalledWith({ guildId: "saved-guild", world: 37 });
+    });
   });
 
   it("saves enabled changes from the rule list checkbox for non-selected rules", async () => {
@@ -1571,8 +1608,92 @@ describe("FirebasePhase0App notification settings dialog", () => {
     await vi.waitFor(() => {
       expect(suspendNotificationRule).toHaveBeenCalledWith({
         guildId: "saved-guild",
-        ruleId: "rule-1"
+      ruleId: "rule-1"
       });
+    });
+  });
+
+  it("keeps existing rule saving available while temporary suspension is pending", async () => {
+    let resolveSuspension:
+      | ((value: {
+          readonly suspendedAt: string;
+          readonly expiresAt: string;
+          readonly suspendedBy?: { readonly uid?: string; readonly role?: "guildOwner" | "admin" };
+        }) => void)
+      | null = null;
+    const suspendNotificationRule = vi.fn(
+      () =>
+        new Promise<{
+          readonly suspendedAt: string;
+          readonly expiresAt: string;
+          readonly suspendedBy?: { readonly uid?: string; readonly role?: "guildOwner" | "admin" };
+        }>((resolve) => {
+          resolveSuspension = resolve;
+        })
+    );
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "rule-1",
+        ...input.rule
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      saveNotificationRule,
+      undefined,
+      suspendNotificationRule
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    await vi.waitFor(() => {
+      expect(suspendNotificationRule).toHaveBeenCalled();
+    });
+
+    const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__action-buttons button")).find(
+      (candidate) => candidate.textContent === "保存"
+    );
+    if (!saveButton) {
+      throw new Error("save notification rule button was not found");
+    }
+
+    expect(saveButton.disabled).toBe(false);
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        guildId: "saved-guild",
+        ruleId: "rule-1"
+      })
+    );
+
+    await act(async () => {
+      resolveSuspension?.({
+        suspendedAt: "2026-06-20T12:00:00.000Z",
+        expiresAt: "2026-06-20T13:00:00.000Z",
+        suspendedBy: { uid: "owner-uid" }
+      });
+      await flushPromises();
     });
   });
 
