@@ -1322,7 +1322,7 @@ export function NotificationSettingsDialog({
                     {"Discord\u901a\u77e5\u5185\u5bb9"}
                   </h3>
                   <label className="field">
-                    <span className="field__label">{"Discord\u8868\u793a\u540d\uff08Webhook\u540d\uff09"}</span>
+                    <span className="field__label">{"Discord\u8868\u793a\u540d"}</span>
                     <input
                       className="field__input field__input--wide"
                       value={ruleDraft.message.usernameTemplate}
