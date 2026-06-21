@@ -632,7 +632,7 @@ export function NotificationSettingsDialog({
   }
 
   async function toggleRuleEnabled(rule: RuleRecord, enabled: boolean) {
-    if (status !== "idle" || rule.id === selectedRuleId || rule.battleType === "grandBattle") {
+    if (status !== "idle" || rule.battleType === "grandBattle") {
       return;
     }
 
@@ -662,6 +662,19 @@ export function NotificationSettingsDialog({
     } finally {
       setStatus("idle");
     }
+  }
+
+  function changeRuleListEnabled(rule: RuleRecord, isDraftRule: boolean, enabled: boolean) {
+    if (status !== "idle" || rule.battleType === "grandBattle") {
+      return;
+    }
+
+    if (isDraftRule || rule.id === selectedRuleId) {
+      setRuleDraft((currentDraft) => ({ ...currentDraft, enabled }));
+      return;
+    }
+
+    void toggleRuleEnabled(rule, enabled);
   }
 
   function deleteDraftRule() {
@@ -934,24 +947,29 @@ export function NotificationSettingsDialog({
                   const ruleMenuId = isDraftRule ? DRAFT_RULE_ID : rule.id;
                   const draftStatus = isDraftRule ? "作成前" : null;
                   const pauseStatus = !isDraftRule && rule.id === selectedRuleId && isRuleDraftDirty ? "保存まで一時停止" : null;
+                  const displayedEnabled = isSelectedRule ? ruleDraft.enabled : rule.enabled;
 
                   return (
                     <article
                       className={isSelectedRule ? "notification-rule-card is-selected" : "notification-rule-card"}
                       key={ruleMenuId}
                     >
-                      <label className="notification-rule-card__enabled">
+                      <label
+                        className="notification-rule-card__enabled-toggle"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <input
                           aria-label={`${rule.name}の有効状態`}
-                          checked={isSelectedRule ? ruleDraft.enabled : rule.enabled}
-                          disabled={status !== "idle" || isSelectedRule || rule.battleType === "grandBattle" || isDraftRule}
+                          checked={displayedEnabled}
+                          disabled={status !== "idle" || rule.battleType === "grandBattle"}
                           type="checkbox"
                           onChange={(event) => {
-                            if (!isDraftRule) {
-                              void toggleRuleEnabled(rule, event.currentTarget.checked);
-                            }
+                            changeRuleListEnabled(rule, isDraftRule, event.currentTarget.checked);
                           }}
                         />
+                        <span className="notification-rule-card__toggle-track" aria-hidden="true">
+                          <span className="notification-rule-card__toggle-thumb" />
+                        </span>
                       </label>
                       <button
                         className="notification-rule-card__main"
@@ -967,8 +985,8 @@ export function NotificationSettingsDialog({
                           <span className="notification-rule-card__title">{rule.name}</span>
                           <span className="notification-rule-card__time">{createRuleScheduleSummary(rule)}</span>
                         </span>
-                        <span className={rule.enabled ? "notification-rule-card__status is-enabled" : "notification-rule-card__status"}>
-                          {rule.enabled ? "有効" : "無効"}
+                        <span className={displayedEnabled ? "notification-rule-card__status is-enabled" : "notification-rule-card__status"}>
+                          {displayedEnabled ? "有効" : "無効"}
                         </span>
                         <span className="notification-rule-card__summary">{createRuleConditionSummary(rule)}</span>
                         {draftStatus !== null ? <span className="notification-rule-card__draft-status">{draftStatus}</span> : null}
@@ -1016,23 +1034,6 @@ export function NotificationSettingsDialog({
               {isRuleEditorVisible ? (
                 <div className="notification-rule-workspace__topbar">
                   <h3>{ruleEditorTitle}</h3>
-                  <div className="notification-rule-editor__header-actions">
-                    <label className="notification-rule-workspace__enabled-toggle">
-                      <span>有効</span>
-                      <input
-                        aria-label="通知ルールを有効にする"
-                        checked={ruleDraft.enabled}
-                        type="checkbox"
-                        onChange={(event) => {
-                          const enabled = event.target.checked;
-                          setRuleDraft((currentDraft) => ({ ...currentDraft, enabled }));
-                        }}
-                      />
-                      <span className="notification-rule-workspace__toggle-track" aria-hidden="true">
-                        <span className="notification-rule-workspace__toggle-thumb" />
-                      </span>
-                    </label>
-                  </div>
                 </div>
               ) : null}
               <div
@@ -1154,34 +1155,32 @@ export function NotificationSettingsDialog({
                   />
                   {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
                 </label>
-                <div
-                  className="notification-rule-editor__target-guild-list"
-                  aria-disabled={ruleDraft.targetGuildSelectionMode !== "specific"}
-                >
-                  {targetGuildOptions.length === 0 ? (
-                    <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
-                  ) : (
-                    targetGuildOptions.map((candidate) => (
-                      <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
-                        <input
-                          checked={ruleDraft.targetGuildIds.includes(candidate.guildId)}
-                          disabled={ruleDraft.targetGuildSelectionMode !== "specific"}
-                          type="checkbox"
-                          onChange={(event) => {
-                            const isChecked = event.target.checked;
-                            setRuleDraft((currentDraft) => ({
-                              ...currentDraft,
-                              targetGuildIds: isChecked
-                                ? addTargetGuildId(currentDraft.targetGuildIds, candidate.guildId)
-                                : currentDraft.targetGuildIds.filter((guildId) => guildId !== candidate.guildId)
-                            }));
-                          }}
-                        />
-                        {candidate.guildName}
-                      </label>
-                    ))
-                  )}
-                </div>
+                {ruleDraft.targetGuildSelectionMode === "specific" ? (
+                  <div className="notification-rule-editor__target-guild-list">
+                    {targetGuildOptions.length === 0 ? (
+                      <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
+                    ) : (
+                      targetGuildOptions.map((candidate) => (
+                        <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
+                          <input
+                            checked={ruleDraft.targetGuildIds.includes(candidate.guildId)}
+                            type="checkbox"
+                            onChange={(event) => {
+                              const isChecked = event.target.checked;
+                              setRuleDraft((currentDraft) => ({
+                                ...currentDraft,
+                                targetGuildIds: isChecked
+                                  ? addTargetGuildId(currentDraft.targetGuildIds, candidate.guildId)
+                                  : currentDraft.targetGuildIds.filter((guildId) => guildId !== candidate.guildId)
+                              }));
+                            }}
+                          />
+                          {candidate.guildName}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </fieldset>
               {targetGuildWorld === null ? (
                 <p className="notification-settings-dialog__note">

@@ -764,7 +764,7 @@ select {
   display: flex;
   gap: 12px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--app-border);
 }
@@ -832,68 +832,6 @@ select {
 .notification-rule-preview-panel::-webkit-scrollbar-track,
 .notification-settings-dialog__body::-webkit-scrollbar-track {
   background: transparent;
-}
-
-.notification-rule-editor__header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.notification-rule-workspace__enabled-toggle {
-  position: relative;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: var(--app-text);
-  font-size: 0.9rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.notification-rule-workspace__enabled-toggle input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.notification-rule-workspace__toggle-track {
-  position: relative;
-  display: inline-flex;
-  width: 44px;
-  height: 24px;
-  flex: 0 0 auto;
-  align-items: center;
-  border-radius: 999px;
-  background: #cbd5e1;
-  transition: background 0.16s ease;
-}
-
-.notification-rule-workspace__toggle-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.24);
-  transform: translateX(3px);
-  transition: transform 0.16s ease;
-}
-
-.notification-rule-workspace__enabled-toggle input:checked + .notification-rule-workspace__toggle-track {
-  background: var(--app-primary);
-}
-
-.notification-rule-workspace__enabled-toggle input:checked + .notification-rule-workspace__toggle-track .notification-rule-workspace__toggle-thumb {
-  transform: translateX(23px);
-}
-
-.notification-rule-workspace__enabled-toggle input:focus-visible + .notification-rule-workspace__toggle-track {
-  outline: 2px solid color-mix(in srgb, var(--app-primary) 45%, transparent);
-  outline-offset: 2px;
 }
 
 .notification-rule-editor__empty-state {
@@ -970,10 +908,6 @@ select {
   border-radius: 8px;
   background: var(--app-surface);
   scrollbar-width: thin;
-}
-
-.notification-rule-editor__target-guild-list[aria-disabled="true"] {
-  opacity: 0.7;
 }
 
 .notification-rule-editor__condition-group {
@@ -1217,18 +1151,61 @@ select {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-primary) 28%, transparent);
 }
 
-.notification-rule-card__enabled {
-  display: grid;
-  min-width: 20px;
+.notification-rule-card__enabled-toggle {
+  position: relative;
+  display: inline-flex;
   min-height: 28px;
-  place-items: start center;
+  align-items: flex-start;
   padding-top: 2px;
+  cursor: pointer;
 }
 
-.notification-rule-card__enabled input {
+.notification-rule-card__enabled-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.notification-rule-card__toggle-track {
+  position: relative;
+  display: inline-flex;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background 0.16s ease;
+}
+
+.notification-rule-card__toggle-thumb {
   width: 16px;
   height: 16px;
-  margin: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.24);
+  transform: translateX(2px);
+  transition: transform 0.16s ease;
+}
+
+.notification-rule-card__enabled-toggle input:checked + .notification-rule-card__toggle-track {
+  background: var(--app-primary);
+}
+
+.notification-rule-card__enabled-toggle input:checked + .notification-rule-card__toggle-track .notification-rule-card__toggle-thumb {
+  transform: translateX(16px);
+}
+
+.notification-rule-card__enabled-toggle input:focus-visible + .notification-rule-card__toggle-track {
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.notification-rule-card__enabled-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .notification-rule-card__main {

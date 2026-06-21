@@ -742,7 +742,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.querySelector(".notification-rule-preview-panel")).toBeNull();
     expect(document.querySelector(".notification-rule-workspace__columns.is-empty")).not.toBeNull();
     expect(document.querySelector(".notification-rule-card__actions-trigger")?.textContent).toBe("...");
-    expect(document.querySelector<HTMLInputElement>(".notification-rule-card__enabled input")?.checked).toBe(true);
+    expect(document.querySelector<HTMLInputElement>(".notification-rule-card__enabled-toggle input")?.checked).toBe(true);
   });
 
   it("syncs target guild candidates with the configured owned guild world", async () => {
@@ -777,7 +777,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
   });
 
-  it("saves enabled changes from the rule list checkbox for non-selected rules", async () => {
+  it("saves enabled changes from the rule list toggle for non-selected rules", async () => {
     const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
       Promise.resolve({
         id: "rule-1",
@@ -805,13 +805,13 @@ describe("FirebasePhase0App notification settings dialog", () => {
     );
     await openNotificationSettings();
 
-    const enabledCheckbox = document.querySelector<HTMLInputElement>(".notification-rule-card__enabled input");
-    if (!enabledCheckbox) {
-      throw new Error("notification rule enabled checkbox was not found");
+    const enabledToggle = document.querySelector<HTMLInputElement>(".notification-rule-card__enabled-toggle input");
+    if (!enabledToggle) {
+      throw new Error("notification rule enabled toggle was not found");
     }
 
     await act(async () => {
-      enabledCheckbox.click();
+      enabledToggle.click();
       await flushPromises();
     });
 
@@ -850,13 +850,18 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     const editorTopbar = document.querySelector(".notification-rule-workspace__topbar");
     expect(editorTopbar?.textContent).toContain("通知ルール新規作成");
-    expect(editorTopbar?.querySelector<HTMLInputElement>("input[type='checkbox']")?.checked).toBe(true);
-    expect(editorTopbar?.querySelector(".notification-rule-workspace__toggle-track")).not.toBeNull();
+    expect(editorTopbar?.querySelector<HTMLInputElement>("input[type='checkbox']")).toBeNull();
+    expect(editorTopbar?.querySelector(".notification-rule-workspace__toggle-track")).toBeNull();
     expect(editorTopbar?.querySelector(".notification-settings-dialog__checkbox")).toBeNull();
     expect(document.querySelector(".notification-rule-editor__topbar")).toBeNull();
+
+    const selectedListToggle = document.querySelector<HTMLInputElement>(
+      ".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input"
+    );
+    expect(selectedListToggle?.checked).toBe(true);
   });
 
-  it("treats the editor enabled toggle as an unsaved edit", async () => {
+  it("treats the selected rule list enabled toggle as an unsaved edit", async () => {
     await renderApp(
       "/",
       signedInState,
@@ -876,13 +881,15 @@ describe("FirebasePhase0App notification settings dialog", () => {
     await openNotificationSettings();
     await openFirstNotificationRuleForEdit();
 
-    const editorToggle = document.querySelector<HTMLInputElement>(".notification-rule-workspace__enabled-toggle input");
-    if (!editorToggle) {
-      throw new Error("notification rule editor enabled toggle was not found");
+    const selectedRuleToggle = document.querySelector<HTMLInputElement>(
+      ".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input"
+    );
+    if (!selectedRuleToggle) {
+      throw new Error("selected notification rule enabled toggle was not found");
     }
 
     await act(async () => {
-      editorToggle.click();
+      selectedRuleToggle.click();
       await flushPromises();
     });
 
@@ -908,6 +915,21 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("新規ルール");
     expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("作成前");
+
+    const draftToggle = document.querySelector<HTMLInputElement>(".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input");
+    if (!draftToggle) {
+      throw new Error("new rule draft enabled toggle was not found");
+    }
+    expect(draftToggle.checked).toBe(true);
+
+    await act(async () => {
+      draftToggle.click();
+      await flushPromises();
+    });
+
+    expect(document.querySelector<HTMLInputElement>(".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input")?.checked).toBe(
+      false
+    );
 
     const nameInput = Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).find(
       (candidate) => candidate.value === "新規ルール"
@@ -1371,8 +1393,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(targetGuildModeRadios[0]?.checked).toBe(true);
     expect(targetGuildModeRadios[1]?.checked).toBe(false);
     expect(document.body.textContent).toContain("未指定の場合は全ギルドが対象です");
-    expect(document.body.textContent).toContain("Alpha連盟");
-    expect(document.querySelector<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input")?.disabled).toBe(true);
+    expect(document.body.textContent).not.toContain("Alpha連盟");
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
   });
 
   it("saves multiple target guilds from the target guild checklist", async () => {
@@ -1443,10 +1465,12 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
 
     const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
     await act(async () => {
       targetGuildModeRadios[1]?.click();
       await flushPromises();
     });
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).not.toBeNull();
 
     const targetGuildCheckboxes = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input");
     await act(async () => {
@@ -1704,6 +1728,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
     expect(targetGuildModeRadios[0]?.checked).toBe(true);
     expect(targetGuildModeRadios[1]?.disabled).toBe(true);
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
     expect(document.body.textContent).toContain(
       "対象ギルド候補を取得するには、所属ギルド設定でワールドを登録してください。"
     );
