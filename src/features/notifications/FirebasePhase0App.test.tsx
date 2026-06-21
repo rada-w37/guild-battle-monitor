@@ -813,7 +813,43 @@ describe("FirebasePhase0App notification settings dialog", () => {
     const editorTopbar = document.querySelector(".notification-rule-workspace__topbar");
     expect(editorTopbar?.textContent).toContain("通知ルール新規作成");
     expect(editorTopbar?.querySelector<HTMLInputElement>("input[type='checkbox']")?.checked).toBe(true);
+    expect(editorTopbar?.querySelector(".notification-rule-workspace__toggle-track")).not.toBeNull();
+    expect(editorTopbar?.querySelector(".notification-settings-dialog__checkbox")).toBeNull();
     expect(document.querySelector(".notification-rule-editor__topbar")).toBeNull();
+  });
+
+  it("treats the editor enabled toggle as an unsaved edit", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート", enabled: true })]
+        })
+      )
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+
+    const editorToggle = document.querySelector<HTMLInputElement>(".notification-rule-workspace__enabled-toggle input");
+    if (!editorToggle) {
+      throw new Error("notification rule editor enabled toggle was not found");
+    }
+
+    await act(async () => {
+      editorToggle.click();
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
+    expect(document.body.textContent).toContain("保存まで一時停止");
   });
 
   it("shows template variable labels without braces but inserts braced variables", async () => {

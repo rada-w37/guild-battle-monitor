@@ -765,6 +765,60 @@ select {
   justify-content: flex-end;
 }
 
+.notification-rule-workspace__enabled-toggle {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--app-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-rule-workspace__enabled-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.notification-rule-workspace__toggle-track {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background 0.16s ease;
+}
+
+.notification-rule-workspace__toggle-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.24);
+  transform: translateX(3px);
+  transition: transform 0.16s ease;
+}
+
+.notification-rule-workspace__enabled-toggle input:checked + .notification-rule-workspace__toggle-track {
+  background: var(--app-primary);
+}
+
+.notification-rule-workspace__enabled-toggle input:checked + .notification-rule-workspace__toggle-track .notification-rule-workspace__toggle-thumb {
+  transform: translateX(23px);
+}
+
+.notification-rule-workspace__enabled-toggle input:focus-visible + .notification-rule-workspace__toggle-track {
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 45%, transparent);
+  outline-offset: 2px;
+}
+
 .notification-rule-editor__empty-state {
   display: grid;
   min-height: 260px;
@@ -1125,6 +1179,17 @@ select {
 .notification-rule-editor__textarea {
   min-height: 104px;
   resize: vertical;
+}
+
+.notification-rule-preview-panel .field,
+.notification-rule-preview-panel .field__input,
+.notification-rule-preview-panel .field__input--wide {
+  width: 100%;
+}
+
+.notification-rule-preview-panel .notification-rule-editor__textarea {
+  min-height: 152px;
+  line-height: 1.5;
 }
 
 .notification-rule-editor__variables {

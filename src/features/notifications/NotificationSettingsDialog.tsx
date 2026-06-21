@@ -734,8 +734,10 @@ export function NotificationSettingsDialog({
                 <div className="notification-rule-workspace__topbar">
                   <h3>{ruleEditorTitle}</h3>
                   <div className="notification-rule-editor__header-actions">
-                    <label className="notification-settings-dialog__checkbox">
+                    <label className="notification-rule-workspace__enabled-toggle">
+                      <span>有効</span>
                       <input
+                        aria-label="通知ルールを有効にする"
                         checked={ruleDraft.enabled}
                         type="checkbox"
                         onChange={(event) => {
@@ -743,7 +745,9 @@ export function NotificationSettingsDialog({
                           setRuleDraft((currentDraft) => ({ ...currentDraft, enabled }));
                         }}
                       />
-                      有効
+                      <span className="notification-rule-workspace__toggle-track" aria-hidden="true">
+                        <span className="notification-rule-workspace__toggle-thumb" />
+                      </span>
                     </label>
                   </div>
                 </div>
