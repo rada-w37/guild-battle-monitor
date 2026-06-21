@@ -984,6 +984,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).not.toBeNull();
+    expect(document.querySelector(".notification-settings-dialog__confirm")?.getAttribute("aria-modal")).toBe("true");
+    expect(document.body.textContent).toContain("保存されていない変更があります。");
     expect(document.body.textContent).toContain("変更を破棄して新規作成しますか？");
 
     const cancelButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__confirm button")).find(
@@ -999,11 +1002,63 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
 
     expect(document.body.textContent).not.toContain("変更を破棄して新規作成しますか？");
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).toBeNull();
     expect(
       Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).some(
         (candidate) => candidate.value === "変更中アラート"
       )
     ).toBe(true);
+  });
+
+  it("shows a centered confirmation before discarding a new draft for rule selection", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "テスト通知" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    await openFirstNotificationRuleForEdit();
+
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).not.toBeNull();
+    expect(document.body.textContent).toContain("作成中の通知ルールがあります。");
+    expect(document.body.textContent).toContain("作成内容を破棄して「テスト通知」を編集しますか？");
+
+    const backdrop = document.querySelector<HTMLElement>(".notification-settings-dialog__confirm-backdrop");
+    if (!backdrop) {
+      throw new Error("discard confirmation backdrop was not found");
+    }
+
+    await act(async () => {
+      backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).toBeNull();
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("新規ルール");
   });
 
   it("allows detail condition numbers to be blank while focused and restores zero on blur", async () => {
@@ -1038,6 +1093,24 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(conditionValueInput.value).toBe("");
 
     await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(conditionValueInput, "50");
+      conditionValueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("50");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(conditionValueInput, "");
+      conditionValueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("");
+
+    await act(async () => {
       conditionValueInput.blur();
       await flushPromises();
     });
@@ -1063,7 +1136,10 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(document.querySelector(".notification-rule-editor__condition-row[draggable='true']")).toBeNull();
     expect(document.querySelector(".notification-rule-editor__condition-group[draggable='true']")).toBeNull();
-    expect(document.querySelectorAll(".notification-rule-editor__drag-handle[draggable='true']").length).toBeGreaterThan(0);
+    const dragHandles = document.querySelectorAll(".notification-rule-editor__drag-handle[draggable='true']");
+    expect(dragHandles.length).toBeGreaterThan(0);
+    expect(dragHandles[0]?.textContent).toBe("⋮⋮");
+    expect(dragHandles[0]?.getAttribute("aria-label")).toBe("並べ替え");
 
     const addConditionButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__condition-actions button")).find(
       (candidate) => candidate.textContent === "＋ 条件を追加"

@@ -55,6 +55,9 @@ const DETAIL_CONDITION_OPERATORS: readonly NotificationDetailConditionOperator[]
 const DRAFT_RULE_ID = "__notification_rule_draft__";
 const NEW_RULE_DRAFT_NAME = "新規ルール";
 const NON_ATTACKING_WARNING_TITLE = "攻撃中でない拠点もこの条件に一致する可能性があります。";
+const CONDITION_DROP_HYSTERESIS_PX = 10;
+const DRAG_HANDLE_LABEL = "\u22ee\u22ee";
+const DRAG_HANDLE_ARIA_LABEL = "\u4e26\u3079\u66ff\u3048";
 
 interface NotificationSettingsDialogProps {
   readonly request: NotificationSettingsRequest;
@@ -92,6 +95,14 @@ type PendingDiscardAction =
   | { readonly type: "duplicate"; readonly ruleId: string }
   | { readonly type: "select"; readonly ruleId: string };
 type RuleListItem = { readonly type: "saved" | "draft"; readonly rule: RuleRecord };
+type DropIndexScope =
+  | { readonly scope: "root" }
+  | { readonly scope: "group"; readonly groupIndex: number };
+interface DiscardConfirmationContent {
+  readonly title: string;
+  readonly message: string;
+  readonly confirmLabel: string;
+}
 
 export function NotificationSettingsDialog({
   request,
@@ -239,6 +250,32 @@ export function NotificationSettingsDialog({
   const shouldShowRuleActionBar = ruleEditorMode === "creating" || isRuleDraftDirty;
   const isSuspendingSelectedRule = selectedRuleId !== null && pendingSuspensionRuleId === selectedRuleId;
   const selectedRuleListId = ruleEditorMode === "creating" ? DRAFT_RULE_ID : selectedRuleId;
+  const pendingDiscardTargetRule =
+    pendingDiscardAction !== null && "ruleId" in pendingDiscardAction
+      ? rules.find((rule) => rule.id === pendingDiscardAction.ruleId)
+      : undefined;
+  const discardConfirmationContent =
+    pendingDiscardAction === null
+      ? null
+      : createDiscardConfirmationContent(pendingDiscardAction, ruleEditorMode, pendingDiscardTargetRule);
+
+  useEffect(() => {
+    if (pendingDiscardAction === null) {
+      return;
+    }
+
+    function cancelDiscardOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setPendingDiscardAction(null);
+      }
+    }
+
+    document.addEventListener("keydown", cancelDiscardOnEscape);
+
+    return () => {
+      document.removeEventListener("keydown", cancelDiscardOnEscape);
+    };
+  }, [pendingDiscardAction]);
 
   useEffect(() => {
     if (activeBattleType !== "guildBattle" || targetGuildWorld === null) {
@@ -447,12 +484,58 @@ export function NotificationSettingsDialog({
     return ruleEditorMode === "creating" || isRuleDraftDirty;
   }
 
-  function confirmPendingDiscardAction() {
+  async function releaseSelectedRuleTemporarySuspension(): Promise<boolean> {
+    if (
+      ruleEditorMode !== "editing" ||
+      selectedRuleId === null ||
+      savedRuleDraft === null ||
+      !suspendedRuleIds.includes(selectedRuleId)
+    ) {
+      return true;
+    }
+
+    const releasingRuleId = selectedRuleId;
+    setStatus("saving");
+    setError(null);
+
+    try {
+      const savedRule = useRuleV2Storage
+        ? createRuleRecordFromV2(
+            await saveNotificationRuleV2({
+              ...request,
+              ruleId: releasingRuleId,
+              rule: toRuleV2Input(savedRuleDraft)
+            } satisfies SaveNotificationRuleV2Request)
+          )
+        : createRuleRecordFromLegacy(
+            await saveNotificationRule({
+              ...request,
+              ruleId: releasingRuleId,
+              rule: toLegacyRuleInput(savedRuleDraft)
+            } satisfies SaveNotificationRuleRequest)
+          );
+      setRules((currentRules) => currentRules.map((rule) => (rule.id === savedRule.id ? savedRule : rule)));
+      setSuspendedRuleIds((currentIds) => currentIds.filter((ruleId) => ruleId !== releasingRuleId));
+      return true;
+    } catch {
+      setError("通知の一時停止解除に失敗しました。時間をおいて再度お試しください。");
+      return false;
+    } finally {
+      setStatus("idle");
+    }
+  }
+
+  async function confirmPendingDiscardAction() {
     if (pendingDiscardAction === null) {
       return;
     }
 
     const action = pendingDiscardAction;
+    const canContinue = await releaseSelectedRuleTemporarySuspension();
+    if (!canContinue) {
+      return;
+    }
+
     setPendingDiscardAction(null);
 
     if (action.type === "create") {
@@ -475,7 +558,7 @@ export function NotificationSettingsDialog({
     setPendingDiscardAction(null);
   }
 
-  function discardRuleChanges() {
+  async function discardRuleChanges() {
     setRuleError(null);
     setMessage(null);
 
@@ -489,6 +572,11 @@ export function NotificationSettingsDialog({
     }
 
     if (savedRuleDraft !== null) {
+      const canContinue = await releaseSelectedRuleTemporarySuspension();
+      if (!canContinue) {
+        return;
+      }
+
       setRuleDraft(savedRuleDraft);
     }
   }
@@ -700,7 +788,7 @@ export function NotificationSettingsDialog({
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
-    setDropTarget(target);
+    setDropTarget((currentTarget) => (isSameDropTarget(currentTarget, target) ? currentTarget : target));
   }
 
   function dropConditionNode(event: DragEvent<HTMLElement>) {
@@ -1070,7 +1158,7 @@ export function NotificationSettingsDialog({
                         onDragOver={(event) =>
                           updateConditionDropTarget(event, {
                             scope: "root",
-                            index: getDropIndex(event, nodeIndex)
+                            index: getDropIndex(event, nodeIndex, dropTarget, { scope: "root" })
                           })
                         }
                         onDrop={dropConditionNode}
@@ -1080,11 +1168,11 @@ export function NotificationSettingsDialog({
                           className="notification-rule-editor__drag-handle"
                           draggable
                           type="button"
-                          aria-label="条件グループを移動"
+                          aria-label={DRAG_HANDLE_ARIA_LABEL}
                           onDragEnd={endConditionDrag}
                           onDragStart={(event) => startConditionDrag(event, { scope: "root", index: nodeIndex })}
                         >
-                          ::::
+                          {DRAG_HANDLE_LABEL}
                         </button>
                         <select
                           className="notification-rule-editor__condition-group-label"
@@ -1137,7 +1225,7 @@ export function NotificationSettingsDialog({
                                 updateConditionDropTarget(event, {
                                   scope: "group",
                                   groupIndex: nodeIndex,
-                                  index: getDropIndex(event, conditionIndex)
+                                  index: getDropIndex(event, conditionIndex, dropTarget, { scope: "group", groupIndex: nodeIndex })
                                 })
                               }
                               onDragStart={(event) =>
@@ -1166,7 +1254,7 @@ export function NotificationSettingsDialog({
                       onDragOver={(event) =>
                         updateConditionDropTarget(event, {
                           scope: "root",
-                          index: getDropIndex(event, nodeIndex)
+                          index: getDropIndex(event, nodeIndex, dropTarget, { scope: "root" })
                         })
                       }
                       onDrop={dropConditionNode}
@@ -1349,7 +1437,7 @@ export function NotificationSettingsDialog({
                       : "\u4fdd\u5b58\u3055\u308c\u3066\u3044\u306a\u3044\u5909\u66f4\u304c\u3042\u308a\u307e\u3059\u3002\u4fdd\u5b58\u307e\u3067\u901a\u77e5\u306f\u4e00\u6642\u505c\u6b62\u3055\u308c\u3066\u3044\u307e\u3059\u3002"}
                   </p>
                   <div className="notification-rule-editor__action-buttons">
-                    <button type="button" onClick={discardRuleChanges}>
+                    <button type="button" onClick={() => void discardRuleChanges()}>
                       {ruleEditorMode === "creating" ? "\u7834\u68c4" : "\u7834\u68c4\u3057\u3066\u623b\u3059"}
                     </button>
                     <button
@@ -1365,33 +1453,39 @@ export function NotificationSettingsDialog({
               ) : null}
             </section>
           </div>
-          {pendingDiscardAction !== null ? (
-            <div className="notification-settings-dialog__confirm" role="alertdialog" aria-modal="false">
+        </div>
+        {discardConfirmationContent !== null ? (
+          <div
+            className="notification-settings-dialog__confirm-backdrop"
+            role="presentation"
+            onMouseDown={cancelPendingDiscardAction}
+          >
+            <div
+              aria-labelledby="notification-settings-dialog-discard-title"
+              className="notification-settings-dialog__confirm"
+              role="alertdialog"
+              aria-modal="true"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
               <div>
-                <strong>保存されていない変更があります。</strong>
-                <p>
-                  {pendingDiscardAction.type === "create"
-                    ? "変更を破棄して新規作成しますか？"
-                    : pendingDiscardAction.type === "duplicate"
-                      ? "変更を破棄して複製しますか？"
-                      : "変更を破棄して別ルールを編集しますか？"}
-                </p>
+                <strong id="notification-settings-dialog-discard-title">{discardConfirmationContent.title}</strong>
+                <p>{discardConfirmationContent.message}</p>
               </div>
               <div className="notification-settings-dialog__confirm-actions">
-                <button type="button" onClick={confirmPendingDiscardAction}>
-                  {pendingDiscardAction.type === "create"
-                    ? "破棄して新規作成"
-                    : pendingDiscardAction.type === "duplicate"
-                      ? "破棄して複製"
-                      : "破棄して編集"}
+                <button
+                  type="button"
+                  disabled={status !== "idle"}
+                  onClick={() => void confirmPendingDiscardAction()}
+                >
+                  {discardConfirmationContent.confirmLabel}
                 </button>
                 <button className="load-form__button" type="button" onClick={cancelPendingDiscardAction}>
                   キャンセル
                 </button>
               </div>
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -1516,11 +1610,11 @@ function ConditionRow({
         className="notification-rule-editor__drag-handle"
         draggable={draggable}
         type="button"
-        aria-label="条件を移動"
+        aria-label={DRAG_HANDLE_ARIA_LABEL}
         onDragEnd={onDragEnd}
         onDragStart={onDragStart}
       >
-        ::::
+        {DRAG_HANDLE_LABEL}
       </button>
       <select
         className="field__input"
@@ -1763,9 +1857,59 @@ function createTemplateVariableLabel(variableName: string): string {
   return variableName.startsWith("{") && variableName.endsWith("}") ? variableName.slice(1, -1) : variableName;
 }
 
-function getDropIndex(event: DragEvent<HTMLElement>, itemIndex: number): number {
+function createDiscardConfirmationContent(
+  action: PendingDiscardAction,
+  editorMode: RuleEditorMode,
+  targetRule: RuleRecord | undefined
+): DiscardConfirmationContent {
+  const isCreating = editorMode === "creating";
+  const title = isCreating ? "作成中の通知ルールがあります。" : "保存されていない変更があります。";
+  const discardSubject = isCreating ? "作成内容" : "変更";
+
+  if (action.type === "create") {
+    return {
+      title,
+      message: `${discardSubject}を破棄して新規作成しますか？`,
+      confirmLabel: "破棄して新規作成"
+    };
+  }
+
+  if (action.type === "duplicate") {
+    return {
+      title,
+      message: `${discardSubject}を破棄して複製しますか？`,
+      confirmLabel: "破棄して複製"
+    };
+  }
+
+  return {
+    title,
+    message:
+      targetRule === undefined
+        ? `${discardSubject}を破棄して選択したルールを編集しますか？`
+        : `${discardSubject}を破棄して「${targetRule.name}」を編集しますか？`,
+    confirmLabel: "破棄して編集"
+  };
+}
+
+function getDropIndex(
+  event: DragEvent<HTMLElement>,
+  itemIndex: number,
+  currentTarget: NotificationDetailConditionDropTarget | null,
+  scope: DropIndexScope
+): number {
   const rect = event.currentTarget.getBoundingClientRect();
-  return event.clientY > rect.top + rect.height / 2 ? itemIndex + 1 : itemIndex;
+  const middleY = rect.top + rect.height / 2;
+  const distanceFromMiddle = Math.abs(event.clientY - middleY);
+  if (
+    distanceFromMiddle <= CONDITION_DROP_HYSTERESIS_PX &&
+    isDropTargetInScope(currentTarget, scope) &&
+    (currentTarget.index === itemIndex || currentTarget.index === itemIndex + 1)
+  ) {
+    return currentTarget.index;
+  }
+
+  return event.clientY > middleY ? itemIndex + 1 : itemIndex;
 }
 
 function canDropConditionNode(
@@ -1789,6 +1933,32 @@ function isGroupDropTarget(
   index: number
 ): boolean {
   return target?.scope === "group" && target.groupIndex === groupIndex && target.index === index;
+}
+
+function isDropTargetInScope(
+  target: NotificationDetailConditionDropTarget | null,
+  scope: DropIndexScope
+): target is NotificationDetailConditionDropTarget {
+  if (target === null || target.scope !== scope.scope) {
+    return false;
+  }
+
+  if (scope.scope === "root") {
+    return true;
+  }
+
+  return target.scope === "group" && target.groupIndex === scope.groupIndex;
+}
+
+function isSameDropTarget(
+  currentTarget: NotificationDetailConditionDropTarget | null,
+  nextTarget: NotificationDetailConditionDropTarget
+): boolean {
+  if (currentTarget === null || currentTarget.scope !== nextTarget.scope || currentTarget.index !== nextTarget.index) {
+    return false;
+  }
+
+  return nextTarget.scope === "root" || (currentTarget.scope === "group" && currentTarget.groupIndex === nextTarget.groupIndex);
 }
 
 function createDefaultDestinationDraft(): DestinationDraft {
