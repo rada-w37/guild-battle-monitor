@@ -407,6 +407,40 @@ export function NotificationSettingsDialog({
     }
   }
 
+  async function toggleRuleEnabled(rule: RuleRecord, enabled: boolean) {
+    if (status !== "idle" || rule.id === selectedRuleId || rule.battleType === "grandBattle") {
+      return;
+    }
+
+    const nextDraft = { ...createRuleDraft(rule), enabled };
+    setStatus("saving");
+    setMessage(null);
+    setError(null);
+    try {
+      const savedRule = useRuleV2Storage
+        ? createRuleRecordFromV2(
+            await saveNotificationRuleV2({
+              ...request,
+              ruleId: rule.id,
+              rule: toRuleV2Input(nextDraft)
+            } satisfies SaveNotificationRuleV2Request)
+          )
+        : createRuleRecordFromLegacy(
+            await saveNotificationRule({
+              ...request,
+              ruleId: rule.id,
+              rule: toLegacyRuleInput(nextDraft)
+            } satisfies SaveNotificationRuleRequest)
+          );
+      setRules((currentRules) => currentRules.map((currentRule) => (currentRule.id === savedRule.id ? savedRule : currentRule)));
+      setMessage("通知ルールを保存しました。");
+    } catch {
+      setError("通知ルールの保存に失敗しました。");
+    } finally {
+      setStatus("idle");
+    }
+  }
+
   async function deleteRule(rule: RuleRecord) {
     if (!window.confirm(`通知ルール「${rule.name}」を削除しますか？`)) {
       return;
@@ -655,6 +689,15 @@ export function NotificationSettingsDialog({
                     className={rule.id === selectedRuleId ? "notification-rule-card is-selected" : "notification-rule-card"}
                     key={rule.id}
                   >
+                    <label className="notification-rule-card__enabled">
+                      <input
+                        aria-label={`${rule.name}の有効状態`}
+                        checked={rule.id === selectedRuleId ? ruleDraft.enabled : rule.enabled}
+                        disabled={status !== "idle" || rule.id === selectedRuleId || rule.battleType === "grandBattle"}
+                        type="checkbox"
+                        onChange={(event) => void toggleRuleEnabled(rule, event.currentTarget.checked)}
+                      />
+                    </label>
                     <button
                       className="notification-rule-card__main"
                       disabled={rule.battleType === "grandBattle"}
@@ -686,9 +729,27 @@ export function NotificationSettingsDialog({
               </div>
             </section>
 
-            <section className="notification-rule-workspace">
+            <section className="notification-settings-dialog__panel notification-rule-workspace">
+              {isRuleEditorVisible ? (
+                <div className="notification-rule-workspace__topbar">
+                  <h3>{ruleEditorTitle}</h3>
+                  <div className="notification-rule-editor__header-actions">
+                    <label className="notification-settings-dialog__checkbox">
+                      <input
+                        checked={ruleDraft.enabled}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const enabled = event.target.checked;
+                          setRuleDraft((currentDraft) => ({ ...currentDraft, enabled }));
+                        }}
+                      />
+                      有効
+                    </label>
+                  </div>
+                </div>
+              ) : null}
               <div className="notification-rule-workspace__columns">
-            <section className="notification-settings-dialog__panel notification-rule-editor" ref={ruleEditorScrollRef}>
+            <section className="notification-rule-workspace__pane notification-rule-editor" ref={ruleEditorScrollRef}>
               {!isRuleEditorVisible ? (
                 isGrandBattlePreparing ? (
                   <div className="notification-rule-editor__empty-state">
@@ -710,22 +771,6 @@ export function NotificationSettingsDialog({
                 )
               ) : (
                 <>
-              <div className="notification-rule-editor__topbar">
-                <h3>{ruleEditorTitle}</h3>
-                <div className="notification-rule-editor__header-actions">
-                  <label className="notification-settings-dialog__checkbox">
-                    <input
-                      checked={ruleDraft.enabled}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const enabled = event.target.checked;
-                        setRuleDraft((currentDraft) => ({ ...currentDraft, enabled }));
-                      }}
-                    />
-                    有効
-                  </label>
-                </div>
-              </div>
               <h4 className="notification-rule-editor__section-title">1 基本設定</h4>
               <label className="field">
                 <span className="field__label">通知ルール名</span>
@@ -854,12 +899,14 @@ export function NotificationSettingsDialog({
                         </select>
                         <span>{"\u6761\u4ef6\u30b0\u30eb\u30fc\u30d7"}{nodeIndex + 1}</span>
                         <small>{conditionNode.operator === "AND" ? "\u3059\u3079\u3066\u306e\u6761\u4ef6\u306b\u4e00\u81f4" : "\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u306b\u4e00\u81f4"}</small>
-                        <button type="button" onClick={() => addGroupConditionAndScroll(nodeIndex)}>
-                          {"\uff0b \u6761\u4ef6\u8ffd\u52a0"}
-                        </button>
-                        <button type="button" onClick={() => setRuleDraft((currentDraft) => removeRootConditionNode(currentDraft, nodeIndex))}>
-                          {"\u524a\u9664"}
-                        </button>
+                        <div className="notification-rule-editor__condition-group-actions">
+                          <button type="button" onClick={() => addGroupConditionAndScroll(nodeIndex)}>
+                            {"\uff0b \u6761\u4ef6\u8ffd\u52a0"}
+                          </button>
+                          <button type="button" onClick={() => setRuleDraft((currentDraft) => removeRootConditionNode(currentDraft, nodeIndex))}>
+                            {"\u524a\u9664"}
+                          </button>
+                        </div>
                       </div>
                       <div
                         className="notification-rule-editor__condition-list"
@@ -953,33 +1000,11 @@ export function NotificationSettingsDialog({
                 </div>
               ) : null}
               {ruleError !== null ? <p className="firebase-message firebase-message--error">{ruleError}</p> : null}
-              {shouldShowRuleActionBar ? (
-                <div className="notification-rule-editor__action-bar notification-rule-editor__action-bar--inline">
-                  <p>
-                    {ruleEditorMode === "creating"
-                      ? "作成前の通知ルールです。"
-                      : "保存されていない変更があります。保存まで通知は一時停止されています。"}
-                  </p>
-                  <div className="notification-rule-editor__action-buttons">
-                    <button type="button" onClick={discardRuleChanges}>
-                      {ruleEditorMode === "creating" ? "破棄" : "破棄して戻す"}
-                    </button>
-                    <button
-                      className="load-form__button"
-                      disabled={status !== "idle" || isSuspendingSelectedRule}
-                      type="button"
-                      onClick={() => void saveRule()}
-                    >
-                      {ruleEditorMode === "creating" ? "作成" : "保存"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
                 </>
               )}
             </section>
 
-            <section className="notification-settings-dialog__panel notification-rule-preview-panel">
+            <section className="notification-rule-workspace__pane notification-rule-preview-panel">
               {isRuleEditorVisible ? (
                 <>
                   <h3>{"4 Discord\u901a\u77e5\u5185\u5bb9"}</h3>

@@ -737,6 +737,54 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
     expect(document.body.textContent).not.toContain("通知ルール編集");
     expect(document.querySelector(".notification-rule-card__actions summary")?.textContent).toBe("...");
+    expect(document.querySelector<HTMLInputElement>(".notification-rule-card__enabled input")?.checked).toBe(true);
+  });
+
+  it("saves enabled changes from the rule list checkbox for non-selected rules", async () => {
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "rule-1",
+        ...input.rule
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "防衛ゼロ検知", enabled: true })]
+        })
+      ),
+      undefined,
+      saveNotificationRule
+    );
+    await openNotificationSettings();
+
+    const enabledCheckbox = document.querySelector<HTMLInputElement>(".notification-rule-card__enabled input");
+    if (!enabledCheckbox) {
+      throw new Error("notification rule enabled checkbox was not found");
+    }
+
+    await act(async () => {
+      enabledCheckbox.click();
+      await flushPromises();
+    });
+
+    await vi.waitFor(() => {
+      expect(saveNotificationRule).toHaveBeenCalledWith({
+        guildId: "saved-guild",
+        ruleId: "rule-1",
+        rule: expect.objectContaining({ enabled: false })
+      });
+    });
   });
 
   it("uses the same rule editor for new rules after the empty state", async () => {
@@ -762,9 +810,10 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).toContain("作成");
     expect(document.body.textContent).toContain("有効");
 
-    const editorTopbar = document.querySelector(".notification-rule-editor__topbar");
+    const editorTopbar = document.querySelector(".notification-rule-workspace__topbar");
     expect(editorTopbar?.textContent).toContain("通知ルール新規作成");
     expect(editorTopbar?.querySelector<HTMLInputElement>("input[type='checkbox']")?.checked).toBe(true);
+    expect(document.querySelector(".notification-rule-editor__topbar")).toBeNull();
   });
 
   it("shows template variable labels without braces but inserts braced variables", async () => {
@@ -1128,7 +1177,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
     expect(document.body.textContent).toContain("保存まで一時停止");
 
-    const discardButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+    const discardButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-workspace__action-bar button")).find(
       (candidate) => candidate.textContent === "破棄して戻す"
     );
     if (!discardButton) {
