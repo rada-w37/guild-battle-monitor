@@ -28,6 +28,8 @@ import {
   type NotificationRuleV2Draft
 } from "./notificationRuleV2Draft";
 import {
+  canConditionNodeMatchWithoutAttack,
+  canMatchWithoutAttack,
   hasNonAttackingTargetWarning,
   moveDetailConditionNode,
   type NotificationDetailConditionDragSource,
@@ -50,6 +52,9 @@ const DISCORD_WEBHOOK_URL_PATTERN = /^https:\/\/discord(?:app)?\.com\/api\/webho
 const START_TIME_PATTERN = /^\d{2}:\d{2}$/;
 const DETAIL_CONDITION_FIELDS: readonly NotificationDetailConditionField[] = ["defenseCount", "attackCount"];
 const DETAIL_CONDITION_OPERATORS: readonly NotificationDetailConditionOperator[] = ["<=", ">="];
+const DRAFT_RULE_ID = "__notification_rule_draft__";
+const NEW_RULE_DRAFT_NAME = "新規ルール";
+const NON_ATTACKING_WARNING_TITLE = "攻撃中でない拠点もこの条件に一致する可能性があります。";
 
 interface NotificationSettingsDialogProps {
   readonly request: NotificationSettingsRequest;
@@ -82,6 +87,11 @@ interface DestinationDraft {
 }
 
 type RuleEditorMode = "empty" | "creating" | "editing";
+type PendingDiscardAction =
+  | { readonly type: "create" }
+  | { readonly type: "duplicate"; readonly ruleId: string }
+  | { readonly type: "select"; readonly ruleId: string };
+type RuleListItem = { readonly type: "saved" | "draft"; readonly rule: RuleRecord };
 
 export function NotificationSettingsDialog({
   request,
@@ -116,7 +126,47 @@ export function NotificationSettingsDialog({
   const [pendingSuspensionRuleId, setPendingSuspensionRuleId] = useState<string | null>(null);
   const [dragSource, setDragSource] = useState<NotificationDetailConditionDragSource | null>(null);
   const [dropTarget, setDropTarget] = useState<NotificationDetailConditionDropTarget | null>(null);
+  const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null);
+  const [pendingDiscardAction, setPendingDiscardAction] = useState<PendingDiscardAction | null>(null);
   const ruleEditorScrollRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (openRuleMenuId === null) {
+      return;
+    }
+
+    function closeMenuOnOutsidePointer(event: MouseEvent) {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".notification-rule-card__actions") !== null) {
+        return;
+      }
+
+      setOpenRuleMenuId(null);
+    }
+
+    function closeMenuOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpenRuleMenuId(null);
+      }
+    }
+
+    document.addEventListener("mousedown", closeMenuOnOutsidePointer);
+    document.addEventListener("keydown", closeMenuOnEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", closeMenuOnOutsidePointer);
+      document.removeEventListener("keydown", closeMenuOnEscape);
+    };
+  }, [openRuleMenuId]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -167,6 +217,14 @@ export function NotificationSettingsDialog({
     () => rules.filter((rule) => rule.battleType === activeBattleType),
     [activeBattleType, rules]
   );
+  const visibleRuleItems = useMemo<readonly RuleListItem[]>(() => {
+    const savedItems = visibleRules.map((rule) => ({ type: "saved" as const, rule }));
+    if (ruleEditorMode !== "creating" || ruleDraft.battleType !== activeBattleType) {
+      return savedItems;
+    }
+
+    return [...savedItems, { type: "draft" as const, rule: createDraftRuleRecord(ruleDraft) }];
+  }, [activeBattleType, ruleDraft, ruleEditorMode, visibleRules]);
   const canSaveDestination = role === "guildOwner";
   const previewMention = createMentionPreview(ruleDraft.message.mention);
   const previewUsername = applyNotificationTemplate(ruleDraft.message.usernameTemplate);
@@ -180,6 +238,7 @@ export function NotificationSettingsDialog({
     ruleEditorMode === "editing" && savedRuleDraft !== null && serializeRuleDraft(ruleDraft) !== serializeRuleDraft(savedRuleDraft);
   const shouldShowRuleActionBar = ruleEditorMode === "creating" || isRuleDraftDirty;
   const isSuspendingSelectedRule = selectedRuleId !== null && pendingSuspensionRuleId === selectedRuleId;
+  const selectedRuleListId = ruleEditorMode === "creating" ? DRAFT_RULE_ID : selectedRuleId;
 
   useEffect(() => {
     if (activeBattleType !== "guildBattle" || targetGuildWorld === null) {
@@ -281,6 +340,21 @@ export function NotificationSettingsDialog({
     setDragSource(null);
     setDropTarget(null);
     setRuleError(null);
+    setOpenRuleMenuId(null);
+    setPendingDiscardAction(null);
+  }
+
+  function requestSelectRule(rule: RuleRecord) {
+    if (rule.id === selectedRuleListId) {
+      return;
+    }
+
+    if (shouldConfirmDiscardCurrentDraft()) {
+      setPendingDiscardAction({ type: "select", ruleId: rule.id });
+      return;
+    }
+
+    selectRule(rule);
   }
 
   function selectRule(rule: RuleRecord) {
@@ -306,29 +380,52 @@ export function NotificationSettingsDialog({
     setPendingSuspensionRuleId(null);
     setDragSource(null);
     setDropTarget(null);
+    setOpenRuleMenuId(null);
+    setPendingDiscardAction(null);
   }
 
-  function createNewRule() {
+  function requestCreateNewRule() {
     if (isGrandBattlePreparing) {
       return;
     }
 
+    if (shouldConfirmDiscardCurrentDraft()) {
+      setPendingDiscardAction({ type: "create" });
+      return;
+    }
+
+    createNewRule();
+  }
+
+  function createNewRule() {
     setSelectedRuleId(null);
     setRuleEditorMode("creating");
-    setRuleDraft(createDefaultRuleDraft(activeBattleType));
+    setRuleDraft(createNewRuleDraft(activeBattleType));
     setSavedRuleDraft(null);
     setRuleError(null);
     setMessage(null);
     setPendingSuspensionRuleId(null);
     setDragSource(null);
     setDropTarget(null);
+    setOpenRuleMenuId(null);
+    setPendingDiscardAction(null);
   }
 
-  function duplicateRule(rule: RuleRecord) {
+  function requestDuplicateRule(rule: RuleRecord) {
     if (rule.battleType === "grandBattle" || isGrandBattlePreparing) {
       return;
     }
 
+    setOpenRuleMenuId(null);
+    if (shouldConfirmDiscardCurrentDraft()) {
+      setPendingDiscardAction({ type: "duplicate", ruleId: rule.id });
+      return;
+    }
+
+    duplicateRule(rule);
+  }
+
+  function duplicateRule(rule: RuleRecord) {
     setSelectedRuleId(null);
     setRuleEditorMode("creating");
     setRuleDraft({
@@ -342,6 +439,40 @@ export function NotificationSettingsDialog({
     setPendingSuspensionRuleId(null);
     setDragSource(null);
     setDropTarget(null);
+    setOpenRuleMenuId(null);
+    setPendingDiscardAction(null);
+  }
+
+  function shouldConfirmDiscardCurrentDraft(): boolean {
+    return ruleEditorMode === "creating" || isRuleDraftDirty;
+  }
+
+  function confirmPendingDiscardAction() {
+    if (pendingDiscardAction === null) {
+      return;
+    }
+
+    const action = pendingDiscardAction;
+    setPendingDiscardAction(null);
+
+    if (action.type === "create") {
+      createNewRule();
+      return;
+    }
+
+    const sourceRule = rules.find((rule) => rule.id === action.ruleId);
+    if (sourceRule !== undefined && action.type === "duplicate") {
+      duplicateRule(sourceRule);
+      return;
+    }
+
+    if (sourceRule !== undefined) {
+      selectRule(sourceRule);
+    }
+  }
+
+  function cancelPendingDiscardAction() {
+    setPendingDiscardAction(null);
   }
 
   function discardRuleChanges() {
@@ -353,6 +484,7 @@ export function NotificationSettingsDialog({
       setRuleEditorMode("empty");
       setRuleDraft(createDefaultRuleDraft(activeBattleType));
       setSavedRuleDraft(null);
+      setOpenRuleMenuId(null);
       return;
     }
 
@@ -441,7 +573,18 @@ export function NotificationSettingsDialog({
     }
   }
 
+  function deleteDraftRule() {
+    setOpenRuleMenuId(null);
+    setRuleError(null);
+    setMessage("作成前の通知ルールを破棄しました。");
+    setSelectedRuleId(null);
+    setRuleEditorMode("empty");
+    setRuleDraft(createDefaultRuleDraft(activeBattleType));
+    setSavedRuleDraft(null);
+  }
+
   async function deleteRule(rule: RuleRecord) {
+    setOpenRuleMenuId(null);
     if (!window.confirm(`通知ルール「${rule.name}」を削除しますか？`)) {
       return;
     }
@@ -456,10 +599,12 @@ export function NotificationSettingsDialog({
       } satisfies DeleteNotificationRuleRequest);
       const nextRules = rules.filter((currentRule) => currentRule.id !== rule.id);
       setRules(nextRules);
-      setSelectedRuleId(null);
-      setRuleEditorMode("empty");
-      setRuleDraft(createDefaultRuleDraft(activeBattleType));
-      setSavedRuleDraft(null);
+      if (rule.id === selectedRuleId) {
+        setSelectedRuleId(null);
+        setRuleEditorMode("empty");
+        setRuleDraft(createDefaultRuleDraft(activeBattleType));
+        setSavedRuleDraft(null);
+      }
       setMessage("通知ルールを削除しました。");
     } catch {
       setError("通知ルールの削除に失敗しました。");
@@ -675,57 +820,91 @@ export function NotificationSettingsDialog({
             <section className="notification-settings-dialog__panel notification-rule-list-panel">
               <div className="notification-settings-dialog__section-header">
                 <h3>通知ルール一覧</h3>
-                <button className="load-form__button" disabled={isGrandBattlePreparing} type="button" onClick={createNewRule}>
+                <button className="load-form__button" disabled={isGrandBattlePreparing} type="button" onClick={requestCreateNewRule}>
                   新規ルール追加
                 </button>
               </div>
               {status === "loading" ? <p className="firebase-message">通知設定を読込中です。</p> : null}
-              {visibleRules.length === 0 && status !== "loading" ? (
+              {visibleRuleItems.length === 0 && status !== "loading" ? (
                 <p className="notification-settings-dialog__empty">通知ルールはまだありません。</p>
               ) : null}
               <div className="notification-rule-list">
-                {visibleRules.map((rule) => (
-                  <article
-                    className={rule.id === selectedRuleId ? "notification-rule-card is-selected" : "notification-rule-card"}
-                    key={rule.id}
-                  >
-                    <label className="notification-rule-card__enabled">
-                      <input
-                        aria-label={`${rule.name}の有効状態`}
-                        checked={rule.id === selectedRuleId ? ruleDraft.enabled : rule.enabled}
-                        disabled={status !== "idle" || rule.id === selectedRuleId || rule.battleType === "grandBattle"}
-                        type="checkbox"
-                        onChange={(event) => void toggleRuleEnabled(rule, event.currentTarget.checked)}
-                      />
-                    </label>
-                    <button
-                      className="notification-rule-card__main"
-                      disabled={rule.battleType === "grandBattle"}
-                      type="button"
-                      onClick={() => selectRule(rule)}
+                {visibleRuleItems.map((item) => {
+                  const rule = item.rule;
+                  const isDraftRule = item.type === "draft";
+                  const isSelectedRule = rule.id === selectedRuleListId;
+                  const ruleMenuId = isDraftRule ? DRAFT_RULE_ID : rule.id;
+                  const draftStatus = isDraftRule ? "作成前" : null;
+                  const pauseStatus = !isDraftRule && rule.id === selectedRuleId && isRuleDraftDirty ? "保存まで一時停止" : null;
+
+                  return (
+                    <article
+                      className={isSelectedRule ? "notification-rule-card is-selected" : "notification-rule-card"}
+                      key={ruleMenuId}
                     >
-                      <span className="notification-rule-card__heading">
-                        <span className="notification-rule-card__title">{rule.name}</span>
-                        <span className="notification-rule-card__time">{createRuleScheduleSummary(rule)}</span>
-                      </span>
-                      <span className={rule.enabled ? "notification-rule-card__status is-enabled" : "notification-rule-card__status"}>
-                        {rule.enabled ? "有効" : "無効"}
-                      </span>
-                      <span className="notification-rule-card__summary">{createRuleConditionSummary(rule)}</span>
-                      {rule.id === selectedRuleId && isRuleDraftDirty ? (
-                        <span className="notification-rule-card__pause-status">保存まで一時停止</span>
-                      ) : null}
-                    </button>
-                    <details className="notification-rule-card__actions">
-                      <summary aria-label={`${rule.name}の操作`}>...</summary>
-                      <div className="notification-rule-card__actions-menu">
-                        <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => selectRule(rule)}>編集</button>
-                        <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => duplicateRule(rule)}>複製</button>
-                        <button type="button" onClick={() => void deleteRule(rule)}>削除</button>
+                      <label className="notification-rule-card__enabled">
+                        <input
+                          aria-label={`${rule.name}の有効状態`}
+                          checked={isSelectedRule ? ruleDraft.enabled : rule.enabled}
+                          disabled={status !== "idle" || isSelectedRule || rule.battleType === "grandBattle" || isDraftRule}
+                          type="checkbox"
+                          onChange={(event) => {
+                            if (!isDraftRule) {
+                              void toggleRuleEnabled(rule, event.currentTarget.checked);
+                            }
+                          }}
+                        />
+                      </label>
+                      <button
+                        className="notification-rule-card__main"
+                        disabled={rule.battleType === "grandBattle"}
+                        type="button"
+                        onClick={() => {
+                          if (!isDraftRule) {
+                            requestSelectRule(rule);
+                          }
+                        }}
+                      >
+                        <span className="notification-rule-card__heading">
+                          <span className="notification-rule-card__title">{rule.name}</span>
+                          <span className="notification-rule-card__time">{createRuleScheduleSummary(rule)}</span>
+                        </span>
+                        <span className={rule.enabled ? "notification-rule-card__status is-enabled" : "notification-rule-card__status"}>
+                          {rule.enabled ? "有効" : "無効"}
+                        </span>
+                        <span className="notification-rule-card__summary">{createRuleConditionSummary(rule)}</span>
+                        {draftStatus !== null ? <span className="notification-rule-card__draft-status">{draftStatus}</span> : null}
+                        {pauseStatus !== null ? <span className="notification-rule-card__pause-status">{pauseStatus}</span> : null}
+                      </button>
+                      <div className="notification-rule-card__actions">
+                        <button
+                          aria-expanded={openRuleMenuId === ruleMenuId}
+                          aria-label={`${rule.name}の操作`}
+                          className="notification-rule-card__actions-trigger"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenRuleMenuId((currentId) => (currentId === ruleMenuId ? null : ruleMenuId));
+                          }}
+                        >
+                          ...
+                        </button>
+                        {openRuleMenuId === ruleMenuId ? (
+                          <div className="notification-rule-card__actions-menu">
+                            {isDraftRule ? null : (
+                              <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => requestDuplicateRule(rule)}>
+                                複製
+                              </button>
+                            )}
+                            <button type="button" onClick={() => (isDraftRule ? deleteDraftRule() : void deleteRule(rule))}>
+                              削除
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
-                    </details>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             </section>
 
@@ -768,14 +947,17 @@ export function NotificationSettingsDialog({
                     <p className="notification-settings-dialog__empty">
                       {"\u65e2\u5b58\u30eb\u30fc\u30eb\u3092\u7de8\u96c6\u3059\u308b\u304b\u3001\u65b0\u898f\u4f5c\u6210\u304b\u3089\u901a\u77e5\u6761\u4ef6\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059\u3002"}
                     </p>
-                    <button className="load-form__button" type="button" onClick={createNewRule}>
+                    <button className="load-form__button" type="button" onClick={requestCreateNewRule}>
                       {"\u65b0\u898f\u4f5c\u6210"}
                     </button>
                   </div>
                 )
               ) : (
                 <>
-              <h4 className="notification-rule-editor__section-title">1 基本設定</h4>
+              <h4 className="notification-settings-dialog__numbered-heading">
+                <span>1</span>
+                基本設定
+              </h4>
               <label className="field">
                 <span className="field__label">通知ルール名</span>
                 <input
@@ -823,7 +1005,10 @@ export function NotificationSettingsDialog({
                 </label>
               </div>
 
-              <h4 className="notification-rule-editor__section-title">{"2 \u5bfe\u8c61"}</h4>
+              <h4 className="notification-settings-dialog__numbered-heading">
+                <span>2</span>
+                {"\u5bfe\u8c61"}
+              </h4>
               <label className="field">
                 <span className="field__label">
                   {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
@@ -860,7 +1045,10 @@ export function NotificationSettingsDialog({
                 </p>
               ) : null}
 
-              <h4 className="notification-rule-editor__section-title">{"3 \u8a73\u7d30\u6761\u4ef6"}</h4>
+              <h4 className="notification-settings-dialog__numbered-heading">
+                <span>3</span>
+                {"\u8a73\u7d30\u6761\u4ef6"}
+              </h4>
               <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
               <div
                 className="notification-rule-editor__condition-tree"
@@ -878,9 +1066,7 @@ export function NotificationSettingsDialog({
                       <DropIndicator isActive={isRootDropTarget(dropTarget, nodeIndex)} />
                       <div
                         className={`notification-rule-editor__condition-group is-${conditionNode.operator.toLowerCase()}`}
-                        draggable
                         onDragEnd={endConditionDrag}
-                        onDragStart={(event) => startConditionDrag(event, { scope: "root", index: nodeIndex })}
                         onDragOver={(event) =>
                           updateConditionDropTarget(event, {
                             scope: "root",
@@ -890,6 +1076,16 @@ export function NotificationSettingsDialog({
                         onDrop={dropConditionNode}
                       >
                         <div className="notification-rule-editor__condition-group-header">
+                        <button
+                          className="notification-rule-editor__drag-handle"
+                          draggable
+                          type="button"
+                          aria-label="条件グループを移動"
+                          onDragEnd={endConditionDrag}
+                          onDragStart={(event) => startConditionDrag(event, { scope: "root", index: nodeIndex })}
+                        >
+                          ::::
+                        </button>
                         <select
                           className="notification-rule-editor__condition-group-label"
                           value={conditionNode.operator}
@@ -903,6 +1099,7 @@ export function NotificationSettingsDialog({
                         </select>
                         <span>{"\u6761\u4ef6\u30b0\u30eb\u30fc\u30d7"}{nodeIndex + 1}</span>
                         <small>{conditionNode.operator === "AND" ? "\u3059\u3079\u3066\u306e\u6761\u4ef6\u306b\u4e00\u81f4" : "\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u306b\u4e00\u81f4"}</small>
+                        {canConditionNodeMatchWithoutAttack(conditionNode) ? <WarningIcon /> : null}
                         <div className="notification-rule-editor__condition-group-actions">
                           <button type="button" onClick={() => addGroupConditionAndScroll(nodeIndex)}>
                             {"\uff0b \u6761\u4ef6\u8ffd\u52a0"}
@@ -929,6 +1126,7 @@ export function NotificationSettingsDialog({
                             <ConditionRow
                               condition={condition}
                               draggable
+                              showWarning={conditionNode.operator === "OR" && canMatchWithoutAttack(condition)}
                               onChange={(nextCondition) =>
                                 setRuleDraft((currentDraft) =>
                                   updateGroupCondition(currentDraft, nodeIndex, conditionIndex, nextCondition)
@@ -964,9 +1162,7 @@ export function NotificationSettingsDialog({
                       <DropIndicator isActive={isRootDropTarget(dropTarget, nodeIndex)} />
                     <div
                       className="notification-rule-editor__condition-card"
-                      draggable
                       onDragEnd={endConditionDrag}
-                      onDragStart={(event) => startConditionDrag(event, { scope: "root", index: nodeIndex })}
                       onDragOver={(event) =>
                         updateConditionDropTarget(event, {
                           scope: "root",
@@ -977,9 +1173,13 @@ export function NotificationSettingsDialog({
                     >
                       <ConditionRow
                         condition={conditionNode}
+                        draggable
+                        showWarning={canMatchWithoutAttack(conditionNode)}
                         onChange={(nextCondition) =>
                           setRuleDraft((currentDraft) => updateRootCondition(currentDraft, nodeIndex, nextCondition))
                         }
+                        onDragEnd={endConditionDrag}
+                        onDragStart={(event) => startConditionDrag(event, { scope: "root", index: nodeIndex })}
                         onRemove={() => setRuleDraft((currentDraft) => removeRootConditionNode(currentDraft, nodeIndex))}
                       />
                     </div>
@@ -1011,7 +1211,10 @@ export function NotificationSettingsDialog({
             <section className="notification-rule-workspace__pane notification-rule-preview-panel">
               {isRuleEditorVisible ? (
                 <>
-                  <h3>{"4 Discord\u901a\u77e5\u5185\u5bb9"}</h3>
+                  <h3 className="notification-settings-dialog__numbered-heading">
+                    <span>4</span>
+                    {"Discord\u901a\u77e5\u5185\u5bb9"}
+                  </h3>
                   <label className="field">
                     <span className="field__label">{"Discord\u8868\u793a\u540d\uff08Webhook\u540d\uff09"}</span>
                     <input
@@ -1111,7 +1314,10 @@ export function NotificationSettingsDialog({
                   <div className="notification-rule-preview-panel__divider" />
                 </>
               ) : null}
-              <h3>5 通知プレビュー</h3>
+              <h3 className="notification-settings-dialog__numbered-heading">
+                <span>5</span>
+                通知プレビュー
+              </h3>
               {isRuleEditorVisible ? (
                 <div className="notification-preview">
                   <div className="notification-preview__header">
@@ -1159,6 +1365,32 @@ export function NotificationSettingsDialog({
               ) : null}
             </section>
           </div>
+          {pendingDiscardAction !== null ? (
+            <div className="notification-settings-dialog__confirm" role="alertdialog" aria-modal="false">
+              <div>
+                <strong>保存されていない変更があります。</strong>
+                <p>
+                  {pendingDiscardAction.type === "create"
+                    ? "変更を破棄して新規作成しますか？"
+                    : pendingDiscardAction.type === "duplicate"
+                      ? "変更を破棄して複製しますか？"
+                      : "変更を破棄して別ルールを編集しますか？"}
+                </p>
+              </div>
+              <div className="notification-settings-dialog__confirm-actions">
+                <button type="button" onClick={confirmPendingDiscardAction}>
+                  {pendingDiscardAction.type === "create"
+                    ? "破棄して新規作成"
+                    : pendingDiscardAction.type === "duplicate"
+                      ? "破棄して複製"
+                      : "破棄して編集"}
+                </button>
+                <button className="load-form__button" type="button" onClick={cancelPendingDiscardAction}>
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
     </div>
@@ -1168,6 +1400,13 @@ export function NotificationSettingsDialog({
 function createDefaultRuleDraft(battleType: NotificationBattleType): RuleDraft {
   return {
     ...createDefaultNotificationRuleV2Draft(battleType, 0)
+  };
+}
+
+function createNewRuleDraft(battleType: NotificationBattleType): RuleDraft {
+  return {
+    ...createDefaultRuleDraft(battleType),
+    name: NEW_RULE_DRAFT_NAME
   };
 }
 
@@ -1193,6 +1432,18 @@ function createRuleRecordFromV2(rule: NotificationRuleV2): RuleRecord {
         node.type === "condition" ? { ...node } : { ...node, children: node.children.map((condition) => ({ ...condition })) }
       )
     }
+  };
+}
+
+function createDraftRuleRecord(ruleDraft: RuleDraft): RuleRecord {
+  const draft = createRuleDraft({
+    ...ruleDraft,
+    id: DRAFT_RULE_ID
+  });
+
+  return {
+    ...draft,
+    id: DRAFT_RULE_ID
   };
 }
 
@@ -1231,6 +1482,7 @@ function serializeRuleDraft(ruleDraft: RuleDraft): string {
 function ConditionRow({
   condition,
   draggable = false,
+  showWarning = false,
   onChange,
   onDragEnd,
   onDragOver,
@@ -1239,20 +1491,37 @@ function ConditionRow({
 }: {
   readonly condition: NotificationDetailCondition;
   readonly draggable?: boolean;
+  readonly showWarning?: boolean;
   readonly onChange: (condition: NotificationDetailCondition) => void;
   readonly onDragEnd?: () => void;
   readonly onDragOver?: (event: DragEvent<HTMLElement>) => void;
   readonly onDragStart?: (event: DragEvent<HTMLElement>) => void;
   readonly onRemove: () => void;
 }) {
+  const [valueText, setValueText] = useState(() => String(condition.value));
+  const [isValueFocused, setIsValueFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isValueFocused) {
+      setValueText(String(condition.value));
+    }
+  }, [condition.value, isValueFocused]);
+
   return (
     <div
       className={draggable ? "notification-rule-editor__condition-row is-draggable" : "notification-rule-editor__condition-row"}
-      draggable={draggable}
-      onDragEnd={onDragEnd}
       onDragOver={onDragOver}
-      onDragStart={onDragStart}
     >
+      <button
+        className="notification-rule-editor__drag-handle"
+        draggable={draggable}
+        type="button"
+        aria-label="条件を移動"
+        onDragEnd={onDragEnd}
+        onDragStart={onDragStart}
+      >
+        ::::
+      </button>
       <select
         className="field__input"
         value={condition.field}
@@ -1292,19 +1561,54 @@ function ConditionRow({
         className="field__input"
         inputMode="numeric"
         min={0}
-        type="number"
-        value={condition.value}
-        onChange={(event) => {
+        pattern="[0-9]*"
+        type="text"
+        value={valueText}
+        onBlur={() => {
+          setIsValueFocused(false);
+          if (valueText.length === 0) {
+            setValueText("0");
+            onChange({
+              ...condition,
+              value: 0
+            });
+            return;
+          }
+
+          const normalizedValue = normalizeDetailConditionValue(valueText);
+          setValueText(String(normalizedValue));
           onChange({
             ...condition,
-            value: Math.max(0, parseOptionalInteger(event.target.value) ?? 0)
+            value: normalizedValue
           });
         }}
+        onChange={(event) => {
+          const nextValueText = event.target.value.replace(/\D/g, "");
+          setValueText(nextValueText);
+          if (nextValueText.length === 0) {
+            return;
+          }
+
+          onChange({
+            ...condition,
+            value: normalizeDetailConditionValue(nextValueText)
+          });
+        }}
+        onFocus={() => setIsValueFocused(true)}
       />
+      {showWarning ? <WarningIcon /> : <span className="notification-rule-editor__condition-warning-placeholder" />}
       <button type="button" onClick={onRemove}>
         {"\u524a\u9664"}
       </button>
     </div>
+  );
+}
+
+function WarningIcon() {
+  return (
+    <span className="notification-rule-editor__condition-warning-icon" title={NON_ATTACKING_WARNING_TITLE} aria-label={NON_ATTACKING_WARNING_TITLE}>
+      ⚠️
+    </span>
   );
 }
 
@@ -1577,18 +1881,9 @@ function validateDestinationDraft(destinationDraft: DestinationDraft): string | 
   return null;
 }
 
-function isNullableNonNegativeInteger(value: number | null): boolean {
-  return value === null || (Number.isSafeInteger(value) && value >= 0);
-}
-
-function parseOptionalInteger(value: string): number | null {
-  const trimmedValue = value.trim();
-  if (trimmedValue.length === 0) {
-    return null;
-  }
-
-  const nextValue = Number(trimmedValue);
-  return Number.isSafeInteger(nextValue) ? nextValue : null;
+function normalizeDetailConditionValue(valueText: string): number {
+  const parsedValue = Number(valueText);
+  return Number.isSafeInteger(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
 }
 
 function createMentionPreview(mention: NotificationRule["message"]["mention"]): string {

@@ -535,6 +535,7 @@ select {
   width: min(96vw, 1600px);
   max-height: calc(100vh - 56px);
   overflow: hidden;
+  overscroll-behavior: contain;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   color: var(--app-text);
@@ -555,7 +556,47 @@ select {
   gap: 16px;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 16px;
+}
+
+.notification-settings-dialog__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.notification-settings-dialog__confirm strong,
+.notification-settings-dialog__confirm p {
+  margin: 0;
+}
+
+.notification-settings-dialog__confirm p {
+  margin-top: 4px;
+  color: var(--app-text-muted);
+  font-size: 0.9rem;
+}
+
+.notification-settings-dialog__confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notification-settings-dialog__confirm-actions button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 6px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  cursor: pointer;
 }
 
 .notification-settings-dialog__destination,
@@ -704,6 +745,7 @@ select {
   gap: 12px;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
@@ -721,6 +763,7 @@ select {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .notification-rule-list,
@@ -833,9 +876,25 @@ select {
   font-size: 1.05rem;
 }
 
-.notification-rule-editor__section-title {
+.notification-settings-dialog__numbered-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   margin: 8px 0 0;
   font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.notification-settings-dialog__numbered-heading span {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--app-primary-text);
+  background: var(--app-primary);
+  font-size: 0.78rem;
 }
 
 .field__label-note {
@@ -904,6 +963,23 @@ select {
   cursor: pointer;
 }
 
+.notification-rule-editor__drag-handle {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: transparent;
+  cursor: grab;
+  font-size: 0.88rem;
+  letter-spacing: 0;
+}
+
+.notification-rule-editor__drag-handle:active {
+  cursor: grabbing;
+}
+
 .notification-rule-editor__condition-group-label {
   width: auto;
   min-height: 28px;
@@ -956,21 +1032,22 @@ select {
 
 .notification-rule-editor__condition-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(72px, 0.45fr) minmax(88px, 0.7fr) auto;
+  grid-template-columns: auto minmax(120px, 1fr) minmax(72px, 0.45fr) minmax(88px, 0.7fr) auto auto;
   gap: 8px;
   align-items: center;
 }
 
-.notification-rule-editor__condition-group[draggable="true"],
-.notification-rule-editor__condition-card[draggable="true"],
-.notification-rule-editor__condition-row.is-draggable {
-  cursor: grab;
+.notification-rule-editor__condition-warning-icon,
+.notification-rule-editor__condition-warning-placeholder {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  font-size: 0.9rem;
 }
 
-.notification-rule-editor__condition-group[draggable="true"]:active,
-.notification-rule-editor__condition-card[draggable="true"]:active,
-.notification-rule-editor__condition-row.is-draggable:active {
-  cursor: grabbing;
+.notification-rule-editor__condition-warning-icon {
+  color: #c2410c;
 }
 
 .notification-rule-editor__condition-row button {
@@ -1112,28 +1189,33 @@ select {
   font-weight: 700;
 }
 
+.notification-rule-card__draft-status {
+  width: fit-content;
+  color: var(--app-primary);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .notification-rule-card__actions {
   position: relative;
   justify-self: end;
 }
 
-.notification-rule-card__actions summary {
+.notification-rule-card__actions-trigger {
   display: grid;
   min-width: 28px;
   min-height: 28px;
   place-items: center;
+  padding: 0;
   border: 1px solid transparent;
   border-radius: 6px;
   color: var(--app-text-muted);
+  background: transparent;
   cursor: pointer;
-  list-style: none;
 }
 
-.notification-rule-card__actions summary::-webkit-details-marker {
-  display: none;
-}
-
-.notification-rule-card__actions summary:hover {
+.notification-rule-card__actions-trigger:hover,
+.notification-rule-card__actions-trigger[aria-expanded="true"] {
   border-color: var(--app-border);
   color: var(--app-text);
   background: var(--app-surface-muted);

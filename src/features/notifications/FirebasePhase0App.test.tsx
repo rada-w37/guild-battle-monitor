@@ -736,7 +736,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       expect(document.body.textContent).toContain("通知ルールを選択してください");
     });
     expect(document.body.textContent).not.toContain("通知ルール編集");
-    expect(document.querySelector(".notification-rule-card__actions summary")?.textContent).toBe("...");
+    expect(document.querySelector(".notification-rule-card__actions-trigger")?.textContent).toBe("...");
     expect(document.querySelector<HTMLInputElement>(".notification-rule-card__enabled input")?.checked).toBe(true);
   });
 
@@ -850,6 +850,234 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(document.body.textContent).toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
     expect(document.body.textContent).toContain("保存まで一時停止");
+  });
+
+  it("shows an unsaved draft row while creating a new rule", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("新規ルール");
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("作成前");
+
+    const nameInput = Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).find(
+      (candidate) => candidate.value === "新規ルール"
+    );
+    if (!nameInput) {
+      throw new Error("new rule name input was not found");
+    }
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(nameInput, "作成中ルール");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("作成中ルール");
+
+    const discardButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-workspace__action-bar button")).find(
+      (candidate) => candidate.textContent === "破棄"
+    );
+    if (!discardButton) {
+      throw new Error("discard new rule button was not found");
+    }
+
+    await act(async () => {
+      discardButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).not.toContain("作成中ルール");
+  });
+
+  it("duplicates from the actions menu into an unsaved copy row and closes the menu", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "見落とし防止" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const menuButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__actions-trigger");
+    if (!menuButton) {
+      throw new Error("notification rule actions menu button was not found");
+    }
+
+    await act(async () => {
+      menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).toContain("複製");
+    expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).not.toContain("編集");
+
+    const duplicateButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions-menu button")).find(
+      (candidate) => candidate.textContent === "複製"
+    );
+    if (!duplicateButton) {
+      throw new Error("duplicate notification rule button was not found");
+    }
+
+    await act(async () => {
+      duplicateButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card__actions-menu")).toBeNull();
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("見落とし防止 コピー");
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("作成前");
+  });
+
+  it("confirms before discarding unsaved edits for new rule creation", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("変更中アラート");
+
+    const addButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__section-header button")).find(
+      (candidate) => candidate.textContent === "新規ルール追加"
+    );
+    if (!addButton) {
+      throw new Error("new rule add button was not found");
+    }
+
+    await act(async () => {
+      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("変更を破棄して新規作成しますか？");
+
+    const cancelButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__confirm button")).find(
+      (candidate) => candidate.textContent === "キャンセル"
+    );
+    if (!cancelButton) {
+      throw new Error("discard confirmation cancel button was not found");
+    }
+
+    await act(async () => {
+      cancelButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).not.toContain("変更を破棄して新規作成しますか？");
+    expect(
+      Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).some(
+        (candidate) => candidate.value === "変更中アラート"
+      )
+    ).toBe(true);
+  });
+
+  it("allows detail condition numbers to be blank while focused and restores zero on blur", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const conditionValueInput = document.querySelector<HTMLInputElement>(".notification-rule-editor__condition-row input[inputmode='numeric']");
+    if (!conditionValueInput) {
+      throw new Error("condition value input was not found");
+    }
+
+    await act(async () => {
+      conditionValueInput.focus();
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(conditionValueInput, "");
+      conditionValueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("");
+
+    await act(async () => {
+      conditionValueInput.blur();
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("0");
+  });
+
+  it("limits detail condition dragging to drag handles and marks non-attacking conditions", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-editor__condition-row[draggable='true']")).toBeNull();
+    expect(document.querySelector(".notification-rule-editor__condition-group[draggable='true']")).toBeNull();
+    expect(document.querySelectorAll(".notification-rule-editor__drag-handle[draggable='true']").length).toBeGreaterThan(0);
+
+    const addConditionButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__condition-actions button")).find(
+      (candidate) => candidate.textContent === "＋ 条件を追加"
+    );
+    if (!addConditionButton) {
+      throw new Error("add root condition button was not found");
+    }
+
+    await act(async () => {
+      addConditionButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(`[title="攻撃中でない拠点もこの条件に一致する可能性があります。"]`)).not.toBeNull();
   });
 
   it("shows template variable labels without braces but inserts braced variables", async () => {
@@ -1184,15 +1412,13 @@ describe("FirebasePhase0App notification settings dialog", () => {
     );
     await openNotificationSettings();
 
-    const editButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions button")).find(
-      (candidate) => candidate.textContent === "編集"
-    );
-    if (!editButton) {
-      throw new Error("notification rule edit button was not found");
+    const ruleButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__main");
+    if (!ruleButton) {
+      throw new Error("notification rule row button was not found");
     }
 
     await act(async () => {
-      editButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      ruleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flushPromises();
     });
 
@@ -1541,13 +1767,13 @@ async function openNotificationSettings() {
 }
 
 async function openFirstNotificationRuleForEdit() {
-  const editButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__actions button");
-  if (!editButton) {
-    throw new Error("notification rule edit button was not found");
+  const ruleButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__main");
+  if (!ruleButton) {
+    throw new Error("notification rule row button was not found");
   }
 
   await act(async () => {
-    editButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    ruleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await flushPromises();
   });
 }
