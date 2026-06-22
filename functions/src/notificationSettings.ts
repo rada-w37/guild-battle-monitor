@@ -8,11 +8,15 @@ const NOTIFICATION_DESTINATIONS_COLLECTION = "notificationDestinations";
 const DISCORD_DESTINATION_ID = "discord";
 const DISCORD_WEBHOOK_URL_PATTERN = /^https:\/\/discord(?:app)?\.com\/api\/webhooks\/[^/\s]+\/[^/\s]+$/;
 const START_TIME_PATTERN = /^\d{2}:\d{2}$/;
+const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const FUNCTION_REGION = "asia-northeast1";
 
 type NotificationBattleType = "guildBattle" | "grandBattle";
 type NotificationMentionType = "none" | "here" | "everyone" | "custom";
 type NotificationSettingsRole = "guildOwner" | "admin";
+type NotificationDetailConditionField = "defenseCount" | "attackCount";
+type NotificationDetailConditionOperator = "<=" | ">=";
+type NotificationDetailConditionGroupOperator = "AND" | "OR";
 
 interface GuildShareDocument {
   readonly guildOwnerUid?: unknown;
@@ -59,7 +63,53 @@ interface NotificationRuleInput {
   };
 }
 
+interface NotificationDetailConditionInput {
+  readonly type: "condition";
+  readonly field: NotificationDetailConditionField;
+  readonly operator: NotificationDetailConditionOperator;
+  readonly value: number;
+}
+
+interface NotificationDetailConditionGroupInput {
+  readonly type: "group";
+  readonly operator: NotificationDetailConditionGroupOperator;
+  readonly children: readonly NotificationDetailConditionInput[];
+}
+
+interface NotificationRuleV2Input {
+  readonly schemaVersion: 2;
+  readonly battleType: NotificationBattleType;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+  readonly schedule: {
+    readonly startTime: string;
+    readonly endTime?: string | null;
+  };
+  readonly targetGuildIds: readonly string[];
+  readonly detailConditions: {
+    readonly operator: "OR";
+    readonly children: readonly (NotificationDetailConditionInput | NotificationDetailConditionGroupInput)[];
+  };
+  readonly message: NotificationRuleInput["message"];
+  readonly temporarySuspension?: {
+    readonly suspendedAt: string;
+    readonly expiresAt: string;
+    readonly suspendedBy?: {
+      readonly role?: "guildOwner" | "admin";
+      readonly uid?: string;
+    };
+  };
+}
+
 interface NotificationRuleOutput extends NotificationRuleInput {
+  readonly id: string;
+  readonly createdByRole?: "guildOwner" | "admin";
+  readonly createdAt?: unknown;
+  readonly updatedAt?: unknown;
+}
+
+interface NotificationRuleV2Output extends NotificationRuleV2Input {
   readonly id: string;
   readonly createdByRole?: "guildOwner" | "admin";
   readonly createdAt?: unknown;
@@ -82,6 +132,20 @@ interface NotificationDestinationOutput extends NotificationDestinationInput {
 interface GetNotificationSettingsOutput {
   readonly rules: readonly NotificationRuleOutput[];
   readonly destination?: NotificationDestinationOutput;
+}
+
+interface GetNotificationSettingsV2Output {
+  readonly rules: readonly NotificationRuleV2Output[];
+  readonly destination?: NotificationDestinationOutput;
+}
+
+interface NotificationTemporarySuspensionOutput {
+  readonly suspendedAt: string;
+  readonly expiresAt: string;
+  readonly suspendedBy: {
+    readonly role?: "guildOwner" | "admin";
+    readonly uid?: string;
+  };
 }
 
 interface DocumentSnapshotLike {
@@ -125,12 +189,24 @@ export const getNotificationSettings = onCall({ region: FUNCTION_REGION }, async
   handleGetNotificationSettings(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
+export const getNotificationSettingsV2 = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
+  handleGetNotificationSettingsV2(request.data, createCallableContext(request), createDefaultDependencies())
+);
+
 export const saveNotificationRule = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleSaveNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
+export const saveNotificationRuleV2 = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
+  handleSaveNotificationRuleV2(request.data, createCallableContext(request), createDefaultDependencies())
+);
+
 export const deleteNotificationRule = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
   handleDeleteNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
+);
+
+export const suspendNotificationRule = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
+  handleSuspendNotificationRule(request.data, createCallableContext(request), createDefaultDependencies())
 );
 
 export const saveNotificationDestination = onCall({ region: FUNCTION_REGION }, async (request: CallableRequest) =>
@@ -158,6 +234,37 @@ export async function handleGetNotificationSettings(
   const rules = rulesSnapshot.docs.map((ruleSnapshot) =>
     readNotificationRuleDocument(ruleSnapshot.id ?? "", ruleSnapshot.data())
   );
+
+  if (role !== "guildOwner") {
+    return { rules };
+  }
+
+  const destinationSnapshot = await getDestinationRef(dependencies.firestore, payload.guildId).get();
+  const destination = destinationSnapshot.exists
+    ? readNotificationDestinationDocument(destinationSnapshot.data())
+    : undefined;
+
+  return destination === undefined ? { rules } : { rules, destination };
+}
+
+export async function handleGetNotificationSettingsV2(
+  input: unknown,
+  context: CallableContext,
+  dependencies: Dependencies
+): Promise<GetNotificationSettingsV2Output> {
+  const payload = readAuthorizedInput(input);
+  const role = await resolveNotificationSettingsRole(payload, context, dependencies);
+  const rulesSnapshot = await dependencies.firestore
+    .collection(`${GUILD_SHARES_COLLECTION}/${payload.guildId}/${NOTIFICATION_RULES_COLLECTION}`)
+    .get();
+  const rules = rulesSnapshot.docs.flatMap((ruleSnapshot) => {
+    const data = ruleSnapshot.data();
+    if (!shouldReadNotificationRuleV2Document(data)) {
+      return [];
+    }
+
+    return [readNotificationRuleV2Document(ruleSnapshot.id ?? "", data)];
+  });
 
   if (role !== "guildOwner") {
     return { rules };
@@ -209,6 +316,49 @@ export async function handleSaveNotificationRule(
   };
 }
 
+export async function handleSaveNotificationRuleV2(
+  input: unknown,
+  context: CallableContext,
+  dependencies: Dependencies
+): Promise<NotificationRuleV2Output> {
+  const payload = readSaveRuleV2Input(input);
+  const role = await resolveNotificationSettingsRole(payload, context, dependencies);
+  const collectionRef = dependencies.firestore.collection(
+    `${GUILD_SHARES_COLLECTION}/${payload.guildId}/${NOTIFICATION_RULES_COLLECTION}`
+  );
+  const ruleRef =
+    payload.ruleId === undefined ? collectionRef.doc(dependencies.createRuleId()) : collectionRef.doc(payload.ruleId);
+  const currentSnapshot = await ruleRef.get();
+  const now = dependencies.now();
+  const createdMetadata = currentSnapshot.exists
+    ? readCreatedMetadata(currentSnapshot.data())
+    : { createdAt: now, createdByRole: role };
+  const document = {
+    ...payload.rule,
+    schedule: { ...payload.rule.schedule },
+    targetGuildIds: [...payload.rule.targetGuildIds],
+    detailConditions: cloneDetailConditionRoot(payload.rule.detailConditions),
+    message: {
+      ...payload.rule.message,
+      mention: { ...payload.rule.message.mention }
+    },
+    ...(payload.rule.temporarySuspension === undefined
+      ? {}
+      : { temporarySuspension: cloneTemporarySuspension(payload.rule.temporarySuspension) }),
+    ...createdMetadata,
+    updatedAt: now
+  };
+
+  await ruleRef.set(document, { merge: false });
+
+  return {
+    id: ruleRef.id,
+    ...payload.rule,
+    ...createdMetadata,
+    updatedAt: now
+  };
+}
+
 export async function handleDeleteNotificationRule(
   input: unknown,
   context: CallableContext,
@@ -221,6 +371,41 @@ export async function handleDeleteNotificationRule(
     .delete();
 
   return { ok: true };
+}
+
+export async function handleSuspendNotificationRule(
+  input: unknown,
+  context: CallableContext,
+  dependencies: Dependencies
+): Promise<NotificationTemporarySuspensionOutput> {
+  const payload = readSuspendRuleInput(input);
+  const role = await resolveNotificationSettingsRole(payload, context, dependencies);
+  const ruleRef = dependencies.firestore.doc(
+    `${GUILD_SHARES_COLLECTION}/${payload.guildId}/${NOTIFICATION_RULES_COLLECTION}/${payload.ruleId}`
+  );
+  const currentSnapshot = await ruleRef.get();
+  if (!currentSnapshot.exists) {
+    throw new HttpsError("not-found", "notification_rule_not_found");
+  }
+
+  const now = dependencies.now();
+  const suspendedAt = timestampToIsoString(now);
+  const expiresAt = new Date(Date.parse(suspendedAt) + 60 * 60 * 1000).toISOString();
+  const temporarySuspension: NotificationTemporarySuspensionOutput = {
+    suspendedAt,
+    expiresAt,
+    suspendedBy: context.authUid === null ? { role } : { uid: context.authUid }
+  };
+
+  await ruleRef.set(
+    {
+      temporarySuspension,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  return temporarySuspension;
 }
 
 export async function handleSaveNotificationDestination(
@@ -360,6 +545,25 @@ function readSaveRuleInput(input: unknown): {
   };
 }
 
+function readSaveRuleV2Input(input: unknown): {
+  readonly guildId: string;
+  readonly accessKey?: string;
+  readonly ruleId?: string;
+  readonly rule: NotificationRuleV2Input;
+} {
+  const authorizedInput = readAuthorizedInput(input);
+  if (!isPlainObject(input) || !isPlainObject(input.rule)) {
+    throw new HttpsError("invalid-argument", "invalid_notification_rule_v2");
+  }
+
+  const ruleId = typeof input.ruleId === "string" && input.ruleId.trim().length > 0 ? input.ruleId.trim() : undefined;
+  return {
+    ...authorizedInput,
+    ...(ruleId === undefined ? {} : { ruleId }),
+    rule: readNotificationRuleV2Input(input.rule)
+  };
+}
+
 function readDeleteRuleInput(input: unknown): {
   readonly guildId: string;
   readonly accessKey?: string;
@@ -371,6 +575,14 @@ function readDeleteRuleInput(input: unknown): {
   }
 
   return { ...authorizedInput, ruleId: input.ruleId.trim() };
+}
+
+function readSuspendRuleInput(input: unknown): {
+  readonly guildId: string;
+  readonly accessKey?: string;
+  readonly ruleId: string;
+} {
+  return readDeleteRuleInput(input);
 }
 
 function readSaveDestinationInput(input: unknown): {
@@ -414,6 +626,218 @@ function readNotificationRuleInput(data: Record<string, unknown>): NotificationR
     enabled: data.enabled,
     conditions,
     message
+  };
+}
+
+export function shouldReadNotificationRuleV2Document(data: Record<string, unknown> | undefined): boolean {
+  return data?.schemaVersion === 2;
+}
+
+export function validateNotificationRuleV2Input(data: Record<string, unknown>): NotificationRuleV2Input {
+  return readNotificationRuleV2Input(data);
+}
+
+function readNotificationRuleV2Input(data: Record<string, unknown>): NotificationRuleV2Input {
+  if (
+    data.schemaVersion !== 2 ||
+    (data.battleType !== "guildBattle" && data.battleType !== "grandBattle") ||
+    typeof data.name !== "string" ||
+    data.name.trim().length === 0 ||
+    typeof data.enabled !== "boolean" ||
+    !Number.isSafeInteger(data.sortOrder) ||
+    typeof data.sortOrder !== "number" ||
+    data.sortOrder < 0 ||
+    !isPlainObject(data.schedule) ||
+    !Array.isArray(data.targetGuildIds) ||
+    !isPlainObject(data.detailConditions) ||
+    !isPlainObject(data.message)
+  ) {
+    throw new HttpsError("invalid-argument", "invalid_notification_rule_v2");
+  }
+
+  return {
+    schemaVersion: 2,
+    battleType: data.battleType,
+    name: data.name.trim(),
+    enabled: data.enabled,
+    sortOrder: data.sortOrder,
+    schedule: readSchedule(data.schedule),
+    targetGuildIds: readTargetGuildIds(data.targetGuildIds),
+    detailConditions: readDetailConditionRoot(data.detailConditions),
+    message: readMessage(data.message),
+    ...(data.temporarySuspension === undefined
+      ? {}
+      : { temporarySuspension: readTemporarySuspension(data.temporarySuspension) })
+  };
+}
+
+function readSchedule(data: Record<string, unknown>): NotificationRuleV2Input["schedule"] {
+  if (typeof data.startTime !== "string" || !START_TIME_PATTERN.test(data.startTime)) {
+    throw new HttpsError("invalid-argument", "invalid_notification_start_time");
+  }
+
+  if (data.endTime !== undefined && data.endTime !== null) {
+    if (typeof data.endTime !== "string" || !START_TIME_PATTERN.test(data.endTime)) {
+      throw new HttpsError("invalid-argument", "invalid_notification_end_time");
+    }
+
+    return { startTime: data.startTime, endTime: data.endTime };
+  }
+
+  return { startTime: data.startTime, ...(data.endTime === null ? { endTime: null } : {}) };
+}
+
+function readTargetGuildIds(values: readonly unknown[]): readonly string[] {
+  if (values.length > 16) {
+    throw new HttpsError("invalid-argument", "invalid_notification_target_guilds");
+  }
+
+  const guildIds = values.map((value) => {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "invalid_notification_target_guilds");
+    }
+
+    return value.trim();
+  });
+
+  if (new Set(guildIds).size !== guildIds.length) {
+    throw new HttpsError("invalid-argument", "invalid_notification_target_guilds");
+  }
+
+  return guildIds;
+}
+
+function readDetailConditionRoot(data: Record<string, unknown>): NotificationRuleV2Input["detailConditions"] {
+  if (data.operator !== "OR" || !Array.isArray(data.children) || data.children.length === 0) {
+    throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
+  }
+
+  return {
+    operator: "OR",
+    children: data.children.map(readDetailConditionRootChild)
+  };
+}
+
+function readDetailConditionRootChild(
+  data: unknown
+): NotificationDetailConditionInput | NotificationDetailConditionGroupInput {
+  if (!isPlainObject(data)) {
+    throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
+  }
+
+  if (data.type === "condition") {
+    return readDetailCondition(data);
+  }
+
+  if (data.type === "group") {
+    return readDetailConditionGroup(data);
+  }
+
+  throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
+}
+
+function readDetailConditionGroup(data: Record<string, unknown>): NotificationDetailConditionGroupInput {
+  if ((data.operator !== "AND" && data.operator !== "OR") || !Array.isArray(data.children) || data.children.length === 0) {
+    throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
+  }
+
+  return {
+    type: "group",
+    operator: data.operator,
+    children: data.children.map((child) => {
+      if (!isPlainObject(child) || child.type !== "condition") {
+        throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
+      }
+
+      return readDetailCondition(child);
+    })
+  };
+}
+
+function readDetailCondition(data: Record<string, unknown>): NotificationDetailConditionInput {
+  if (
+    (data.field !== "defenseCount" && data.field !== "attackCount") ||
+    (data.operator !== "<=" && data.operator !== ">=") ||
+    !Number.isSafeInteger(data.value) ||
+    typeof data.value !== "number" ||
+    data.value < 0
+  ) {
+    throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
+  }
+
+  return {
+    type: "condition",
+    field: data.field,
+    operator: data.operator,
+    value: data.value
+  };
+}
+
+function readTemporarySuspension(data: unknown): NonNullable<NotificationRuleV2Input["temporarySuspension"]> {
+  if (!isPlainObject(data) || typeof data.suspendedAt !== "string" || typeof data.expiresAt !== "string") {
+    throw new HttpsError("invalid-argument", "invalid_notification_temporary_suspension");
+  }
+
+  if (!ISO_DATE_TIME_PATTERN.test(data.suspendedAt) || !ISO_DATE_TIME_PATTERN.test(data.expiresAt)) {
+    throw new HttpsError("invalid-argument", "invalid_notification_temporary_suspension");
+  }
+
+  const suspendedAt = Date.parse(data.suspendedAt);
+  const expiresAt = Date.parse(data.expiresAt);
+  if (!Number.isFinite(suspendedAt) || expiresAt - suspendedAt !== 60 * 60 * 1000) {
+    throw new HttpsError("invalid-argument", "invalid_notification_temporary_suspension");
+  }
+
+  return {
+    suspendedAt: data.suspendedAt,
+    expiresAt: data.expiresAt,
+    ...(data.suspendedBy === undefined ? {} : { suspendedBy: readSuspendedBy(data.suspendedBy) })
+  };
+}
+
+function readSuspendedBy(data: unknown): NonNullable<NonNullable<NotificationRuleV2Input["temporarySuspension"]>["suspendedBy"]> {
+  if (!isPlainObject(data)) {
+    throw new HttpsError("invalid-argument", "invalid_notification_temporary_suspension");
+  }
+
+  const role = data.role === "guildOwner" || data.role === "admin" ? data.role : undefined;
+  const uid = typeof data.uid === "string" && data.uid.trim().length > 0 ? data.uid.trim() : undefined;
+  if (role === undefined && uid === undefined) {
+    throw new HttpsError("invalid-argument", "invalid_notification_temporary_suspension");
+  }
+
+  return {
+    ...(role === undefined ? {} : { role }),
+    ...(uid === undefined ? {} : { uid })
+  };
+}
+
+function cloneDetailConditionRoot(
+  root: NotificationRuleV2Input["detailConditions"]
+): NotificationRuleV2Input["detailConditions"] {
+  return {
+    operator: "OR",
+    children: root.children.map((child) =>
+      child.type === "condition"
+        ? { ...child }
+        : {
+            type: "group",
+            operator: child.operator,
+            children: child.children.map((condition) => ({ ...condition }))
+          }
+    )
+  };
+}
+
+function cloneTemporarySuspension(
+  temporarySuspension: NonNullable<NotificationRuleV2Input["temporarySuspension"]>
+): NonNullable<NotificationRuleV2Input["temporarySuspension"]> {
+  return {
+    suspendedAt: temporarySuspension.suspendedAt,
+    expiresAt: temporarySuspension.expiresAt,
+    ...(temporarySuspension.suspendedBy === undefined
+      ? {}
+      : { suspendedBy: { ...temporarySuspension.suspendedBy } })
   };
 }
 
@@ -509,6 +933,24 @@ function readNotificationRuleDocument(id: string, data: Record<string, unknown> 
   };
 }
 
+function readNotificationRuleV2Document(id: string, data: Record<string, unknown> | undefined): NotificationRuleV2Output {
+  if (data === undefined) {
+    throw new HttpsError("failed-precondition", "invalid_notification_rule_v2");
+  }
+
+  const rule = readNotificationRuleV2Input(data);
+  const createdByRole =
+    data.createdByRole === "guildOwner" || data.createdByRole === "admin" ? data.createdByRole : undefined;
+
+  return {
+    id,
+    ...rule,
+    ...(createdByRole === undefined ? {} : { createdByRole }),
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt
+  };
+}
+
 function readNotificationDestinationDocument(
   data: Record<string, unknown> | undefined
 ): NotificationDestinationOutput {
@@ -557,6 +999,17 @@ function readNullableNonNegativeInteger(value: unknown): number | null {
   }
 
   return value;
+}
+
+function timestampToIsoString(timestamp: Timestamp): string {
+  const value = timestamp as Timestamp & { readonly toDate?: () => Date };
+  const date = typeof value.toDate === "function" ? value.toDate() : new Date(timestamp as never);
+  const isoString = date.toISOString();
+  if (!ISO_DATE_TIME_PATTERN.test(isoString)) {
+    throw new HttpsError("failed-precondition", "invalid_notification_temporary_suspension_clock");
+  }
+
+  return isoString;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

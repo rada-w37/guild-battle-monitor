@@ -8,7 +8,8 @@ import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSettingsStorage";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
-import type { NotificationDestination, NotificationRule } from "./types";
+import type { NotificationDestination, NotificationRule, NotificationRuleV2, NotificationRuleV2Input } from "./types";
+import { NotificationSettingsDialog } from "./NotificationSettingsDialog";
 
 vi.mock("../auth/authService", () => ({
   signInWithGoogle: () => Promise.resolve(),
@@ -66,7 +67,9 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
       readonly headerActions?: React.ReactNode;
       readonly modeOverride?: "guest";
       readonly notificationSettings?: React.ReactNode;
-      readonly notificationSettingsDialog?: React.ReactNode;
+      readonly notificationSettingsDialog?:
+        | React.ReactNode
+        | ((activeBattleType: "guildBattle" | "grandBattle") => React.ReactNode);
       readonly ownedGuildProfilePersistence?: {
         readonly error: string | null;
         readonly profile: OwnedGuildProfile | null;
@@ -198,7 +201,9 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
               </div>
             </section>
           ) : null}
-          {notificationSettingsDialog}
+          {typeof notificationSettingsDialog === "function"
+            ? notificationSettingsDialog("guildBattle")
+            : notificationSettingsDialog}
         </main>
       );
     }
@@ -244,6 +249,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   window.localStorage.clear();
   container?.remove();
   container = null;
@@ -698,6 +704,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
       expect(document.querySelector(".notification-settings-dialog")).not.toBeNull();
     });
     expect(document.body.textContent).toContain("Discord Webhook設定");
+    expect(document.body.textContent?.match(/Discord Webhook設定/g)).toHaveLength(1);
+    expect(document.body.textContent).not.toContain("Webhook URLはguild ownerのみ表示・編集できます。");
     expect(document.querySelector("input[type='url']")).not.toBeNull();
   });
 
@@ -710,6 +718,1533 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
     expect(document.body.textContent).not.toContain("Discord Webhook設定");
     expect(document.querySelector("input[type='url']")).toBeNull();
+  });
+
+  it("opens notification settings without selecting the first existing rule", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("通知ルールを選択してください");
+    });
+    expect(document.body.textContent).not.toContain("通知ルール編集");
+    expect(document.body.textContent).not.toContain("通知プレビュー");
+    expect(document.querySelector(".notification-rule-preview-panel")).toBeNull();
+    expect(document.querySelector(".notification-rule-workspace__columns.is-empty")).not.toBeNull();
+    expect(document.querySelector(".notification-rule-card__actions-trigger")?.textContent).toBe("...");
+    expect(document.querySelector<HTMLInputElement>(".notification-rule-card__enabled-toggle input")?.checked).toBe(true);
+  });
+
+  it("syncs target guild candidates with the configured owned guild world", async () => {
+    const syncGuildBattleGuildCandidates = vi.fn(() =>
+      Promise.resolve({
+        worldId: 1037,
+        candidates: [{ guildId: "guild-a", guildName: "Alpha連盟", rank: 1 }]
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      syncGuildBattleGuildCandidates
+    );
+    await openNotificationSettings();
+
+    await vi.waitFor(() => {
+      expect(syncGuildBattleGuildCandidates).toHaveBeenCalledWith({ guildId: "saved-guild", world: 37 });
+    });
+  });
+
+  it("saves enabled changes from the rule list toggle for non-selected rules", async () => {
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "rule-1",
+        ...input.rule
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "防衛ゼロ検知", enabled: true })]
+        })
+      ),
+      undefined,
+      saveNotificationRule
+    );
+    await openNotificationSettings();
+
+    const enabledToggle = document.querySelector<HTMLInputElement>(".notification-rule-card__enabled-toggle input");
+    if (!enabledToggle) {
+      throw new Error("notification rule enabled toggle was not found");
+    }
+
+    await act(async () => {
+      enabledToggle.click();
+      await flushPromises();
+    });
+
+    await vi.waitFor(() => {
+      expect(saveNotificationRule).toHaveBeenCalledWith({
+        guildId: "saved-guild",
+        ruleId: "rule-1",
+        rule: expect.objectContaining({ enabled: false })
+      });
+    });
+    expect(document.body.textContent).not.toContain("通知ルールを保存しました。");
+  });
+
+  it("uses the same rule editor for new rules after the empty state", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("通知ルール新規作成");
+    expect(document.body.textContent).toContain("作成前の通知ルールです。");
+    expect(document.body.textContent).toContain("破棄");
+    expect(document.body.textContent).toContain("作成");
+    expect(document.body.textContent).toContain("有効");
+
+    const editorTopbar = document.querySelector(".notification-rule-workspace__topbar");
+    expect(editorTopbar?.textContent).toContain("通知ルール新規作成");
+    expect(editorTopbar?.querySelector<HTMLInputElement>("input[type='checkbox']")).toBeNull();
+    expect(editorTopbar?.querySelector(".notification-rule-workspace__toggle-track")).toBeNull();
+    expect(editorTopbar?.querySelector(".notification-settings-dialog__checkbox")).toBeNull();
+    expect(document.querySelector(".notification-rule-editor__topbar")).toBeNull();
+
+    const selectedListToggle = document.querySelector<HTMLInputElement>(
+      ".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input"
+    );
+    expect(selectedListToggle?.checked).toBe(true);
+  });
+
+  it("treats the selected rule list enabled toggle as an unsaved edit", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート", enabled: true })]
+        })
+      )
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+
+    const selectedRuleToggle = document.querySelector<HTMLInputElement>(
+      ".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input"
+    );
+    if (!selectedRuleToggle) {
+      throw new Error("selected notification rule enabled toggle was not found");
+    }
+
+    await act(async () => {
+      selectedRuleToggle.click();
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
+    expect(document.body.textContent).toContain("保存まで一時停止");
+  });
+
+  it("shows an unsaved draft row while creating a new rule", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("新規ルール");
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("作成前");
+
+    const draftToggle = document.querySelector<HTMLInputElement>(".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input");
+    if (!draftToggle) {
+      throw new Error("new rule draft enabled toggle was not found");
+    }
+    expect(draftToggle.checked).toBe(true);
+
+    await act(async () => {
+      draftToggle.click();
+      await flushPromises();
+    });
+
+    expect(document.querySelector<HTMLInputElement>(".notification-rule-card.is-selected .notification-rule-card__enabled-toggle input")?.checked).toBe(
+      false
+    );
+
+    const nameInput = Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).find(
+      (candidate) => candidate.value === "新規ルール"
+    );
+    if (!nameInput) {
+      throw new Error("new rule name input was not found");
+    }
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(nameInput, "作成中ルール");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("作成中ルール");
+
+    const discardButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-workspace__action-bar button")).find(
+      (candidate) => candidate.textContent === "破棄"
+    );
+    if (!discardButton) {
+      throw new Error("discard new rule button was not found");
+    }
+
+    await act(async () => {
+      discardButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).not.toContain("作成中ルール");
+  });
+
+  it("duplicates from the actions menu into an unsaved copy row and closes the menu", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "見落とし防止" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const menuButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__actions-trigger");
+    if (!menuButton) {
+      throw new Error("notification rule actions menu button was not found");
+    }
+
+    await act(async () => {
+      menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).toContain("複製");
+    expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).not.toContain("編集");
+
+    const duplicateButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions-menu button")).find(
+      (candidate) => candidate.textContent === "複製"
+    );
+    if (!duplicateButton) {
+      throw new Error("duplicate notification rule button was not found");
+    }
+
+    await act(async () => {
+      duplicateButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card__actions-menu")).toBeNull();
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("見落とし防止 コピー");
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("作成前");
+  });
+
+  it("confirms before discarding unsaved edits for new rule creation", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("変更中アラート");
+
+    const addButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__section-header button")).find(
+      (candidate) => candidate.textContent === "新規ルール追加"
+    );
+    if (!addButton) {
+      throw new Error("new rule add button was not found");
+    }
+
+    await act(async () => {
+      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).not.toBeNull();
+    expect(document.querySelector(".notification-settings-dialog__confirm")?.getAttribute("aria-modal")).toBe("true");
+    expect(document.body.textContent).toContain("保存されていない変更があります。");
+    expect(document.body.textContent).toContain("変更を破棄して新規作成しますか？");
+
+    const cancelButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__confirm button")).find(
+      (candidate) => candidate.textContent === "キャンセル"
+    );
+    if (!cancelButton) {
+      throw new Error("discard confirmation cancel button was not found");
+    }
+
+    await act(async () => {
+      cancelButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).not.toContain("変更を破棄して新規作成しますか？");
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).toBeNull();
+    expect(
+      Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).some(
+        (candidate) => candidate.value === "変更中アラート"
+      )
+    ).toBe(true);
+  });
+
+  it("shows a centered confirmation before discarding a new draft for rule selection", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "テスト通知" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    await openFirstNotificationRuleForEdit();
+
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).not.toBeNull();
+    expect(document.body.textContent).toContain("作成中の通知ルールがあります。");
+    expect(document.body.textContent).toContain("作成内容を破棄して「テスト通知」を編集しますか？");
+
+    const backdrop = document.querySelector<HTMLElement>(".notification-settings-dialog__confirm-backdrop");
+    if (!backdrop) {
+      throw new Error("discard confirmation backdrop was not found");
+    }
+
+    await act(async () => {
+      backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-settings-dialog__confirm-backdrop")).toBeNull();
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("新規ルール");
+  });
+
+  it("allows detail condition numbers to be blank while focused and restores zero on blur", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const conditionValueInput = document.querySelector<HTMLInputElement>(".notification-rule-editor__condition-row input[inputmode='numeric']");
+    if (!conditionValueInput) {
+      throw new Error("condition value input was not found");
+    }
+
+    await act(async () => {
+      conditionValueInput.focus();
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(conditionValueInput, "");
+      conditionValueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(conditionValueInput, "50");
+      conditionValueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("50");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(conditionValueInput, "");
+      conditionValueInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("");
+
+    await act(async () => {
+      conditionValueInput.blur();
+      await flushPromises();
+    });
+
+    expect(conditionValueInput.value).toBe("0");
+  });
+
+  it("limits detail condition dragging to drag handles and marks non-attacking conditions", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-editor__condition-row[draggable='true']")).toBeNull();
+    expect(document.querySelector(".notification-rule-editor__condition-group[draggable='true']")).toBeNull();
+    const dragHandles = document.querySelectorAll(".notification-rule-editor__drag-handle[draggable='true']");
+    expect(dragHandles.length).toBeGreaterThan(0);
+    expect(dragHandles[0]?.textContent).toBe("⋮⋮");
+    expect(dragHandles[0]?.getAttribute("aria-label")).toBe("並べ替え");
+
+    const addConditionButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__condition-actions button")).find(
+      (candidate) => candidate.textContent === "＋ 条件を追加"
+    );
+    if (!addConditionButton) {
+      throw new Error("add root condition button was not found");
+    }
+
+    await act(async () => {
+      addConditionButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(`[title="攻撃中でない拠点もこの条件に一致する可能性があります。"]`)).not.toBeNull();
+  });
+
+  it("shows template variable labels without braces but inserts braced variables", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const variableButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__variables button"));
+    expect(variableButtons.map((button) => button.textContent)).toEqual([
+      "拠点名",
+      "侵攻ギルド",
+      "防衛数",
+      "侵攻数",
+      "通知時刻",
+      "通知ルール名"
+    ]);
+
+    const [baseNameButton, attackerGuildButton, , , notificationTimeButton] = variableButtons;
+    const templateFields = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        ".notification-rule-preview-panel input.field__input--wide, .notification-rule-preview-panel textarea.field__input--wide"
+      )
+    );
+    const [usernameInput, titleInput, bodyTextarea] = templateFields;
+    if (!baseNameButton || !attackerGuildButton || !notificationTimeButton || !usernameInput || !titleInput || !bodyTextarea) {
+      throw new Error("variable buttons or notification template fields were not found");
+    }
+
+    async function changeTemplateField(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+      await act(async () => {
+        const valueSetter = Object.getOwnPropertyDescriptor(
+          field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+          "value"
+        )?.set;
+        valueSetter?.call(field, value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        await flushPromises();
+      });
+    }
+
+    async function clickVariableButton(button: HTMLButtonElement) {
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+    }
+
+    const baseNameToken = `{${baseNameButton.textContent}}`;
+    await changeTemplateField(usernameInput, "ABCDEF");
+    usernameInput.focus();
+    usernameInput.setSelectionRange(3, 3);
+    await clickVariableButton(baseNameButton);
+    expect(usernameInput.value).toBe(`ABC${baseNameToken}DEF`);
+    expect(document.activeElement).toBe(usernameInput);
+    expect(usernameInput.selectionStart).toBe(3 + baseNameToken.length);
+
+    const attackerGuildToken = `{${attackerGuildButton.textContent}}`;
+    await changeTemplateField(titleInput, "ABCDEFGHI");
+    titleInput.focus();
+    titleInput.setSelectionRange(3, 6);
+    await clickVariableButton(attackerGuildButton);
+    expect(titleInput.value).toBe(`ABC${attackerGuildToken}GHI`);
+    expect(document.activeElement).toBe(titleInput);
+    expect(titleInput.selectionStart).toBe(3 + attackerGuildToken.length);
+
+    const notificationTimeToken = `{${notificationTimeButton.textContent}}`;
+    await changeTemplateField(bodyTextarea, "ABCDEF");
+    bodyTextarea.focus();
+    bodyTextarea.setSelectionRange(3, 3);
+    await clickVariableButton(notificationTimeButton);
+    expect(bodyTextarea.value).toBe(`ABC${notificationTimeToken}DEF`);
+    expect(document.activeElement).toBe(bodyTextarea);
+    expect(bodyTextarea.selectionStart).toBe(3 + notificationTimeToken.length);
+    expect(usernameInput.value).toBe(`ABC${baseNameToken}DEF`);
+    expect(titleInput.value).toBe(`ABC${attackerGuildToken}GHI`);
+
+    const previousUsername = usernameInput.value;
+    const previousTitle = titleInput.value;
+    const previousBody = bodyTextarea.value;
+    document.body.tabIndex = -1;
+    document.body.focus();
+    await clickVariableButton(baseNameButton);
+
+    expect(usernameInput.value).toBe(previousUsername);
+    expect(titleInput.value).toBe(previousTitle);
+    expect(bodyTextarea.value).toBe(previousBody);
+  });
+
+  it("scrolls the condition editor to the bottom after adding conditions or groups", async () => {
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+
+    try {
+      await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+      await openNotificationSettings();
+
+      const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+        (candidate) => candidate.textContent === "新規作成"
+      );
+      if (!newRuleButton) {
+        throw new Error("new rule button was not found");
+      }
+
+      await act(async () => {
+        newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      const ruleEditor = document.querySelector<HTMLElement>(".notification-rule-editor");
+      const rootActionButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__condition-actions button"));
+      const addConditionButton = rootActionButtons.find(
+        (candidate) => candidate.textContent === "＋ 条件を追加"
+      );
+      const addGroupButton = rootActionButtons.find(
+        (candidate) => candidate.textContent === "＋ グループを追加"
+      );
+      if (!ruleEditor || !addConditionButton || !addGroupButton) {
+        throw new Error("rule editor or root add button was not found");
+      }
+
+      Object.defineProperty(ruleEditor, "scrollHeight", { configurable: true, value: 1200 });
+
+      await act(async () => {
+        addConditionButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(ruleEditor.scrollTop).toBe(1200);
+
+      ruleEditor.scrollTop = 0;
+      Object.defineProperty(ruleEditor, "scrollHeight", { configurable: true, value: 1400 });
+
+      await act(async () => {
+        addGroupButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(ruleEditor.scrollTop).toBe(1400);
+
+      const addGroupConditionButton = Array.from(
+        document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__condition-group-header button")
+      ).find((candidate) => candidate.textContent === "＋ 条件追加");
+      if (!addGroupConditionButton) {
+        throw new Error("group add condition button was not found");
+      }
+
+      ruleEditor.scrollTop = 0;
+      Object.defineProperty(ruleEditor, "scrollHeight", { configurable: true, value: 1600 });
+
+      await act(async () => {
+        addGroupConditionButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(ruleEditor.scrollTop).toBe(1600);
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it("keeps the Grand Battle tab visible but blocks rule editing while it is preparing", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ battleType: "grandBattle", id: "gb-rule-1", name: "Grand Rule" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const grandBattleTab = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__tab")).find(
+      (candidate) => candidate.textContent === "Grand Battle"
+    );
+    if (!grandBattleTab) {
+      throw new Error("Grand Battle tab was not found");
+    }
+
+    await act(async () => {
+      grandBattleTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("Grand Battle通知設定は準備中です");
+    expect(document.body.textContent).toContain("Grand Rule");
+    expect(document.body.textContent).not.toContain("通知ルール編集");
+    expect(
+      Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__section-header .load-form__button")).some(
+        (candidate) => candidate.disabled
+      )
+    ).toBe(true);
+  });
+
+  it("uses the initial battle type only for the first notification tab selection", async () => {
+    const request = { guildId: "saved-guild" };
+    const getNotificationSettings = vi.fn(() =>
+      Promise.resolve({
+        rules: [createNotificationRule({ battleType: "grandBattle", id: "gb-rule-1", name: "Grand Rule" })]
+      })
+    );
+
+    function renderDialog() {
+      root?.render(
+        <NotificationSettingsDialog
+          request={request}
+          role="admin"
+          initialBattleType="grandBattle"
+          getNotificationSettings={getNotificationSettings}
+          onClose={() => {}}
+        />
+      );
+    }
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      renderDialog();
+      await flushPromises();
+    });
+
+    const getTab = (label: string) =>
+      Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__tab")).find(
+        (candidate) => candidate.textContent === label
+      );
+    const guildBattleTab = getTab("Guild Battle");
+    const grandBattleTab = getTab("Grand Battle");
+    if (guildBattleTab === undefined || grandBattleTab === undefined) {
+      throw new Error("notification battle tabs were not found");
+    }
+
+    expect(grandBattleTab.className).toContain("is-active");
+    expect(document.body.textContent).toContain("Grand Battle通知設定は準備中です");
+    expect(document.body.textContent).toContain("Grand Rule");
+
+    await act(async () => {
+      guildBattleTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    await act(async () => {
+      renderDialog();
+      await flushPromises();
+    });
+
+    expect(guildBattleTab.className).toContain("is-active");
+    expect(grandBattleTab.className).not.toContain("is-active");
+  });
+
+  it("shows target guild default state from the owned guild world", async () => {
+    await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(targetGuildModeRadios).toHaveLength(2);
+    expect(targetGuildModeRadios[0]?.checked).toBe(true);
+    expect(targetGuildModeRadios[1]?.checked).toBe(false);
+    expect(document.body.textContent).toContain("未指定の場合は全ギルドが対象です");
+    expect(document.body.textContent).not.toContain("Alpha連盟");
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
+  });
+
+  it("saves multiple target guilds from the target guild checklist", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <NotificationSettingsDialog
+          request={{ guildId: "saved-guild" }}
+          role="guildOwner"
+          targetGuildWorld={37}
+          useRuleV2Storage
+          getNotificationSettings={vi.fn(() => Promise.resolve({ rules: [] }))}
+          getNotificationSettingsV2={vi.fn(() => Promise.resolve({ rules: [] }))}
+          saveNotificationRule={vi.fn(() => Promise.resolve(createNotificationRule()))}
+          saveNotificationRuleV2={saveNotificationRuleV2}
+          deleteNotificationRule={vi.fn(() => Promise.resolve())}
+          suspendNotificationRule={vi.fn(() =>
+            Promise.resolve({
+              suspendedAt: "2026-06-20T12:00:00.000Z",
+              expiresAt: "2026-06-20T13:00:00.000Z",
+              suspendedBy: { role: "guildOwner" as const }
+            })
+          )}
+          saveNotificationDestination={vi.fn(() =>
+            Promise.resolve({
+              id: "discord" as const,
+              type: "discord_webhook" as const,
+              enabled: true,
+              webhookUrl: "",
+              defaultUsernameTemplate: ""
+            })
+          )}
+          syncGuildBattleGuildCandidates={vi.fn(() =>
+            Promise.resolve({
+              worldId: 1037,
+              candidates: [
+                { guildId: "guild-a", guildName: "Alpha連盟", rank: 1 },
+                { guildId: "guild-b", guildName: "Bravo隊", rank: 2 }
+              ]
+            })
+          )}
+          onClose={() => {}}
+        />
+      );
+      await flushPromises();
+    });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
+    await act(async () => {
+      targetGuildModeRadios[1]?.click();
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).not.toBeNull();
+
+    const targetGuildCheckboxes = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input");
+    await act(async () => {
+      targetGuildCheckboxes[0]?.click();
+      targetGuildCheckboxes[1]?.click();
+      await flushPromises();
+    });
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        targetGuildIds: ["guild-a", "guild-b"]
+      })
+    });
+    expect(saveNotificationRuleV2.mock.calls[0]?.[0].rule).not.toHaveProperty("targetGuildSelectionMode");
+  });
+
+  it("blocks saving when specific target guild mode has no checked guilds", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      saveNotificationRuleV2,
+      true
+    );
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    await act(async () => {
+      targetGuildModeRadios[1]?.click();
+      await flushPromises();
+    });
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("対象ギルドを1件以上選択してください。");
+  });
+
+  it("restores selected target guilds and keeps out-of-candidate ids visible", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRuleV2({ id: "v2-rule", name: "指定通知", targetGuildIds: ["guild-a", "guild-z"] })]
+        })
+      ),
+      undefined,
+      true
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(targetGuildModeRadios[0]?.checked).toBe(false);
+    expect(targetGuildModeRadios[1]?.checked).toBe(true);
+
+    const checkedTargetGuilds = Array.from(
+      document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input")
+    ).filter((candidate) => candidate.checked);
+    expect(checkedTargetGuilds).toHaveLength(2);
+    expect(document.body.textContent).toContain("Alpha連盟");
+    expect(document.body.textContent).toContain("guild-z（現在Stock上位16位外）");
+  });
+
+  it("uses v2 notification rule storage only when the feature path is enabled", async () => {
+    const getNotificationSettings = vi.fn(() => Promise.resolve({ rules: [] }));
+    const getNotificationSettingsV2 = vi.fn(() => Promise.resolve({ rules: [] }));
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "legacy-rule",
+        ...input.rule
+      })
+    );
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "v2-rule",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      getNotificationSettings,
+      undefined,
+      saveNotificationRule,
+      undefined,
+      undefined,
+      undefined,
+      getNotificationSettingsV2,
+      saveNotificationRuleV2,
+      true
+    );
+    await openNotificationSettings();
+
+    expect(getNotificationSettings).not.toHaveBeenCalled();
+    expect(getNotificationSettingsV2).toHaveBeenCalledWith({ guildId: "saved-guild" });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("Discord表示名");
+    expect(document.body.textContent).not.toContain("Webhook名");
+    const previewAvatar = document.querySelector<HTMLElement>(".notification-preview__avatar");
+    expect(previewAvatar?.textContent?.trim()).toBe("");
+    expect(previewAvatar?.querySelector("svg")).not.toBeNull();
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRule).not.toHaveBeenCalled();
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        schemaVersion: 2,
+        targetGuildIds: [],
+        detailConditions: expect.objectContaining({ operator: "OR" })
+      })
+    });
+  });
+
+  it("uses v2 notification rule storage by default when the env flag is unset", async () => {
+    const getNotificationSettings = vi.fn(() => Promise.resolve({ rules: [] }));
+    const getNotificationSettingsV2 = vi.fn(() => Promise.resolve({ rules: [] }));
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "legacy-rule",
+        ...input.rule
+      })
+    );
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "v2-rule",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    vi.stubEnv("VITE_ENABLE_NOTIFICATION_RULE_V2", undefined);
+    const { FirebasePhase0App } = await import("./FirebasePhase0App");
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <AppModeProvider pathname="/">
+          <FirebasePhase0App
+            getOwnerGuildShare={vi.fn(() => Promise.resolve(createOwnerShareResult()))}
+            getNotificationSettings={getNotificationSettings}
+            getNotificationSettingsV2={getNotificationSettingsV2}
+            deleteNotificationRule={vi.fn(() => Promise.resolve())}
+            loadKoGuildKoTotals={() => Promise.resolve([])}
+            loadKoObserverRunMeta={() => Promise.resolve(null)}
+            loadOwnedGuildProfile={vi.fn(() => Promise.resolve(createProfile()))}
+            loadSnapshot={vi.fn(() => Promise.resolve(createGvgSnapshot()))}
+            saveNotificationDestination={vi.fn((input) =>
+              Promise.resolve({
+                id: "discord",
+                type: "discord_webhook",
+                ...input.destination
+              })
+            )}
+            saveNotificationRule={saveNotificationRule}
+            saveNotificationRuleV2={saveNotificationRuleV2}
+            saveOwnerGuildShare={vi.fn()}
+            saveOwnedGuildProfile={vi.fn()}
+            subscribeKoGuildKoTotals={() => () => {}}
+            subscribeToAuthState={(onStateChanged) => {
+              onStateChanged(signedInState);
+              return () => {};
+            }}
+            syncGuildBattleGuildCandidates={vi.fn(() =>
+              Promise.resolve({
+                worldId: 1037,
+                candidates: [
+                  { guildId: "guild-a", guildName: "Alpha騾｣逶・", rank: 1 },
+                  { guildId: "guild-b", guildName: "Bravo髫・", rank: 2 }
+                ]
+              })
+            )}
+            suspendNotificationRule={vi.fn(() =>
+              Promise.resolve({
+                suspendedAt: "2026-06-20T12:00:00.000Z",
+                expiresAt: "2026-06-20T13:00:00.000Z",
+                suspendedBy: { uid: "owner-uid" }
+              })
+            )}
+            verifyGuildShareAccess={vi.fn()}
+          />
+        </AppModeProvider>
+      );
+      await flushPromises();
+    });
+
+    await openNotificationSettings();
+
+    expect(getNotificationSettings).not.toHaveBeenCalled();
+    expect(getNotificationSettingsV2).toHaveBeenCalledWith({ guildId: "saved-guild" });
+
+    const newRuleButton = document.querySelector<HTMLButtonElement>(
+      ".notification-settings-dialog__section-header .load-form__button"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    await act(async () => {
+      targetGuildModeRadios[1]?.click();
+      await flushPromises();
+    });
+
+    const targetGuildCheckboxes = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input");
+    await act(async () => {
+      targetGuildCheckboxes[0]?.click();
+      targetGuildCheckboxes[1]?.click();
+      await flushPromises();
+    });
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRule).not.toHaveBeenCalled();
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        targetGuildIds: ["guild-a", "guild-b"]
+      })
+    });
+  });
+
+  it("disables the target guild field when the target guild world is not available", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <NotificationSettingsDialog
+          request={{ guildId: "saved-guild" }}
+          role="guildOwner"
+          targetGuildWorld={null}
+          getNotificationSettings={vi.fn(() => Promise.resolve({ rules: [] }))}
+          saveNotificationRule={vi.fn(() => Promise.resolve(createNotificationRule()))}
+          deleteNotificationRule={vi.fn(() => Promise.resolve())}
+          suspendNotificationRule={vi.fn(() =>
+            Promise.resolve({
+              suspendedAt: "2026-06-20T12:00:00.000Z",
+              expiresAt: "2026-06-20T13:00:00.000Z",
+              suspendedBy: { role: "guildOwner" as const }
+            })
+          )}
+          saveNotificationDestination={vi.fn(() =>
+            Promise.resolve({
+              id: "discord" as const,
+              type: "discord_webhook" as const,
+              enabled: true,
+              webhookUrl: "",
+              defaultUsernameTemplate: ""
+            })
+          )}
+          onClose={() => {}}
+        />
+      );
+      await flushPromises();
+    });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    expect(targetGuildModeRadios[0]?.checked).toBe(true);
+    expect(targetGuildModeRadios[1]?.disabled).toBe(true);
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
+    expect(document.body.textContent).toContain(
+      "対象ギルド候補を取得するには、所属ギルド設定でワールドを登録してください。"
+    );
+  });
+
+  it("shows the edit dirty bar and restores the saved rule when discarded", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "終盤アラート" })]
+        })
+      )
+    );
+    await openNotificationSettings();
+
+    const ruleButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__main");
+    if (!ruleButton) {
+      throw new Error("notification rule row button was not found");
+    }
+
+    await act(async () => {
+      ruleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const nameInput = Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).find(
+      (candidate) => candidate.value === "終盤アラート"
+    );
+    if (!nameInput) {
+      throw new Error("notification rule name input was not found");
+    }
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(nameInput, "変更中アラート");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
+    expect(document.body.textContent).toContain("保存まで一時停止");
+
+    const discardButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-workspace__action-bar button")).find(
+      (candidate) => candidate.textContent === "破棄して戻す"
+    );
+    if (!discardButton) {
+      throw new Error("discard rule changes button was not found");
+    }
+
+    await act(async () => {
+      discardButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).not.toContain("保存されていない変更があります。保存まで通知は一時停止されています。");
+    expect(
+      Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).some(
+        (candidate) => candidate.value === "終盤アラート"
+      )
+    ).toBe(true);
+  });
+
+  it("temporarily suspends an existing rule when editing starts", async () => {
+    const suspendNotificationRule = vi.fn(() =>
+      Promise.resolve({
+        suspendedAt: "2026-06-20T12:00:00.000Z",
+        expiresAt: "2026-06-20T13:00:00.000Z",
+        suspendedBy: { uid: "owner-uid" }
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      undefined,
+      undefined,
+      suspendNotificationRule
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    await vi.waitFor(() => {
+      expect(suspendNotificationRule).toHaveBeenCalledWith({
+        guildId: "saved-guild",
+      ruleId: "rule-1"
+      });
+    });
+  });
+
+  it("keeps existing rule saving available while temporary suspension is pending", async () => {
+    let resolveSuspension:
+      | ((value: {
+          readonly suspendedAt: string;
+          readonly expiresAt: string;
+          readonly suspendedBy?: { readonly uid?: string; readonly role?: "guildOwner" | "admin" };
+        }) => void)
+      | null = null;
+    const suspendNotificationRule = vi.fn(
+      () =>
+        new Promise<{
+          readonly suspendedAt: string;
+          readonly expiresAt: string;
+          readonly suspendedBy?: { readonly uid?: string; readonly role?: "guildOwner" | "admin" };
+        }>((resolve) => {
+          resolveSuspension = resolve;
+        })
+    );
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "rule-1",
+        ...input.rule
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      saveNotificationRule,
+      undefined,
+      suspendNotificationRule
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    await vi.waitFor(() => {
+      expect(suspendNotificationRule).toHaveBeenCalled();
+    });
+
+    const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__action-buttons button")).find(
+      (candidate) => candidate.textContent === "保存"
+    );
+    if (!saveButton) {
+      throw new Error("save notification rule button was not found");
+    }
+
+    expect(saveButton.disabled).toBe(false);
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        guildId: "saved-guild",
+        ruleId: "rule-1"
+      })
+    );
+    expect(document.body.textContent).not.toContain("通知ルールを保存しました。");
+    expect(document.querySelector(".notification-rule-workspace__action-bar")).toBeNull();
+
+    await act(async () => {
+      resolveSuspension?.({
+        suspendedAt: "2026-06-20T12:00:00.000Z",
+        expiresAt: "2026-06-20T13:00:00.000Z",
+        suspendedBy: { uid: "owner-uid" }
+      });
+      await flushPromises();
+    });
+  });
+
+  it("keeps the notification rule save error visible when saving fails", async () => {
+    const saveNotificationRule = vi.fn(() => Promise.reject(new Error("save failed")));
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      saveNotificationRule
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__action-buttons button")).find(
+      (candidate) => candidate.textContent === "保存"
+    );
+    if (!saveButton) {
+      throw new Error("save notification rule button was not found");
+    }
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("通知ルールの保存に失敗しました。");
+  });
+
+  it("cancels editing when temporary suspension fails", async () => {
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.reject(new Error("suspend failed")))
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "通知の一時停止に失敗したため、編集を開始できませんでした。時間をおいて再度お試しください。"
+      );
+    });
+    expect(document.querySelector(".notification-rule-editor__empty-state")).not.toBeNull();
+    expect(document.body.textContent).not.toContain("Rule One Edited");
   });
 
   it("saves the webhook destination from the notification dialog, not the common settings save button", async () => {
@@ -810,7 +2345,38 @@ async function renderApp(
       ...input.rule
     })
   ),
-  deleteNotificationRule: (input: { readonly ruleId: string }) => Promise<void> = vi.fn(() => Promise.resolve())
+  deleteNotificationRule: (input: { readonly ruleId: string }) => Promise<void> = vi.fn(() => Promise.resolve()),
+  suspendNotificationRule: (input: { readonly ruleId: string }) => Promise<{
+    readonly suspendedAt: string;
+    readonly expiresAt: string;
+    readonly suspendedBy?: { readonly uid?: string; readonly role?: "guildOwner" | "admin" };
+  }> = vi.fn(() =>
+    Promise.resolve({
+      suspendedAt: "2026-06-20T12:00:00.000Z",
+      expiresAt: "2026-06-20T13:00:00.000Z",
+      suspendedBy: { uid: "owner-uid" }
+    })
+  ),
+  syncGuildBattleGuildCandidates = vi.fn(() =>
+    Promise.resolve({
+      worldId: 1037,
+      candidates: [
+        { guildId: "guild-a", guildName: "Alpha連盟", rank: 1 },
+        { guildId: "guild-b", guildName: "Bravo隊", rank: 2 }
+      ]
+    })
+  ),
+  getNotificationSettingsV2: (input: { readonly guildId: string; readonly accessKey?: string }) => Promise<{
+    readonly rules: readonly NotificationRuleV2[];
+    readonly destination?: NotificationDestination;
+  }> = vi.fn(() => Promise.resolve({ rules: [] })),
+  saveNotificationRuleV2: (input: { readonly rule: NotificationRuleV2Input }) => Promise<NotificationRuleV2> = vi.fn((input) =>
+    Promise.resolve({
+      id: "saved-rule-v2",
+      ...input.rule
+    })
+  ),
+  useNotificationRuleV2 = false
 ) {
   const { FirebasePhase0App } = await import("./FirebasePhase0App");
   container = document.createElement("div");
@@ -822,6 +2388,7 @@ async function renderApp(
       <FirebasePhase0App
         getOwnerGuildShare={getOwnerShare}
         getNotificationSettings={getNotificationSettings}
+        getNotificationSettingsV2={getNotificationSettingsV2}
         deleteNotificationRule={deleteNotificationRule}
         loadKoGuildKoTotals={() => Promise.resolve([])}
         loadKoObserverRunMeta={() => Promise.resolve(null)}
@@ -829,6 +2396,9 @@ async function renderApp(
         loadSnapshot={loadSnapshot}
         saveNotificationDestination={saveNotificationDestination}
         saveNotificationRule={saveNotificationRule}
+        saveNotificationRuleV2={saveNotificationRuleV2}
+        syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidates}
+        suspendNotificationRule={suspendNotificationRule}
         saveOwnerGuildShare={saveOwnerShare}
         saveOwnedGuildProfile={saveProfile}
         subscribeKoGuildKoTotals={() => () => {}}
@@ -836,6 +2406,7 @@ async function renderApp(
           onStateChanged(authState);
           return () => {};
         }}
+        useNotificationRuleV2={useNotificationRuleV2}
         verifyGuildShareAccess={verifyShareAccess}
       />
     </AppModeProvider>
@@ -904,6 +2475,34 @@ async function openNotificationSettings() {
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+  });
+}
+
+async function openFirstNotificationRuleForEdit() {
+  const ruleButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__main");
+  if (!ruleButton) {
+    throw new Error("notification rule row button was not found");
+  }
+
+  await act(async () => {
+    ruleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+  });
+}
+
+async function editSelectedNotificationRuleName(nextName: string) {
+  const nameInput = Array.from(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor input")).find(
+    (candidate) => candidate.type !== "checkbox" && !candidate.disabled
+  );
+  if (!nameInput) {
+    throw new Error("notification rule name input was not found");
+  }
+
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    valueSetter?.call(nameInput, nextName);
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     await flushPromises();
   });
 }
@@ -1056,6 +2655,63 @@ function createShare(guildId: string): GuildShare {
     guildId,
     adminAccessKey: "a_admin",
     guestAccessKey: "g_guest"
+  };
+}
+
+function createNotificationRule(overrides: Partial<NotificationRule> = {}): NotificationRule {
+  return {
+    id: "rule-1",
+    battleType: "guildBattle",
+    name: "見落とし防止",
+    enabled: true,
+    conditions: {
+      startTime: "21:00",
+      defenseCountMax: 20,
+      attackCountMin: 15
+    },
+    message: {
+      usernameTemplate: "ギルバト監視BOT - {拠点名}",
+      mention: { type: "here" },
+      titleTemplate: "⚠ {拠点名}が攻撃されています！",
+      bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
+    },
+    ...overrides
+  };
+}
+
+function createNotificationRuleV2(overrides: Partial<NotificationRuleV2> = {}): NotificationRuleV2 {
+  return {
+    id: "v2-rule",
+    schemaVersion: 2,
+    battleType: "guildBattle",
+    name: "見落とし防止",
+    enabled: true,
+    sortOrder: 0,
+    schedule: {
+      startTime: "21:00",
+      endTime: null
+    },
+    targetGuildIds: [],
+    detailConditions: {
+      operator: "OR",
+      children: [
+        {
+          type: "group",
+          operator: "AND",
+          children: [
+            { type: "condition", field: "defenseCount", operator: "<=", value: 30 },
+            { type: "condition", field: "attackCount", operator: ">=", value: 1 }
+          ]
+        }
+      ]
+    },
+    message: {
+      usernameTemplate: "ギルバト監視BOT - {拠点名}",
+      mention: { type: "here" },
+      titleTemplate: "⚠ {拠点名}が攻撃されています！",
+      bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
+    },
+    ...overrides
   };
 }
 

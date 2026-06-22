@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   handleDeleteNotificationRule,
   handleGetNotificationSettings,
+  handleGetNotificationSettingsV2,
   handleSaveNotificationDestination,
-  handleSaveNotificationRule
+  handleSaveNotificationRule,
+  handleSaveNotificationRuleV2,
+  handleSuspendNotificationRule,
+  shouldReadNotificationRuleV2Document,
+  validateNotificationRuleV2Input
 } from "./notificationSettings.js";
 
 describe("notification settings callables", () => {
@@ -53,6 +58,40 @@ describe("notification settings callables", () => {
           name: "Admin Rule"
         })
       ]
+    });
+  });
+
+  it("returns only schemaVersion 2 rules from the v2 settings path", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/legacy-rule": createRule({ name: "Legacy Rule" }),
+      "guildShares/guild-1/notificationRules/v2-rule": {
+        ...createRuleV2Input({ name: "V2 Rule", targetGuildIds: ["guild-a"] }),
+        createdAt: "created-at",
+        createdByRole: "guildOwner",
+        updatedAt: "updated-at"
+      },
+      "guildShares/guild-1/notificationDestinations/discord": createDestination({
+        enabled: true,
+        webhookUrl: "https://discord.com/api/webhooks/123/token"
+      })
+    });
+
+    await expect(
+      handleGetNotificationSettingsV2({ guildId: "guild-1" }, { authUid: "owner-uid" }, createDependencies(firestore))
+    ).resolves.toMatchObject({
+      rules: [
+        {
+          id: "v2-rule",
+          schemaVersion: 2,
+          name: "V2 Rule",
+          targetGuildIds: ["guild-a"]
+        }
+      ],
+      destination: {
+        id: "discord",
+        type: "discord_webhook"
+      }
     });
   });
 
@@ -157,6 +196,118 @@ describe("notification settings callables", () => {
     expect(firestore.writes[0].data).not.toHaveProperty("updatedByRole");
   });
 
+  it("saves a v2 rule with server-managed metadata", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            targetGuildIds: ["guild-a"],
+            sortOrder: 3
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      id: "generated-rule",
+      schemaVersion: 2,
+      sortOrder: 3,
+      targetGuildIds: ["guild-a"],
+      createdByRole: "guildOwner",
+      createdAt: "now-1",
+      updatedAt: "now-1"
+    });
+
+    expect(firestore.writes).toEqual([
+      expect.objectContaining({
+        path: "guildShares/guild-1/notificationRules/generated-rule",
+        data: expect.objectContaining({
+          schemaVersion: 2,
+          sortOrder: 3,
+          targetGuildIds: ["guild-a"],
+          createdAt: "now-1",
+          createdByRole: "guildOwner",
+          updatedAt: "now-1"
+        }),
+        options: { merge: false }
+      })
+    ]);
+    expect(firestore.writes[0].data).not.toHaveProperty("id");
+  });
+
+  it("updates a v2 rule while preserving created metadata", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/rule-v2": {
+        ...createRuleV2Input(),
+        createdAt: "created-before",
+        createdByRole: "admin",
+        updatedAt: "updated-before"
+      }
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          accessKey: "a_admin",
+          ruleId: "rule-v2",
+          rule: createRuleV2Input({ name: "Updated V2" })
+        },
+        { authUid: null },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      id: "rule-v2",
+      name: "Updated V2",
+      createdAt: "created-before",
+      createdByRole: "admin",
+      updatedAt: "now-1"
+    });
+
+    expect(firestore.writes[0].data).toMatchObject({
+      name: "Updated V2",
+      createdAt: "created-before",
+      createdByRole: "admin",
+      updatedAt: "now-1"
+    });
+  });
+
+  it("rejects invalid v2 rules through the save callable", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            detailConditions: {
+              operator: "AND",
+              children: [
+                {
+                  type: "group",
+                  operator: "AND",
+                  children: [{ type: "condition", field: "attackCount", operator: ">=", value: 1 }]
+                }
+              ]
+            }
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+
+    expect(firestore.writes).toEqual([]);
+  });
+
   it("allows an empty webhook URL only when destination is disabled", async () => {
     const firestore = createFirestore({
       "guildShares/guild-1": createShare()
@@ -226,6 +377,115 @@ describe("notification settings callables", () => {
 
     expect(firestore.deletes).toEqual(["guildShares/guild-1/notificationRules/rule-1"]);
   });
+
+  it("temporarily suspends an existing rule with a safe owner uid", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/rule-1": createRule()
+    });
+
+    await expect(
+      handleSuspendNotificationRule(
+        { guildId: "guild-1", ruleId: "rule-1" },
+        { authUid: "owner-uid" },
+        createDependencies(firestore, new Date("2026-06-20T12:00:00.000Z") as never)
+      )
+    ).resolves.toEqual({
+      suspendedAt: "2026-06-20T12:00:00.000Z",
+      expiresAt: "2026-06-20T13:00:00.000Z",
+      suspendedBy: { uid: "owner-uid" }
+    });
+
+    expect(firestore.writes).toEqual([
+      {
+        path: "guildShares/guild-1/notificationRules/rule-1",
+        data: {
+          temporarySuspension: {
+            suspendedAt: "2026-06-20T12:00:00.000Z",
+            expiresAt: "2026-06-20T13:00:00.000Z",
+            suspendedBy: { uid: "owner-uid" }
+          },
+          updatedAt: new Date("2026-06-20T12:00:00.000Z")
+        },
+        options: { merge: true }
+      }
+    ]);
+  });
+
+  it("temporarily suspends an existing rule with a safe admin role", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/rule-1": createRule()
+    });
+
+    await expect(
+      handleSuspendNotificationRule(
+        { guildId: "guild-1", accessKey: "a_admin", ruleId: "rule-1" },
+        { authUid: null },
+        createDependencies(firestore, new Date("2026-06-20T12:00:00.000Z") as never)
+      )
+    ).resolves.toMatchObject({
+      suspendedAt: "2026-06-20T12:00:00.000Z",
+      expiresAt: "2026-06-20T13:00:00.000Z",
+      suspendedBy: { role: "admin" }
+    });
+
+    expect(firestore.writes[0].data.temporarySuspension).toMatchObject({
+      suspendedBy: { role: "admin" }
+    });
+    expect(JSON.stringify(firestore.writes[0].data)).not.toContain("a_admin");
+  });
+
+  it("accepts v2 notification rule validation with here and everyone mentions", () => {
+    expect(validateNotificationRuleV2Input(createRuleV2Input({ mention: { type: "here" } }))).toMatchObject({
+      schemaVersion: 2,
+      message: { mention: { type: "here" } }
+    });
+
+    expect(validateNotificationRuleV2Input(createRuleV2Input({ mention: { type: "everyone" } }))).toMatchObject({
+      schemaVersion: 2,
+      message: { mention: { type: "everyone" } }
+    });
+  });
+
+  it("prepares v2 document filtering without switching the get settings path", () => {
+    expect(shouldReadNotificationRuleV2Document(createRuleV2Input())).toBe(true);
+    expect(shouldReadNotificationRuleV2Document(createRule())).toBe(false);
+    expect(shouldReadNotificationRuleV2Document(undefined)).toBe(false);
+  });
+
+  it("rejects v2 rules when the root detail condition operator is not OR", () => {
+    expect(() =>
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          detailConditions: {
+            operator: "AND",
+            children: [
+              {
+                type: "group",
+                operator: "AND",
+                children: [{ type: "condition", field: "defenseCount", operator: "<=", value: 30 }]
+              }
+            ]
+          }
+        })
+      )
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+  });
+
+  it("rejects v2 temporary suspension without a safe role or uid", () => {
+    expect(() =>
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          temporarySuspension: {
+            suspendedAt: "2026-06-20T12:00:00.000Z",
+            expiresAt: "2026-06-20T13:00:00.000Z",
+            suspendedBy: {}
+          }
+        })
+      )
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+  });
 });
 
 function createShare() {
@@ -265,6 +525,52 @@ function createRuleInput() {
   };
 }
 
+function createRuleV2Input(
+  overrides: {
+    readonly name?: string;
+    readonly sortOrder?: number;
+    readonly targetGuildIds?: readonly string[];
+    readonly mention?: { readonly type: string; readonly customText?: string };
+    readonly detailConditions?: Record<string, unknown>;
+    readonly temporarySuspension?: Record<string, unknown>;
+  } = {}
+) {
+  return {
+    schemaVersion: 2,
+    battleType: "guildBattle",
+    name: overrides.name ?? "\u898b\u843d\u3068\u3057\u9632\u6b62",
+    enabled: true,
+    sortOrder: overrides.sortOrder ?? 0,
+    schedule: {
+      startTime: "21:00",
+      endTime: null
+    },
+    targetGuildIds: overrides.targetGuildIds ?? [],
+    detailConditions: overrides.detailConditions ?? {
+      operator: "OR",
+      children: [
+        {
+          type: "group",
+          operator: "AND",
+          children: [
+            { type: "condition", field: "defenseCount", operator: "<=", value: 30 },
+            { type: "condition", field: "attackCount", operator: ">=", value: 1 }
+          ]
+        }
+      ]
+    },
+    message: {
+      usernameTemplate: "ギルバト監視BOT - {拠点名}",
+      mention: overrides.mention ?? { type: "none" },
+      titleTemplate: "⚠ {拠点名}が攻撃されています！",
+      bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
+    },
+    ...(overrides.temporarySuspension === undefined
+      ? {}
+      : { temporarySuspension: overrides.temporarySuspension })
+  };
+}
+
 function createDestination(overrides: Record<string, unknown>) {
   return {
     type: "discord_webhook",
@@ -274,12 +580,16 @@ function createDestination(overrides: Record<string, unknown>) {
   };
 }
 
-function createDependencies(firestore: ReturnType<typeof createFirestore>) {
+function createDependencies(firestore: ReturnType<typeof createFirestore>, fixedNow?: never) {
   let nowIndex = 0;
 
   return {
     firestore,
     now: () => {
+      if (fixedNow !== undefined) {
+        return fixedNow;
+      }
+
       nowIndex += 1;
       return `now-${nowIndex}` as never;
     },

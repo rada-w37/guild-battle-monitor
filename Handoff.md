@@ -1,172 +1,66 @@
 # Handoff.md
 
-## Next Session Start
+## Current Goal
 
-1. `git status --short`
-2. `git log -6 --oneline`
-3. Handoff.md を確認
-4. Discord通知 Phase1 の実装Planを作成
-5. `notificationRules` / `notificationDestinations` のFunctions設計確認
-6. `NotificationSettingsDialog` の構成確認
-7. 実装開始
+通知設定v2 UI修正後の実ブラウザ確認とデプロイ要否判断。
 
-## Validation Status
+## Current Status
 
-* `npm.cmd run test`: passed
-* `npm.cmd run test:functions`: passed
-* `npm.cmd run typecheck`: passed
-* `npm.cmd run build:functions`: passed
-* Functions deploy済み
+- 通知設定v2 UI修正はローカル実装・コミット済み。
+- 完了済み: ダークモード下部バー、Grand Battle初期タブ、縦レイアウト、保存成功メッセージ非表示、下部余白、Discordプレビューアイコン、変数挿入先、Undo同期改善。
+- 最新コミット: `2aeedb5 fix(notification-rule): step6 refine variable undo sync`
+- Hosting/Functionsへの今回変更のデプロイは未実施。
 
-  * region: `asia-northeast1`
-* Hosting deploy済み
-* Firestore Rules deploy済み
-* Owner/Admin/Viewer URL 実機確認済み
+## Architecture
 
-Latest commits:
+- Client entry: `FirebasePhase0App`
+- Notification dialog UI: `NotificationSettingsDialog`
+- Dialog styles: `src/app/styles.css`
+- v2 rule draft: `notificationRuleV2Draft`
+- v2 callable client: `notificationSettingsFunctionsRepository`
 
-* `2999123 fix(functions): set share callable region`
-* `77865c5 fix(share-url): step1 move share access to functions`
+## Decisions
 
-## Known Issues
-
-* 所属ギルド設定UIが今後の権限モデルと不整合
-
-  * Notion Issue化済み
-  * 今回は未対応
-* functions依存の audit warning
-
-  * moderate 8 / high 5
-  * 未調査
-* 既に壊れた旧共有URLは自動復旧しない
-
-## Remaining Tasks
-
-1. Discord通知 Phase1
-2. Discord通知 Phase2: KOO連携による通知判定/送信
-3. guild owner申請機能
-4. site owner承認機能
-5. guild member/admin付与機能
-6. 所属ギルド設定UI整理
-7. URL再発行機能
-8. 操作ログ
+- 通知ルールv2の保存形式・Firestore schema・Functions仕様は変更しない。
+- `schemaVersion: 2`, `targetGuildIds`, `detailConditions`, `temporarySuspension` は既存仕様維持。
+- 変数ボタンは `Discord表示名` / `通知タイトル` / `通知本文` のフォーカス中フィールドだけに挿入する。
+- 3フィールド以外にフォーカスがある場合、変数挿入はno-op。
+- Undo/Redoはブラウザ標準履歴に寄せ、独自Undoスタックは作らない。
 
 ## Important Files
 
 ```text
-src/features/notifications/
-src/features/guildBattle/GuildBattlePlaceholder.tsx
-src/features/notifications/FirebasePhase0App.tsx
-src/lib/firebase.ts
+Handoff.md
+src/features/notifications/NotificationSettingsDialog.tsx
+src/features/notifications/FirebasePhase0App.test.tsx
 src/app/styles.css
-
-functions/src/index.ts
-functions/src/guildShare.ts
-
-firestore.rules
-firebase.json
-docs/step1-share-functions-deploy.md
+src/features/notifications/notificationTemplates.ts
 ```
 
-## Decisions
+## Remaining Tasks
 
-* `guildShares/{guildId}` が共有URL/accessKeyの唯一の正。
-* clientは `guildShares/{guildId}` を直接read/writeしない。
-* Owner表示/保存、Admin/Viewer URL検証はCallable Functions経由。
-* Functions regionは `asia-northeast1`。
-* `guildOwnerUid` がguild owner判定の正。
-* `profile.guildId` は権限根拠にしない。
-* 旧guestはUI上 `viewer` / `Viewer URL` とする。
-* `guestAccessKey` は内部互換のため当面維持。
-* Discord通知 Phase1では通知送信しない。
-* Webhook URLはguild ownerのみ表示/編集可。
-* adminは通知ルール編集可、Webhook不可。
-* viewer / signed-in user / anonymous は通知設定不可。
+1. ログイン済み実ブラウザで通知設定v2画面を手動確認する。
+2. Discord表示名/通知タイトル/通知本文で `aaa{拠点名}aaa` のCtrl+Z/Ctrl+Yを確認する。
+3. Grand Battle/ダークモード、縦レイアウト、保存/破棄/未保存変更確認を画面確認する。
+4. デプロイ要否を決める。
 
-## Architecture
+## Known Issues
 
-共有URL:
+- 実アプリ画面でのUndo確認は未ログインのため未実施。
+- `npm.cmd run test` で既存テスト由来のstderr警告が出るが、テストは成功する。
+- 今回のUI修正はまだHostingへデプロイしていない。
 
-```text
-guildShares/{guildId}
-  guildOwnerUid
-  adminAccessKey
-  guestAccessKey
-  world
-  guildName
-```
+## Validation Status
 
-Step1 Functions:
+- `npm.cmd run test -- src/features/notifications/FirebasePhase0App.test.tsx`: passed, 53 tests
+- `npm.cmd run typecheck`: passed
+- `npm.cmd run test`: passed, 373 tests
+- `npm.cmd run build`: passed
+- Chrome最小DOM検証: input/textareaとも変数挿入後の1回目Ctrl+Zで全消しにならないことを確認
+- `git status --short`: clean before this Handoff update
 
-```text
-getOwnerGuildShare
-saveOwnerGuildShare
-verifyGuildShareAccess
-```
+## Next Session Start
 
-通知ルール保存先:
-
-```text
-guildShares/{guildId}/notificationRules/{ruleId}
-```
-
-通知先保存先:
-
-```text
-guildShares/{guildId}/notificationDestinations/discord
-```
-
-通知Phase1条件:
-
-```text
-開始時刻
-防御数 ○○以下
-侵攻数 ○○以上
-```
-
-通知Phase1テンプレート変数:
-
-```text
-{拠点名}
-{侵攻ギルド}
-{防御数}
-{侵攻数}
-{通知時刻}
-{通知ルール名}
-```
-
-通知実行方針:
-
-```text
-GBM: 通知ルール管理
-KOO: 通知判定
-Function: Webhook読込/Discord送信
-```
-
-## Current Status
-
-Step1 共有URL/accessKey固定化 + Functions移行は完了。
-
-完了済み:
-
-* Functions基盤追加
-* `guildOwnerUid` 導入
-* `guildShares/{guildId}` client直接read/write禁止
-* Owner表示/保存のFunctions移行
-* Admin/Viewer URL検証のFunctions移行
-* Viewer URL表記対応
-* Functions / Hosting / Firestore Rules deploy
-* 実機確認
-
-## Current Goal
-
-Discord通知 Phase1 を実装する。
-
-対象:
-
-* 通知設定ダイアログ
-* 通知ルールCRUD
-* 通知ルール保存/読込
-* Discord Webhook保存/読込
-* テンプレート変数プレビュー
-* 権限制御
+1. `git status --short`
+2. `git log -5 --oneline`
+3. `Handoff.md` のRemaining Tasks順に実ブラウザ確認を始める
