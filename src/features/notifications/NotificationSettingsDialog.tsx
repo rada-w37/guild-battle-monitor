@@ -1471,7 +1471,7 @@ export function NotificationSettingsDialog({
                 <div className="notification-preview">
                   <div className="notification-preview__header">
                     <div className="notification-preview__avatar" aria-hidden="true">
-                      Discord
+                      GBM
                     </div>
                     <div>
                       <div className="notification-preview__username">{previewUsername}</div>

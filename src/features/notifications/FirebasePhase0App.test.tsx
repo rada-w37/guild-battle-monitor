@@ -1717,6 +1717,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(document.body.textContent).toContain("Discord表示名");
     expect(document.body.textContent).not.toContain("Webhook名");
+    const previewAvatar = document.querySelector<HTMLElement>(".notification-preview__avatar");
+    expect(previewAvatar?.textContent).toBe("GBM");
+    expect(previewAvatar?.textContent).not.toBe("Discord");
 
     const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
     if (!createButton) {
