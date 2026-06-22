@@ -1443,36 +1443,36 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).not.toContain("Alpha連盟");
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
 
-    const targetRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
-    expect(targetRadios).toHaveLength(2);
-    expect(targetRadios[0]?.closest(".notification-rule-editor__target-guilds")?.className).toContain("is-readonly");
-    expect(targetRadios[0]?.checked).toBe(true);
-    expect(targetRadios[0]?.disabled).toBe(false);
-    expect(targetRadios[0]?.getAttribute("aria-disabled")).toBe("true");
-    expect(targetRadios[0]?.tabIndex).toBe(-1);
-    expect(targetRadios[1]?.checked).toBe(false);
-    expect(targetRadios[1]?.disabled).toBe(false);
-    expect(targetRadios[1]?.getAttribute("aria-disabled")).toBe("true");
-    expect(targetRadios[1]?.tabIndex).toBe(-1);
+    const readonlyTargetGroup = document.querySelector<HTMLElement>(".notification-rule-editor__target-guilds.is-readonly");
+    expect(readonlyTargetGroup).not.toBeNull();
+    expect(readonlyTargetGroup?.querySelector("input")).toBeNull();
+    const readonlyTargetOptions = document.querySelectorAll<HTMLElement>(
+      ".notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio"
+    );
+    expect(readonlyTargetOptions).toHaveLength(2);
+    expect(readonlyTargetOptions[0]?.getAttribute("role")).toBe("radio");
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-checked")).toBe("true");
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-disabled")).toBe("true");
+    expect(readonlyTargetOptions[0]?.querySelector(".notification-rule-editor__readonly-radio.is-checked")).not.toBeNull();
+    expect(readonlyTargetOptions[1]?.getAttribute("role")).toBe("radio");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-checked")).toBe("false");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-disabled")).toBe("true");
+    expect(readonlyTargetOptions[1]?.querySelector(".notification-rule-editor__readonly-radio:not(.is-checked)")).not.toBeNull();
     await act(async () => {
-      targetRadios[1]?.click();
+      readonlyTargetOptions[1]?.click();
       await flushPromises();
     });
-    expect(targetRadios[0]?.checked).toBe(true);
-    expect(targetRadios[1]?.checked).toBe(false);
-    const targetLabels = document.querySelectorAll<HTMLElement>(".notification-rule-editor__target-guild-radio");
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-checked")).toBe("true");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-checked")).toBe("false");
     await act(async () => {
-      targetLabels[1]?.click();
+      readonlyTargetOptions[0]?.click();
       await flushPromises();
     });
-    expect(targetRadios[0]?.checked).toBe(true);
-    expect(targetRadios[1]?.checked).toBe(false);
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-checked")).toBe("true");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-checked")).toBe("false");
     expect(document.querySelector(".notification-preview__avatar svg")).not.toBeNull();
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1615,7 +1615,12 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     await openFirstNotificationRuleForEdit();
     expect(document.body.textContent).toContain("通知ルール編集");
-    expect(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input")).toHaveLength(2);
+    expect(
+      document.querySelectorAll<HTMLElement>(
+        ".notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio"
+      )
+    ).toHaveLength(2);
+    expect(document.querySelector(".notification-rule-editor__target-guilds.is-readonly input")).toBeNull();
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
 
     await editSelectedNotificationRuleName("Grand Rule Edited");
@@ -1741,10 +1746,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("Grand Rule コピー");
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1912,10 +1914,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1979,10 +1978,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -2092,10 +2088,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(previewAvatar?.textContent?.trim()).toBe("");
     expect(previewAvatar?.querySelector("svg")).not.toBeNull();
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -2217,10 +2210,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -2345,6 +2335,16 @@ describe("FirebasePhase0App notification settings dialog", () => {
     if (!discardButton) {
       throw new Error("discard rule changes button was not found");
     }
+    expect(discardButton.className).toContain("load-form__button--secondary");
+
+    const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-workspace__action-bar button")).find(
+      (candidate) => candidate.textContent === "保存"
+    );
+    if (!saveButton) {
+      throw new Error("save rule changes button was not found");
+    }
+    expect(saveButton.className).toContain("load-form__button");
+    expect(saveButton.className).not.toContain("load-form__button--secondary");
 
     await act(async () => {
       discardButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -2901,6 +2901,16 @@ async function editSelectedNotificationRuleName(nextName: string) {
     nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     await flushPromises();
   });
+}
+
+function getNotificationRuleEditorActionButton(label: string) {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__action-buttons button")).find(
+    (candidate) => candidate.textContent === label
+  );
+  if (!button) {
+    throw new Error(`notification rule editor action button was not found: ${label}`);
+  }
+  return button;
 }
 
 async function openSettings() {

@@ -914,12 +914,28 @@ select {
 .notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio {
   color: color-mix(in srgb, var(--app-text-muted) 88%, var(--app-text));
   cursor: default;
+  pointer-events: none;
   user-select: none;
 }
 
-.notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio input {
-  accent-color: color-mix(in srgb, var(--app-text-muted) 72%, var(--app-surface));
-  cursor: default;
+.notification-rule-editor__readonly-radio {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--app-text-muted) 72%, var(--app-border-strong));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 14%, var(--app-surface));
+}
+
+.notification-rule-editor__readonly-radio.is-checked::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 82%, var(--app-text));
+  content: "";
 }
 
 .notification-rule-editor__target-guild-list {

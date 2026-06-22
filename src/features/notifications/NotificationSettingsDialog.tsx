@@ -1183,38 +1183,24 @@ export function NotificationSettingsDialog({
                 <>
                   <p className="notification-settings-dialog__note">{"\u30b0\u30e9\u30f3\u30c9\u30d0\u30c8\u30eb\u3067\u306f\u5168\u30ae\u30eb\u30c9\u56fa\u5b9a\u3067\u3059\u3002"}</p>
                   <fieldset className="notification-rule-editor__target-guilds is-readonly" aria-label="対象ギルド">
-                    <label
+                    <div
                       className="notification-rule-editor__target-guild-radio"
                       aria-disabled="true"
-                      onClick={(event) => event.preventDefault()}
+                      role="radio"
+                      aria-checked="true"
                     >
-                      <input
-                        checked
-                        aria-disabled="true"
-                        name="notification-target-guild-mode"
-                        readOnly
-                        tabIndex={-1}
-                        type="radio"
-                        onClick={(event) => event.preventDefault()}
-                      />
+                      <span className="notification-rule-editor__readonly-radio is-checked" aria-hidden="true" />
                       {"\u5168\u30ae\u30eb\u30c9"}
-                    </label>
-                    <label
+                    </div>
+                    <div
                       className="notification-rule-editor__target-guild-radio"
                       aria-disabled="true"
-                      onClick={(event) => event.preventDefault()}
+                      role="radio"
+                      aria-checked="false"
                     >
-                      <input
-                        checked={false}
-                        aria-disabled="true"
-                        name="notification-target-guild-mode"
-                        readOnly
-                        tabIndex={-1}
-                        type="radio"
-                        onClick={(event) => event.preventDefault()}
-                      />
+                      <span className="notification-rule-editor__readonly-radio" aria-hidden="true" />
                       {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
-                    </label>
+                    </div>
                   </fieldset>
                 </>
               ) : (
@@ -1605,7 +1591,7 @@ export function NotificationSettingsDialog({
                       : "\u4fdd\u5b58\u3055\u308c\u3066\u3044\u306a\u3044\u5909\u66f4\u304c\u3042\u308a\u307e\u3059\u3002\u4fdd\u5b58\u307e\u3067\u901a\u77e5\u306f\u4e00\u6642\u505c\u6b62\u3055\u308c\u3066\u3044\u307e\u3059\u3002"}
                   </p>
                   <div className="notification-rule-editor__action-buttons">
-                    <button type="button" onClick={() => void discardRuleChanges()}>
+                    <button className="load-form__button load-form__button--secondary" type="button" onClick={() => void discardRuleChanges()}>
                       {ruleEditorMode === "creating" ? "\u7834\u68c4" : "\u7834\u68c4\u3057\u3066\u623b\u3059"}
                     </button>
                     <button
