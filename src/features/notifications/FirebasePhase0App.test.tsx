@@ -1304,6 +1304,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(bodyTextarea.value).toBe(`ABC${notificationTimeToken}DEF`);
     expect(document.activeElement).toBe(bodyTextarea);
     expect(bodyTextarea.selectionStart).toBe(3 + notificationTimeToken.length);
+    expect(usernameInput.value).toBe(`ABC${baseNameToken}DEF`);
+    expect(titleInput.value).toBe(`ABC${attackerGuildToken}GHI`);
 
     const previousUsername = usernameInput.value;
     const previousTitle = titleInput.value;

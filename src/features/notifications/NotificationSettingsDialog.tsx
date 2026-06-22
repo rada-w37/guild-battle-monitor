@@ -762,56 +762,70 @@ export function NotificationSettingsDialog({
       return;
     }
 
-    if (insertVariableWithNativeUndo(target, variableName)) {
+    const selectionStart = target.element.selectionStart ?? target.element.value.length;
+    const selectionEnd = target.element.selectionEnd ?? selectionStart;
+
+    if (insertVariableWithNativeUndo(target, variableName, selectionStart, selectionEnd)) {
       return;
     }
 
-    const selectionStart = target.element.selectionStart ?? target.element.value.length;
-    const selectionEnd = target.element.selectionEnd ?? selectionStart;
-    const nextCursorPosition = selectionStart + variableName.length;
-
-    setRuleDraft((currentDraft) => {
-      const currentTemplate = currentDraft.message[target.field];
-      const safeSelectionStart = Math.min(selectionStart, currentTemplate.length);
-      const safeSelectionEnd = Math.min(Math.max(selectionEnd, safeSelectionStart), currentTemplate.length);
-
-      return {
-        ...currentDraft,
-        message: {
-          ...currentDraft.message,
-          [target.field]: `${currentTemplate.slice(0, safeSelectionStart)}${variableName}${currentTemplate.slice(safeSelectionEnd)}`
-        }
-      };
-    });
-
-    window.setTimeout(() => {
-      target.element.focus();
-      target.element.setSelectionRange(nextCursorPosition, nextCursorPosition);
-    }, 0);
+    insertVariableWithRangeText(target, variableName, selectionStart, selectionEnd);
   }
 
-  function insertVariableWithNativeUndo(target: TemplateFieldTarget, variableName: string): boolean {
+  function insertVariableWithNativeUndo(
+    target: TemplateFieldTarget,
+    variableName: string,
+    selectionStart: number,
+    selectionEnd: number
+  ): boolean {
     if (typeof document.execCommand !== "function") {
       return false;
     }
 
-    const previousTemplate = target.element.value;
     target.element.focus();
+    target.element.setSelectionRange(selectionStart, selectionEnd);
     const didInsert = document.execCommand("insertText", false, variableName);
-    if (!didInsert || target.element.value === previousTemplate) {
+    if (!didInsert) {
       return false;
     }
 
-    const nextTemplate = target.element.value;
-    setRuleDraft((currentDraft) => ({
-      ...currentDraft,
-      message: {
-        ...currentDraft.message,
-        [target.field]: nextTemplate
-      }
-    }));
-
+    dispatchTemplateInputEvent(target.element, variableName);
+    restoreTemplateFocusWithUndoBoundary(target.element);
     return true;
+  }
+
+  function insertVariableWithRangeText(
+    target: TemplateFieldTarget,
+    variableName: string,
+    selectionStart: number,
+    selectionEnd: number
+  ) {
+    const safeSelectionStart = Math.min(selectionStart, target.element.value.length);
+    const safeSelectionEnd = Math.min(Math.max(selectionEnd, safeSelectionStart), target.element.value.length);
+    target.element.focus();
+    target.element.setRangeText(variableName, safeSelectionStart, safeSelectionEnd, "end");
+    dispatchTemplateInputEvent(target.element, variableName);
+    restoreTemplateFocusWithUndoBoundary(target.element);
+  }
+
+  function dispatchTemplateInputEvent(element: TemplateFieldElement, variableName: string) {
+    const inputEvent =
+      typeof InputEvent === "function"
+        ? new InputEvent("input", {
+            bubbles: true,
+            data: variableName,
+            inputType: "insertText"
+          })
+        : new Event("input", { bubbles: true });
+
+    element.dispatchEvent(inputEvent);
+  }
+
+  function restoreTemplateFocusWithUndoBoundary(element: TemplateFieldElement) {
+    const cursorPosition = element.selectionStart ?? element.value.length;
+    element.blur();
+    element.focus();
+    element.setSelectionRange(cursorPosition, cursorPosition);
   }
 
   function getFocusedTemplateTarget(): TemplateFieldTarget | null {
