@@ -245,6 +245,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   window.localStorage.clear();
   container?.remove();
   container = null;
@@ -1673,6 +1674,129 @@ describe("FirebasePhase0App notification settings dialog", () => {
         schemaVersion: 2,
         targetGuildIds: [],
         detailConditions: expect.objectContaining({ operator: "OR" })
+      })
+    });
+  });
+
+  it("uses v2 notification rule storage by default when the env flag is unset", async () => {
+    const getNotificationSettings = vi.fn(() => Promise.resolve({ rules: [] }));
+    const getNotificationSettingsV2 = vi.fn(() => Promise.resolve({ rules: [] }));
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "legacy-rule",
+        ...input.rule
+      })
+    );
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "v2-rule",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    vi.stubEnv("VITE_ENABLE_NOTIFICATION_RULE_V2", undefined);
+    const { FirebasePhase0App } = await import("./FirebasePhase0App");
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <AppModeProvider pathname="/">
+          <FirebasePhase0App
+            getOwnerGuildShare={vi.fn(() => Promise.resolve(createOwnerShareResult()))}
+            getNotificationSettings={getNotificationSettings}
+            getNotificationSettingsV2={getNotificationSettingsV2}
+            deleteNotificationRule={vi.fn(() => Promise.resolve())}
+            loadKoGuildKoTotals={() => Promise.resolve([])}
+            loadKoObserverRunMeta={() => Promise.resolve(null)}
+            loadOwnedGuildProfile={vi.fn(() => Promise.resolve(createProfile()))}
+            loadSnapshot={vi.fn(() => Promise.resolve(createGvgSnapshot()))}
+            saveNotificationDestination={vi.fn((input) =>
+              Promise.resolve({
+                id: "discord",
+                type: "discord_webhook",
+                ...input.destination
+              })
+            )}
+            saveNotificationRule={saveNotificationRule}
+            saveNotificationRuleV2={saveNotificationRuleV2}
+            saveOwnerGuildShare={vi.fn()}
+            saveOwnedGuildProfile={vi.fn()}
+            subscribeKoGuildKoTotals={() => () => {}}
+            subscribeToAuthState={(onStateChanged) => {
+              onStateChanged(signedInState);
+              return () => {};
+            }}
+            syncGuildBattleGuildCandidates={vi.fn(() =>
+              Promise.resolve({
+                worldId: 1037,
+                candidates: [
+                  { guildId: "guild-a", guildName: "Alpha騾｣逶・", rank: 1 },
+                  { guildId: "guild-b", guildName: "Bravo髫・", rank: 2 }
+                ]
+              })
+            )}
+            suspendNotificationRule={vi.fn(() =>
+              Promise.resolve({
+                suspendedAt: "2026-06-20T12:00:00.000Z",
+                expiresAt: "2026-06-20T13:00:00.000Z",
+                suspendedBy: { uid: "owner-uid" }
+              })
+            )}
+            verifyGuildShareAccess={vi.fn()}
+          />
+        </AppModeProvider>
+      );
+      await flushPromises();
+    });
+
+    await openNotificationSettings();
+
+    expect(getNotificationSettings).not.toHaveBeenCalled();
+    expect(getNotificationSettingsV2).toHaveBeenCalledWith({ guildId: "saved-guild" });
+
+    const newRuleButton = document.querySelector<HTMLButtonElement>(
+      ".notification-settings-dialog__section-header .load-form__button"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    await act(async () => {
+      targetGuildModeRadios[1]?.click();
+      await flushPromises();
+    });
+
+    const targetGuildCheckboxes = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input");
+    await act(async () => {
+      targetGuildCheckboxes[0]?.click();
+      targetGuildCheckboxes[1]?.click();
+      await flushPromises();
+    });
+
+    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
+    if (!createButton) {
+      throw new Error("create notification rule button was not found");
+    }
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRule).not.toHaveBeenCalled();
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        targetGuildIds: ["guild-a", "guild-b"]
       })
     });
   });
