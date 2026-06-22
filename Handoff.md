@@ -2,70 +2,65 @@
 
 ## Current Goal
 
-通知ルールv2の対象ギルド複数選択保存を本番環境へ反映し、保存後の再読込で `targetGuildIds` が維持されることを確認する。
+通知設定v2 UI修正後の実ブラウザ確認とデプロイ要否判断。
 
 ## Current Status
 
-- `targetGuildIds` 保存不具合の原因は、`VITE_ENABLE_NOTIFICATION_RULE_V2` 未設定時にlegacy保存経路へ落ちること。
-- 修正コミット作成済み: `d606adc fix(notification-rule): enable v2 storage by default`
-- `notificationRuleV2` は未設定時もv2有効。明示的に `VITE_ENABLE_NOTIFICATION_RULE_V2=false` の場合のみlegacy経路。
-- ローカル検証は完了。Hosting/Functionsへの今回変更のデプロイは未実施。
+- 通知設定v2 UI修正はローカル実装・コミット済み。
+- 完了済み: ダークモード下部バー、Grand Battle初期タブ、縦レイアウト、保存成功メッセージ非表示、下部余白、Discordプレビューアイコン、変数挿入先、Undo同期改善。
+- 最新コミット: `2aeedb5 fix(notification-rule): step6 refine variable undo sync`
+- Hosting/Functionsへの今回変更のデプロイは未実施。
 
 ## Architecture
 
 - Client entry: `FirebasePhase0App`
-- Notification dialog: `NotificationSettingsDialog`
-- v2 storage flag: `featureFlags.notificationRuleV2`
+- Notification dialog UI: `NotificationSettingsDialog`
+- Dialog styles: `src/app/styles.css`
+- v2 rule draft: `notificationRuleV2Draft`
 - v2 callable client: `notificationSettingsFunctionsRepository`
-- v2 callable functions: `getNotificationSettingsV2`, `saveNotificationRuleV2`
-- Rule storage: `guildShares/{guildId}/notificationRules/{ruleId}`
 
 ## Decisions
 
-- GBM v2の対象ギルドID配列は `targetGuildIds` を正とする。
-- `targetGuildIds` はGuild Battleの侵攻ギルドIDフィルタ。
-- 全ギルド対象は `targetGuildIds: []`。
-- 指定ギルドのみで0件選択は保存不可。
-- 候補外の保存済みギルドIDはUI候補へ補完表示し、保存値を消さない。
+- 通知ルールv2の保存形式・Firestore schema・Functions仕様は変更しない。
+- `schemaVersion: 2`, `targetGuildIds`, `detailConditions`, `temporarySuspension` は既存仕様維持。
+- 変数ボタンは `Discord表示名` / `通知タイトル` / `通知本文` のフォーカス中フィールドだけに挿入する。
+- 3フィールド以外にフォーカスがある場合、変数挿入はno-op。
+- Undo/Redoはブラウザ標準履歴に寄せ、独自Undoスタックは作らない。
 
 ## Important Files
 
 ```text
 Handoff.md
-.env.example
-src/config/featureFlags.ts
-src/features/notifications/FirebasePhase0App.tsx
-src/features/notifications/FirebasePhase0App.test.tsx
 src/features/notifications/NotificationSettingsDialog.tsx
-src/features/notifications/notificationRuleV2Draft.ts
-src/features/notifications/notificationSettingsFunctionsRepository.ts
-functions/src/notificationSettings.ts
-functions/src/notificationSettings.test.ts
+src/features/notifications/FirebasePhase0App.test.tsx
+src/app/styles.css
+src/features/notifications/notificationTemplates.ts
 ```
 
 ## Remaining Tasks
 
-1. 必要ならFirebase Hostingへデプロイする。
-2. 実環境で通知ルール編集画面を開き、指定ギルド複数選択の保存/再読込を確認する。
-3. KOO側へ `targetGuildIds` は `attackerGuildId` フィルタとして引き継ぐ。
+1. ログイン済み実ブラウザで通知設定v2画面を手動確認する。
+2. Discord表示名/通知タイトル/通知本文で `aaa{拠点名}aaa` のCtrl+Z/Ctrl+Yを確認する。
+3. Grand Battle/ダークモード、縦レイアウト、保存/破棄/未保存変更確認を画面確認する。
+4. デプロイ要否を決める。
 
 ## Known Issues
 
-- 今回変更はまだHostingへデプロイしていない。
-- `npm.cmd run test` 実行時、既存テスト由来のstderr警告は出るがテストは成功する。
+- 実アプリ画面でのUndo確認は未ログインのため未実施。
+- `npm.cmd run test` で既存テスト由来のstderr警告が出るが、テストは成功する。
+- 今回のUI修正はまだHostingへデプロイしていない。
 
 ## Validation Status
 
-- `npm.cmd run test -- src/features/notifications/FirebasePhase0App.test.tsx`: passed, 51 tests
-- `npm.cmd run test`: passed, 370 tests
+- `npm.cmd run test -- src/features/notifications/FirebasePhase0App.test.tsx`: passed, 53 tests
 - `npm.cmd run typecheck`: passed
-- `npm.cmd run test:functions`: passed, 42 tests
+- `npm.cmd run test`: passed, 373 tests
 - `npm.cmd run build`: passed
+- Chrome最小DOM検証: input/textareaとも変数挿入後の1回目Ctrl+Zで全消しにならないことを確認
 - `git status --short`: clean before this Handoff update
 
 ## Next Session Start
 
 1. `git status --short`
-2. `git log -3 --oneline`
-3. デプロイ要否を確認する
-4. 実環境で `targetGuildIds` 保存/再読込を確認する
+2. `git log -5 --oneline`
+3. `Handoff.md` のRemaining Tasks順に実ブラウザ確認を始める
