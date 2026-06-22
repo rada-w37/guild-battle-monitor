@@ -1177,6 +1177,19 @@ select {
   cursor: pointer;
 }
 
+.notification-rule-editor__action-buttons .notification-rule-footer-save-button {
+  border-color: var(--app-primary);
+  color: var(--app-primary-text);
+  background: var(--app-primary);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--app-primary) 30%, transparent);
+}
+
+.notification-rule-editor__action-buttons .notification-rule-footer-save-button:hover:not(:disabled),
+.notification-rule-editor__action-buttons .notification-rule-footer-save-button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--app-primary) 86%, #ffffff);
+  background: color-mix(in srgb, var(--app-primary) 86%, #ffffff);
+}
+
 .notification-rule-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

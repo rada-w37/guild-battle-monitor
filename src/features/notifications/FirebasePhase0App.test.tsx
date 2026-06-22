@@ -2344,6 +2344,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       throw new Error("save rule changes button was not found");
     }
     expect(saveButton.className).toContain("load-form__button");
+    expect(saveButton.className).toContain("notification-rule-footer-save-button");
     expect(saveButton.className).not.toContain("load-form__button--secondary");
 
     await act(async () => {

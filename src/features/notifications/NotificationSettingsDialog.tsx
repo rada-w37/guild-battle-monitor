@@ -1595,7 +1595,7 @@ export function NotificationSettingsDialog({
                       {ruleEditorMode === "creating" ? "\u7834\u68c4" : "\u7834\u68c4\u3057\u3066\u623b\u3059"}
                     </button>
                     <button
-                      className="load-form__button"
+                      className="load-form__button notification-rule-footer-save-button"
                       disabled={status !== "idle"}
                       type="button"
                       onClick={() => void saveRule()}
