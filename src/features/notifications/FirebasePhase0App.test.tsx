@@ -8,7 +8,13 @@ import type { GuildShare, OwnedGuildProfile } from "../guildBattle/types";
 import { GUILD_BATTLE_VIEW_SETTINGS_STORAGE_KEY } from "../guildBattle/viewSettingsStorage";
 import { loadLocalGvgSnapshot } from "../gvg/localGvgService";
 import type { GvgCastleId, GvgGuildId, GvgSnapshot, GvgWorldId } from "../gvg/types";
-import type { NotificationDestination, NotificationRule, NotificationRuleV2, NotificationRuleV2Input } from "./types";
+import type {
+  NotificationBattleType,
+  NotificationDestination,
+  NotificationRule,
+  NotificationRuleV2,
+  NotificationRuleV2Input
+} from "./types";
 import { NotificationSettingsDialog } from "./NotificationSettingsDialog";
 
 vi.mock("../auth/authService", () => ({
@@ -1394,45 +1400,95 @@ describe("FirebasePhase0App notification settings dialog", () => {
     }
   });
 
-  it("keeps the Grand Battle tab visible but blocks rule editing while it is preparing", async () => {
-    await renderApp(
-      "/",
-      signedInState,
-      vi.fn(() => Promise.resolve(createProfile())),
-      vi.fn(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      vi.fn(() =>
-        Promise.resolve({
-          rules: [createNotificationRule({ battleType: "grandBattle", id: "gb-rule-1", name: "Grand Rule" })]
-        })
-      )
+  it("creates Grand Battle v2 rules without target guild candidates", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "grand-created",
+        ...input.rule
+      } satisfies NotificationRuleV2)
     );
-    await openNotificationSettings();
+    const syncGuildBattleGuildCandidates = vi.fn(() =>
+      Promise.resolve({
+        worldId: 1037,
+        candidates: [{ guildId: "guild-a", guildName: "Alpha連盟", rank: 1 }]
+      })
+    );
 
-    const grandBattleTab = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__tab")).find(
-      (candidate) => candidate.textContent === "Grand Battle"
+    await renderNotificationSettingsDialog({
+      initialBattleType: "grandBattle",
+      saveNotificationRuleV2,
+      syncGuildBattleGuildCandidates
+    });
+
+    expect(syncGuildBattleGuildCandidates).not.toHaveBeenCalled();
+
+    const newRuleButton = document.querySelector<HTMLButtonElement>(
+      ".notification-settings-dialog__section-header .load-form__button"
     );
-    if (!grandBattleTab) {
-      throw new Error("Grand Battle tab was not found");
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
     }
 
     await act(async () => {
-      grandBattleTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flushPromises();
     });
 
-    expect(document.body.textContent).toContain("Grand Battle通知設定は準備中です");
-    expect(document.body.textContent).toContain("Grand Rule");
-    expect(document.body.textContent).not.toContain("通知ルール編集");
-    expect(
-      Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__section-header .load-form__button")).some(
-        (candidate) => candidate.disabled
-      )
-    ).toBe(true);
+    expect(document.body.textContent).toContain("通知ルール新規作成");
+    expect(document.body.textContent).toContain("対象ギルド");
+    expect(document.body.textContent).toContain("グランドバトルでは全ギルド固定です。");
+    expect(document.body.textContent).toContain("全ギルド");
+    expect(document.body.textContent).toContain("指定ギルドのみ");
+    expect(document.body.textContent).not.toContain("Grand Battleでは対象ギルド指定は使用しません。");
+    expect(document.body.textContent).not.toContain("Alpha連盟");
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
+
+    const readonlyTargetGroup = document.querySelector<HTMLElement>(".notification-rule-editor__target-guilds.is-readonly");
+    expect(readonlyTargetGroup).not.toBeNull();
+    expect(readonlyTargetGroup?.querySelector("input")).toBeNull();
+    const readonlyTargetOptions = document.querySelectorAll<HTMLElement>(
+      ".notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio"
+    );
+    expect(readonlyTargetOptions).toHaveLength(2);
+    expect(readonlyTargetOptions[0]?.getAttribute("role")).toBe("radio");
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-checked")).toBe("true");
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-disabled")).toBe("true");
+    expect(readonlyTargetOptions[0]?.querySelector(".notification-rule-editor__readonly-radio.is-checked")).not.toBeNull();
+    expect(readonlyTargetOptions[1]?.getAttribute("role")).toBe("radio");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-checked")).toBe("false");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-disabled")).toBe("true");
+    expect(readonlyTargetOptions[1]?.querySelector(".notification-rule-editor__readonly-radio:not(.is-checked)")).not.toBeNull();
+    await act(async () => {
+      readonlyTargetOptions[1]?.click();
+      await flushPromises();
+    });
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-checked")).toBe("true");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-checked")).toBe("false");
+    await act(async () => {
+      readonlyTargetOptions[0]?.click();
+      await flushPromises();
+    });
+    expect(readonlyTargetOptions[0]?.getAttribute("aria-checked")).toBe("true");
+    expect(readonlyTargetOptions[1]?.getAttribute("aria-checked")).toBe("false");
+    expect(document.querySelector(".notification-preview__avatar svg")).not.toBeNull();
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        schemaVersion: 2,
+        battleType: "grandBattle",
+        targetGuildIds: [],
+        detailConditions: expect.objectContaining({ operator: "OR" })
+      })
+    });
+    expect(syncGuildBattleGuildCandidates).not.toHaveBeenCalled();
   });
 
   it("uses the initial battle type only for the first notification tab selection", async () => {
@@ -1475,8 +1531,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
     }
 
     expect(grandBattleTab.className).toContain("is-active");
-    expect(document.body.textContent).toContain("Grand Battle通知設定は準備中です");
+    expect(document.body.textContent).toContain("通知ルールを選択してください");
     expect(document.body.textContent).toContain("Grand Rule");
+    expect(document.body.textContent).not.toContain("Grand Battle通知設定は準備中です");
 
     await act(async () => {
       guildBattleTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1490,6 +1547,262 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(guildBattleTab.className).toContain("is-active");
     expect(grandBattleTab.className).not.toContain("is-active");
+  });
+
+  it("keeps the main notification settings dialog open on backdrop clicks", async () => {
+    const onClose = vi.fn();
+
+    await renderNotificationSettingsDialog({ onClose });
+
+    const backdrop = document.querySelector<HTMLElement>(".notification-settings-dialog-backdrop");
+    if (!backdrop) {
+      throw new Error("notification settings dialog backdrop was not found");
+    }
+
+    await act(async () => {
+      backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.querySelector(".notification-settings-dialog")).not.toBeNull();
+
+    const closeButton = document.querySelector<HTMLButtonElement>(".notification-settings-dialog .settings-dialog__close");
+    if (!closeButton) {
+      throw new Error("notification settings close button was not found");
+    }
+
+    await act(async () => {
+      closeButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters and edits Grand Battle v2 rules independently from Guild Battle rules", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly ruleId?: string; readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: input.ruleId ?? "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+    const suspendNotificationRule = vi.fn(() =>
+      Promise.resolve({
+        suspendedAt: "2026-06-20T12:00:00.000Z",
+        expiresAt: "2026-06-20T13:00:00.000Z",
+        suspendedBy: { uid: "owner-uid" }
+      })
+    );
+
+    await renderNotificationSettingsDialog({
+      initialBattleType: "grandBattle",
+      rules: [
+        createNotificationRuleV2({ id: "guild-rule", battleType: "guildBattle", name: "Guild Rule" }),
+        createNotificationRuleV2({
+          id: "grand-rule",
+          battleType: "grandBattle",
+          name: "Grand Rule",
+          targetGuildIds: ["guild-a"]
+        })
+      ],
+      saveNotificationRuleV2,
+      suspendNotificationRule
+    });
+
+    expect(document.body.textContent).toContain("Grand Rule");
+    expect(document.body.textContent).not.toContain("Guild Rule");
+
+    await openFirstNotificationRuleForEdit();
+    expect(document.body.textContent).toContain("通知ルール編集");
+    expect(
+      document.querySelectorAll<HTMLElement>(
+        ".notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio"
+      )
+    ).toHaveLength(2);
+    expect(document.querySelector(".notification-rule-editor__target-guilds.is-readonly input")).toBeNull();
+    expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
+
+    await editSelectedNotificationRuleName("Grand Rule Edited");
+
+    await vi.waitFor(() => {
+      expect(suspendNotificationRule).toHaveBeenCalledWith({
+        guildId: "saved-guild",
+        ruleId: "grand-rule"
+      });
+    });
+
+    const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__action-buttons button")).find(
+      (candidate) => candidate.textContent === "保存"
+    );
+    if (!saveButton) {
+      throw new Error("save notification rule button was not found");
+    }
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      ruleId: "grand-rule",
+      rule: expect.objectContaining({
+        battleType: "grandBattle",
+        name: "Grand Rule Edited",
+        targetGuildIds: []
+      })
+    });
+
+    const guildBattleTab = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__tab")).find(
+      (candidate) => candidate.textContent === "Guild Battle"
+    );
+    if (!guildBattleTab) {
+      throw new Error("Guild Battle tab was not found");
+    }
+
+    await act(async () => {
+      guildBattleTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("Guild Rule");
+    expect(document.body.textContent).not.toContain("Grand Rule Edited");
+  });
+
+  it("saves Grand Battle enabled changes from the rule list toggle", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly ruleId?: string; readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: input.ruleId ?? "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({
+      initialBattleType: "grandBattle",
+      rules: [createNotificationRuleV2({ id: "grand-rule", battleType: "grandBattle", name: "Grand Rule", enabled: true })],
+      saveNotificationRuleV2
+    });
+
+    const enabledToggle = document.querySelector<HTMLInputElement>(".notification-rule-card__enabled-toggle input");
+    if (!enabledToggle) {
+      throw new Error("notification rule enabled toggle was not found");
+    }
+
+    await act(async () => {
+      enabledToggle.click();
+      await flushPromises();
+    });
+
+    await vi.waitFor(() => {
+      expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+        guildId: "saved-guild",
+        ruleId: "grand-rule",
+        rule: expect.objectContaining({
+          battleType: "grandBattle",
+          enabled: false,
+          targetGuildIds: []
+        })
+      });
+    });
+    expect(document.body.textContent).not.toContain("通知ルール編集");
+  });
+
+  it("duplicates Grand Battle rules into unsaved Grand Battle copies", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly ruleId?: string; readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: input.ruleId ?? "grand-copy",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({
+      initialBattleType: "grandBattle",
+      rules: [createNotificationRuleV2({ id: "grand-rule", battleType: "grandBattle", name: "Grand Rule" })],
+      saveNotificationRuleV2
+    });
+
+    const menuButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__actions-trigger");
+    if (!menuButton) {
+      throw new Error("notification rule actions menu button was not found");
+    }
+
+    await act(async () => {
+      menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const duplicateButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions-menu button")).find(
+      (candidate) => candidate.textContent === "複製"
+    );
+    if (!duplicateButton) {
+      throw new Error("duplicate notification rule button was not found");
+    }
+
+    await act(async () => {
+      duplicateButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("Grand Rule コピー");
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        battleType: "grandBattle",
+        name: "Grand Rule コピー",
+        targetGuildIds: []
+      })
+    });
+  });
+
+  it("deletes Grand Battle rules from the actions menu", async () => {
+    const deleteNotificationRule = vi.fn(() => Promise.resolve());
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    try {
+      await renderNotificationSettingsDialog({
+        initialBattleType: "grandBattle",
+        rules: [createNotificationRuleV2({ id: "grand-rule", battleType: "grandBattle", name: "Grand Rule" })],
+        deleteNotificationRule
+      });
+
+      const menuButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__actions-trigger");
+      if (!menuButton) {
+        throw new Error("notification rule actions menu button was not found");
+      }
+
+      await act(async () => {
+        menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      const deleteButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions-menu button")).find(
+        (candidate) => candidate.textContent === "削除"
+      );
+      if (!deleteButton) {
+        throw new Error("delete notification rule button was not found");
+      }
+
+      await act(async () => {
+        deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(deleteNotificationRule).toHaveBeenCalledWith({
+        guildId: "saved-guild",
+        ruleId: "grand-rule"
+      });
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 
   it("shows target guild default state from the owned guild world", async () => {
@@ -1510,9 +1823,11 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
     expect(targetGuildModeRadios).toHaveLength(2);
+    expect(targetGuildModeRadios[0]?.closest(".notification-rule-editor__target-guilds")?.className).not.toContain("is-readonly");
     expect(targetGuildModeRadios[0]?.checked).toBe(true);
     expect(targetGuildModeRadios[1]?.checked).toBe(false);
-    expect(document.body.textContent).toContain("未指定の場合は全ギルドが対象です");
+    expect(document.body.textContent).toContain("対象ギルド");
+    expect(document.body.textContent).not.toContain("未指定の場合は全ギルドが対象です");
     expect(document.body.textContent).not.toContain("Alpha連盟");
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
   });
@@ -1599,10 +1914,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1666,10 +1978,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1779,10 +2088,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(previewAvatar?.textContent?.trim()).toBe("");
     expect(previewAvatar?.querySelector("svg")).not.toBeNull();
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1904,10 +2210,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
-    if (!createButton) {
-      throw new Error("create notification rule button was not found");
-    }
+    const createButton = getNotificationRuleEditorActionButton("作成");
 
     await act(async () => {
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -2032,6 +2335,17 @@ describe("FirebasePhase0App notification settings dialog", () => {
     if (!discardButton) {
       throw new Error("discard rule changes button was not found");
     }
+    expect(discardButton.className).toContain("load-form__button--secondary");
+
+    const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-workspace__action-bar button")).find(
+      (candidate) => candidate.textContent === "保存"
+    );
+    if (!saveButton) {
+      throw new Error("save rule changes button was not found");
+    }
+    expect(saveButton.className).toContain("load-form__button");
+    expect(saveButton.className).toContain("notification-rule-footer-save-button");
+    expect(saveButton.className).not.toContain("load-form__button--secondary");
 
     await act(async () => {
       discardButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -2303,6 +2617,89 @@ describe("FirebasePhase0App notification settings dialog", () => {
   });
 });
 
+async function renderNotificationSettingsDialog({
+  initialBattleType = "guildBattle",
+  rules = [],
+  targetGuildWorld = 37,
+  getNotificationSettingsV2 = vi.fn(() => Promise.resolve({ rules })),
+  saveNotificationRuleV2 = vi.fn((input: { readonly ruleId?: string; readonly rule: NotificationRuleV2Input }) =>
+    Promise.resolve({
+      id: input.ruleId ?? "saved-rule-v2",
+      ...input.rule
+    } satisfies NotificationRuleV2)
+  ),
+  deleteNotificationRule = vi.fn(() => Promise.resolve()),
+  suspendNotificationRule = vi.fn(() =>
+    Promise.resolve({
+      suspendedAt: "2026-06-20T12:00:00.000Z",
+      expiresAt: "2026-06-20T13:00:00.000Z",
+      suspendedBy: { role: "guildOwner" as const }
+    })
+  ),
+  syncGuildBattleGuildCandidates = vi.fn(() =>
+    Promise.resolve({
+      worldId: 1037,
+      candidates: [
+        { guildId: "guild-a", guildName: "Alpha連盟", rank: 1 },
+        { guildId: "guild-b", guildName: "Bravo隊", rank: 2 }
+      ]
+    })
+  ),
+  onClose = vi.fn()
+}: {
+  readonly initialBattleType?: NotificationBattleType;
+  readonly rules?: readonly NotificationRuleV2[];
+  readonly targetGuildWorld?: number | null;
+  readonly getNotificationSettingsV2?: (input: { readonly guildId: string; readonly accessKey?: string }) => Promise<{
+    readonly rules: readonly NotificationRuleV2[];
+    readonly destination?: NotificationDestination;
+  }>;
+  readonly saveNotificationRuleV2?: (input: {
+    readonly guildId: string;
+    readonly accessKey?: string;
+    readonly ruleId?: string;
+    readonly rule: NotificationRuleV2Input;
+  }) => Promise<NotificationRuleV2>;
+  readonly deleteNotificationRule?: (input: {
+    readonly guildId: string;
+    readonly accessKey?: string;
+    readonly ruleId: string;
+  }) => Promise<void>;
+  readonly suspendNotificationRule?: (input: { readonly guildId: string; readonly accessKey?: string; readonly ruleId: string }) => Promise<{
+    readonly suspendedAt: string;
+    readonly expiresAt: string;
+    readonly suspendedBy?: { readonly uid?: string; readonly role?: "guildOwner" | "admin" };
+  }>;
+  readonly syncGuildBattleGuildCandidates?: (input: { readonly guildId: string; readonly accessKey?: string; readonly world?: number }) => Promise<{
+    readonly worldId: number;
+    readonly candidates: readonly { readonly guildId: string; readonly guildName: string; readonly rank: number }[];
+  }>;
+  readonly onClose?: () => void;
+} = {}) {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () => {
+    root?.render(
+      <NotificationSettingsDialog
+        request={{ guildId: "saved-guild" }}
+        role="guildOwner"
+        initialBattleType={initialBattleType}
+        targetGuildWorld={targetGuildWorld}
+        useRuleV2Storage
+        getNotificationSettingsV2={getNotificationSettingsV2}
+        saveNotificationRuleV2={saveNotificationRuleV2}
+        deleteNotificationRule={deleteNotificationRule}
+        suspendNotificationRule={suspendNotificationRule}
+        syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidates}
+        onClose={onClose}
+      />
+    );
+    await flushPromises();
+  });
+}
+
 async function renderApp(
   pathname: string,
   authState: AuthState,
@@ -2505,6 +2902,16 @@ async function editSelectedNotificationRuleName(nextName: string) {
     nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     await flushPromises();
   });
+}
+
+function getNotificationRuleEditorActionButton(label: string) {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__action-buttons button")).find(
+    (candidate) => candidate.textContent === label
+  );
+  if (!button) {
+    throw new Error(`notification rule editor action button was not found: ${label}`);
+  }
+  return button;
 }
 
 async function openSettings() {

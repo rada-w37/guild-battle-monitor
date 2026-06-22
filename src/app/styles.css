@@ -911,6 +911,33 @@ select {
   flex: 0 0 auto;
 }
 
+.notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio {
+  color: color-mix(in srgb, var(--app-text-muted) 88%, var(--app-text));
+  cursor: default;
+  pointer-events: none;
+  user-select: none;
+}
+
+.notification-rule-editor__readonly-radio {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--app-text-muted) 72%, var(--app-border-strong));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 14%, var(--app-surface));
+}
+
+.notification-rule-editor__readonly-radio.is-checked::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 82%, var(--app-text));
+  content: "";
+}
+
 .notification-rule-editor__target-guild-list {
   display: grid;
   gap: 6px;
@@ -1148,6 +1175,19 @@ select {
   color: var(--app-text);
   background: var(--app-surface);
   cursor: pointer;
+}
+
+.notification-rule-editor__action-buttons .notification-rule-footer-save-button {
+  border-color: var(--app-primary);
+  color: var(--app-primary-text);
+  background: var(--app-primary);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--app-primary) 30%, transparent);
+}
+
+.notification-rule-editor__action-buttons .notification-rule-footer-save-button:hover:not(:disabled),
+.notification-rule-editor__action-buttons .notification-rule-footer-save-button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--app-primary) 86%, #ffffff);
+  background: color-mix(in srgb, var(--app-primary) 86%, #ffffff);
 }
 
 .notification-rule-card {
