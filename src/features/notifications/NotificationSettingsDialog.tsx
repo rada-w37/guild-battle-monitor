@@ -71,6 +71,7 @@ interface NotificationSettingsDialogProps {
   readonly saveNotificationDestination?: typeof saveNotificationDestinationDefault;
   readonly syncGuildBattleGuildCandidates?: typeof syncGuildBattleGuildCandidatesDefault;
   readonly targetGuildWorld?: number | null;
+  readonly initialBattleType?: NotificationBattleType;
   readonly useRuleV2Storage?: boolean;
   readonly onClose: () => void;
 }
@@ -117,10 +118,11 @@ export function NotificationSettingsDialog({
   saveNotificationDestination = saveNotificationDestinationDefault,
   syncGuildBattleGuildCandidates = syncGuildBattleGuildCandidatesDefault,
   targetGuildWorld = null,
+  initialBattleType = "guildBattle",
   useRuleV2Storage = false,
   onClose
 }: NotificationSettingsDialogProps) {
-  const [activeBattleType, setActiveBattleType] = useState<NotificationBattleType>("guildBattle");
+  const [activeBattleType, setActiveBattleType] = useState<NotificationBattleType>(initialBattleType);
   const [rules, setRules] = useState<readonly RuleRecord[]>([]);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [ruleEditorMode, setRuleEditorMode] = useState<RuleEditorMode>("empty");

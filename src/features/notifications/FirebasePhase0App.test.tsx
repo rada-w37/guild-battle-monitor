@@ -67,7 +67,9 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
       readonly headerActions?: React.ReactNode;
       readonly modeOverride?: "guest";
       readonly notificationSettings?: React.ReactNode;
-      readonly notificationSettingsDialog?: React.ReactNode;
+      readonly notificationSettingsDialog?:
+        | React.ReactNode
+        | ((activeBattleType: "guildBattle" | "grandBattle") => React.ReactNode);
       readonly ownedGuildProfilePersistence?: {
         readonly error: string | null;
         readonly profile: OwnedGuildProfile | null;
@@ -199,7 +201,9 @@ vi.mock("../guildBattle/GuildBattlePlaceholder", async () => {
               </div>
             </section>
           ) : null}
-          {notificationSettingsDialog}
+          {typeof notificationSettingsDialog === "function"
+            ? notificationSettingsDialog("guildBattle")
+            : notificationSettingsDialog}
         </main>
       );
     }
@@ -1371,6 +1375,63 @@ describe("FirebasePhase0App notification settings dialog", () => {
         (candidate) => candidate.disabled
       )
     ).toBe(true);
+  });
+
+  it("uses the initial battle type only for the first notification tab selection", async () => {
+    const request = { guildId: "saved-guild" };
+    const getNotificationSettings = vi.fn(() =>
+      Promise.resolve({
+        rules: [createNotificationRule({ battleType: "grandBattle", id: "gb-rule-1", name: "Grand Rule" })]
+      })
+    );
+
+    function renderDialog() {
+      root?.render(
+        <NotificationSettingsDialog
+          request={request}
+          role="admin"
+          initialBattleType="grandBattle"
+          getNotificationSettings={getNotificationSettings}
+          onClose={() => {}}
+        />
+      );
+    }
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      renderDialog();
+      await flushPromises();
+    });
+
+    const getTab = (label: string) =>
+      Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-settings-dialog__tab")).find(
+        (candidate) => candidate.textContent === label
+      );
+    const guildBattleTab = getTab("Guild Battle");
+    const grandBattleTab = getTab("Grand Battle");
+    if (guildBattleTab === undefined || grandBattleTab === undefined) {
+      throw new Error("notification battle tabs were not found");
+    }
+
+    expect(grandBattleTab.className).toContain("is-active");
+    expect(document.body.textContent).toContain("Grand Battle通知設定は準備中です");
+    expect(document.body.textContent).toContain("Grand Rule");
+
+    await act(async () => {
+      guildBattleTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    await act(async () => {
+      renderDialog();
+      await flushPromises();
+    });
+
+    expect(guildBattleTab.className).toContain("is-active");
+    expect(grandBattleTab.className).not.toContain("is-active");
   });
 
   it("shows target guild default state from the owned guild world", async () => {

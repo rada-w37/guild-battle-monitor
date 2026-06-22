@@ -134,7 +134,7 @@ interface GuildBattlePlaceholderProps {
   readonly headerActions?: ReactNode;
   readonly modeOverride?: AppMode;
   readonly notificationSettings?: ReactNode;
-  readonly notificationSettingsDialog?: ReactNode;
+  readonly notificationSettingsDialog?: ReactNode | ((activeMode: BattleMonitorMode) => ReactNode);
   readonly ownedGuildProfilePersistence?: OwnedGuildProfilePersistence;
   readonly permissionsOverride?: Partial<AppModePermissions>;
   readonly settingsDraftExternal?: SettingsDraftExternal;
@@ -1103,7 +1103,7 @@ export function GuildBattlePlaceholder({
             onWorldInputChange={handleGrandBattleWorldInputChange}
           />
         ) : null}
-        {notificationSettingsDialog}
+        {typeof notificationSettingsDialog === "function" ? notificationSettingsDialog(activeMode) : notificationSettingsDialog}
       </section>
     </main>
   );

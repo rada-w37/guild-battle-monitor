@@ -571,6 +571,41 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.querySelector(".castle-list")).not.toBeNull();
   });
 
+  it("passes the resolved Grand Battle mode to the notification dialog renderer", async () => {
+    const renderedModes: string[] = [];
+    const loadGrandBattleLatestSnapshot = vi.fn<typeof loadGrandBattleSnapshot>(() =>
+      Promise.resolve(grandBattleSnapshot)
+    );
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(
+        <AppModeProvider pathname="/">
+          <GuildBattlePlaceholder
+            loadSnapshot={vi.fn(() => Promise.resolve(grandBattleDetectionSnapshot))}
+            loadGrandBattleLatestSnapshot={loadGrandBattleLatestSnapshot}
+            ownedGuildProfilePersistence={createOwnedGuildPersistence({
+              world: 50,
+              guildId: grandBattleParticipants[0].guildId,
+              guildName: "ギルドA"
+            })}
+            notificationSettingsDialog={(activeMode) => {
+              renderedModes.push(activeMode);
+              return <div data-testid="notification-dialog-mode">{activeMode}</div>;
+            }}
+          />
+        </AppModeProvider>
+      );
+    });
+    await flushPromises();
+
+    expect(renderedModes[renderedModes.length - 1]).toBe("grandBattle");
+    expect(document.body.textContent).toContain("grandBattle");
+  });
+
   it("does not rerun Firebase GrandBattle auto resolution when an admin route rerenders", async () => {
     const loadSnapshot = vi.fn(() => Promise.resolve(grandBattleDetectionSnapshot));
     const loadGrandBattleLatestSnapshot = vi.fn<typeof loadGrandBattleSnapshot>(() =>

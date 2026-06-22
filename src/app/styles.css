@@ -738,7 +738,7 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
   gap: 14px;
-  align-items: stretch;
+  align-items: start;
   min-height: 0;
 }
 
@@ -747,7 +747,8 @@ select {
 }
 
 .notification-settings-dialog__grid > .notification-settings-dialog__panel {
-  max-height: min(720px, calc(100vh - 260px));
+  max-height: calc(100vh - 260px);
+  max-height: calc(100dvh - 260px);
 }
 
 .notification-settings-dialog__grid > .notification-settings-dialog__panel {
@@ -778,6 +779,7 @@ select {
   display: grid;
   gap: 12px;
   min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 14px;
@@ -1102,13 +1104,14 @@ select {
 .notification-rule-workspace__action-bar {
   display: flex;
   flex-wrap: wrap;
+  flex: 0 0 auto;
   gap: 12px;
   align-items: center;
   justify-content: space-between;
   padding: 10px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 34%, var(--app-border));
   border-radius: 8px;
-  background: #eff6ff;
+  background: color-mix(in srgb, var(--app-primary) 12%, var(--app-surface));
 }
 
 .notification-rule-workspace__action-bar p {

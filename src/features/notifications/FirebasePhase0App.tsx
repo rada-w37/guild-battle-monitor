@@ -240,23 +240,27 @@ export function FirebasePhase0App({
         )
       }
       notificationSettingsDialog={
-        isNotificationSettingsOpen && notificationSettingsContext !== null ? (
-          <NotificationSettingsDialog
-            deleteNotificationRule={deleteNotificationRuleForDialog}
-            getNotificationSettings={getNotificationSettingsForDialog}
-            getNotificationSettingsV2={getNotificationSettingsV2ForDialog}
-            request={notificationSettingsContext.request}
-            role={notificationSettingsContext.role}
-            saveNotificationDestination={saveNotificationDestinationForDialog}
-            saveNotificationRule={saveNotificationRuleForDialog}
-            saveNotificationRuleV2={saveNotificationRuleV2ForDialog}
-            syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidatesForDialog}
-            suspendNotificationRule={suspendNotificationRuleForDialog}
-            targetGuildWorld={notificationSettingsContext.targetGuildWorld}
-            useRuleV2Storage={useNotificationRuleV2}
-            onClose={() => setIsNotificationSettingsOpen(false)}
-          />
-        ) : undefined
+        notificationSettingsContext === null
+          ? undefined
+          : (initialBattleType) =>
+              isNotificationSettingsOpen ? (
+                <NotificationSettingsDialog
+                  deleteNotificationRule={deleteNotificationRuleForDialog}
+                  getNotificationSettings={getNotificationSettingsForDialog}
+                  getNotificationSettingsV2={getNotificationSettingsV2ForDialog}
+                  initialBattleType={initialBattleType}
+                  request={notificationSettingsContext.request}
+                  role={notificationSettingsContext.role}
+                  saveNotificationDestination={saveNotificationDestinationForDialog}
+                  saveNotificationRule={saveNotificationRuleForDialog}
+                  saveNotificationRuleV2={saveNotificationRuleV2ForDialog}
+                  syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidatesForDialog}
+                  suspendNotificationRule={suspendNotificationRuleForDialog}
+                  targetGuildWorld={notificationSettingsContext.targetGuildWorld}
+                  useRuleV2Storage={useNotificationRuleV2}
+                  onClose={() => setIsNotificationSettingsOpen(false)}
+                />
+              ) : undefined
       }
       ownedGuildProfilePersistence={ownedGuildProfilePersistenceWithShare}
       sharedGuild={effectiveSharedGuild}
