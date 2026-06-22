@@ -1177,34 +1177,41 @@ export function NotificationSettingsDialog({
 
               <h4 className="notification-settings-dialog__numbered-heading">
                 <span>2</span>
-                {"\u5bfe\u8c61"}
+                {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
               </h4>
               {isGrandBattleRuleDraft ? (
-                <fieldset className="notification-rule-editor__target-guilds">
-                  <legend className="field__label">{"\u5bfe\u8c61"}</legend>
-                  <label className="notification-rule-editor__target-guild-radio">
-                    <input
-                      checked
-                      disabled
-                      type="radio"
-                      name="notification-target-guild-mode"
-                      readOnly
-                    />
-                    <span>
-                      {"\u5168\u5bfe\u8c61"}
-                      <span className="field__label-note">
-                        {"Grand Battle\u3067\u306f\u5bfe\u8c61\u30ae\u30eb\u30c9\u6307\u5b9a\u306f\u4f7f\u7528\u3057\u307e\u305b\u3093\u3002\u3059\u3079\u3066\u306e\u62e0\u70b9\u304c\u901a\u77e5\u6761\u4ef6\u306e\u5bfe\u8c61\u3067\u3059\u3002"}
-                      </span>
-                    </span>
-                  </label>
-                </fieldset>
+                <>
+                  <p className="notification-settings-dialog__note">{"\u30b0\u30e9\u30f3\u30c9\u30d0\u30c8\u30eb\u3067\u306f\u5168\u30ae\u30eb\u30c9\u56fa\u5b9a\u3067\u3059\u3002"}</p>
+                  <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド">
+                    <label className="notification-rule-editor__target-guild-radio">
+                      <input
+                        checked
+                        aria-disabled="true"
+                        name="notification-target-guild-mode"
+                        readOnly
+                        tabIndex={-1}
+                        type="radio"
+                        onClick={(event) => event.preventDefault()}
+                      />
+                      {"\u5168\u30ae\u30eb\u30c9"}
+                    </label>
+                    <label className="notification-rule-editor__target-guild-radio">
+                      <input
+                        checked={false}
+                        aria-disabled="true"
+                        name="notification-target-guild-mode"
+                        readOnly
+                        tabIndex={-1}
+                        type="radio"
+                        onClick={(event) => event.preventDefault()}
+                      />
+                      {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
+                    </label>
+                  </fieldset>
+                </>
               ) : (
                 <>
-                  <fieldset className="notification-rule-editor__target-guilds">
-                    <legend className="field__label">
-                      {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
-                      <span className="field__label-note">{"\u672a\u6307\u5b9a\u306e\u5834\u5408\u306f\u5168\u30ae\u30eb\u30c9\u304c\u5bfe\u8c61\u3067\u3059"}</span>
-                    </legend>
+                  <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド">
                     <label className="notification-rule-editor__target-guild-radio">
                       <input
                         checked={ruleDraft.targetGuildSelectionMode === "all"}

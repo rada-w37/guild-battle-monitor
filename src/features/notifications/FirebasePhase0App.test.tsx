@@ -1435,15 +1435,30 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
 
     expect(document.body.textContent).toContain("通知ルール新規作成");
-    expect(document.body.textContent).toContain("全対象");
-    expect(document.body.textContent).toContain("Grand Battleでは対象ギルド指定は使用しません。");
+    expect(document.body.textContent).toContain("対象ギルド");
+    expect(document.body.textContent).toContain("グランドバトルでは全ギルド固定です。");
+    expect(document.body.textContent).toContain("全ギルド");
+    expect(document.body.textContent).toContain("指定ギルドのみ");
+    expect(document.body.textContent).not.toContain("Grand Battleでは対象ギルド指定は使用しません。");
     expect(document.body.textContent).not.toContain("Alpha連盟");
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
 
     const targetRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
-    expect(targetRadios).toHaveLength(1);
+    expect(targetRadios).toHaveLength(2);
     expect(targetRadios[0]?.checked).toBe(true);
-    expect(targetRadios[0]?.disabled).toBe(true);
+    expect(targetRadios[0]?.disabled).toBe(false);
+    expect(targetRadios[0]?.getAttribute("aria-disabled")).toBe("true");
+    expect(targetRadios[0]?.tabIndex).toBe(-1);
+    expect(targetRadios[1]?.checked).toBe(false);
+    expect(targetRadios[1]?.disabled).toBe(false);
+    expect(targetRadios[1]?.getAttribute("aria-disabled")).toBe("true");
+    expect(targetRadios[1]?.tabIndex).toBe(-1);
+    await act(async () => {
+      targetRadios[1]?.click();
+      await flushPromises();
+    });
+    expect(targetRadios[0]?.checked).toBe(true);
+    expect(targetRadios[1]?.checked).toBe(false);
     expect(document.querySelector(".notification-preview__avatar svg")).not.toBeNull();
 
     const createButton = document.querySelector<HTMLButtonElement>(".notification-rule-editor__action-buttons .load-form__button");
@@ -1561,7 +1576,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     await openFirstNotificationRuleForEdit();
     expect(document.body.textContent).toContain("通知ルール編集");
-    expect(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input")).toHaveLength(1);
+    expect(document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input")).toHaveLength(2);
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
 
     await editSelectedNotificationRuleName("Grand Rule Edited");
@@ -1769,7 +1784,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(targetGuildModeRadios).toHaveLength(2);
     expect(targetGuildModeRadios[0]?.checked).toBe(true);
     expect(targetGuildModeRadios[1]?.checked).toBe(false);
-    expect(document.body.textContent).toContain("未指定の場合は全ギルドが対象です");
+    expect(document.body.textContent).toContain("対象ギルド");
+    expect(document.body.textContent).not.toContain("未指定の場合は全ギルドが対象です");
     expect(document.body.textContent).not.toContain("Alpha連盟");
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
   });
