@@ -1247,18 +1247,74 @@ describe("FirebasePhase0App notification settings dialog", () => {
       "通知ルール名"
     ]);
 
-    const baseNameButton = variableButtons.find((button) => button.textContent === "拠点名");
-    const bodyTextarea = document.querySelector<HTMLTextAreaElement>(".notification-rule-editor__textarea");
-    if (!baseNameButton || !bodyTextarea) {
-      throw new Error("variable button or notification body textarea was not found");
+    const [baseNameButton, attackerGuildButton, , , notificationTimeButton] = variableButtons;
+    const templateFields = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        ".notification-rule-preview-panel input.field__input--wide, .notification-rule-preview-panel textarea.field__input--wide"
+      )
+    );
+    const [usernameInput, titleInput, bodyTextarea] = templateFields;
+    if (!baseNameButton || !attackerGuildButton || !notificationTimeButton || !usernameInput || !titleInput || !bodyTextarea) {
+      throw new Error("variable buttons or notification template fields were not found");
     }
 
-    await act(async () => {
-      baseNameButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await flushPromises();
-    });
+    async function changeTemplateField(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+      await act(async () => {
+        const valueSetter = Object.getOwnPropertyDescriptor(
+          field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+          "value"
+        )?.set;
+        valueSetter?.call(field, value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        await flushPromises();
+      });
+    }
 
-    expect(bodyTextarea.value).toContain("{拠点名}");
+    async function clickVariableButton(button: HTMLButtonElement) {
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+    }
+
+    const baseNameToken = `{${baseNameButton.textContent}}`;
+    await changeTemplateField(usernameInput, "ABCDEF");
+    usernameInput.focus();
+    usernameInput.setSelectionRange(3, 3);
+    await clickVariableButton(baseNameButton);
+    expect(usernameInput.value).toBe(`ABC${baseNameToken}DEF`);
+    expect(document.activeElement).toBe(usernameInput);
+    expect(usernameInput.selectionStart).toBe(3 + baseNameToken.length);
+
+    const attackerGuildToken = `{${attackerGuildButton.textContent}}`;
+    await changeTemplateField(titleInput, "ABCDEFGHI");
+    titleInput.focus();
+    titleInput.setSelectionRange(3, 6);
+    await clickVariableButton(attackerGuildButton);
+    expect(titleInput.value).toBe(`ABC${attackerGuildToken}GHI`);
+    expect(document.activeElement).toBe(titleInput);
+    expect(titleInput.selectionStart).toBe(3 + attackerGuildToken.length);
+
+    const notificationTimeToken = `{${notificationTimeButton.textContent}}`;
+    await changeTemplateField(bodyTextarea, "ABCDEF");
+    bodyTextarea.focus();
+    bodyTextarea.setSelectionRange(3, 3);
+    await clickVariableButton(notificationTimeButton);
+    expect(bodyTextarea.value).toBe(`ABC${notificationTimeToken}DEF`);
+    expect(document.activeElement).toBe(bodyTextarea);
+    expect(bodyTextarea.selectionStart).toBe(3 + notificationTimeToken.length);
+
+    const previousUsername = usernameInput.value;
+    const previousTitle = titleInput.value;
+    const previousBody = bodyTextarea.value;
+    document.body.tabIndex = -1;
+    document.body.focus();
+    await clickVariableButton(baseNameButton);
+
+    expect(usernameInput.value).toBe(previousUsername);
+    expect(titleInput.value).toBe(previousTitle);
+    expect(bodyTextarea.value).toBe(previousBody);
   });
 
   it("scrolls the condition editor to the bottom after adding conditions or groups", async () => {

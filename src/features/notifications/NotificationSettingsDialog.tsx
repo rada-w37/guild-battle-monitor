@@ -100,6 +100,12 @@ type RuleListItem = { readonly type: "saved" | "draft"; readonly rule: RuleRecor
 type DropIndexScope =
   | { readonly scope: "root" }
   | { readonly scope: "group"; readonly groupIndex: number };
+type TemplateFieldName = "usernameTemplate" | "titleTemplate" | "bodyTemplate";
+type TemplateFieldElement = HTMLInputElement | HTMLTextAreaElement;
+interface TemplateFieldTarget {
+  readonly field: TemplateFieldName;
+  readonly element: TemplateFieldElement;
+}
 interface DiscardConfirmationContent {
   readonly title: string;
   readonly message: string;
@@ -143,6 +149,9 @@ export function NotificationSettingsDialog({
   const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null);
   const [pendingDiscardAction, setPendingDiscardAction] = useState<PendingDiscardAction | null>(null);
   const ruleEditorScrollRef = useRef<HTMLElement | null>(null);
+  const usernameTemplateInputRef = useRef<HTMLInputElement | null>(null);
+  const titleTemplateInputRef = useRef<HTMLInputElement | null>(null);
+  const bodyTemplateTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -748,13 +757,76 @@ export function NotificationSettingsDialog({
   }
 
   function insertVariable(variableName: string) {
+    const target = getFocusedTemplateTarget();
+    if (target === null) {
+      return;
+    }
+
+    if (insertVariableWithNativeUndo(target, variableName)) {
+      return;
+    }
+
+    const selectionStart = target.element.selectionStart ?? target.element.value.length;
+    const selectionEnd = target.element.selectionEnd ?? selectionStart;
+    const nextCursorPosition = selectionStart + variableName.length;
+
+    setRuleDraft((currentDraft) => {
+      const currentTemplate = currentDraft.message[target.field];
+      const safeSelectionStart = Math.min(selectionStart, currentTemplate.length);
+      const safeSelectionEnd = Math.min(Math.max(selectionEnd, safeSelectionStart), currentTemplate.length);
+
+      return {
+        ...currentDraft,
+        message: {
+          ...currentDraft.message,
+          [target.field]: `${currentTemplate.slice(0, safeSelectionStart)}${variableName}${currentTemplate.slice(safeSelectionEnd)}`
+        }
+      };
+    });
+
+    window.setTimeout(() => {
+      target.element.focus();
+      target.element.setSelectionRange(nextCursorPosition, nextCursorPosition);
+    }, 0);
+  }
+
+  function insertVariableWithNativeUndo(target: TemplateFieldTarget, variableName: string): boolean {
+    if (typeof document.execCommand !== "function") {
+      return false;
+    }
+
+    const previousTemplate = target.element.value;
+    target.element.focus();
+    const didInsert = document.execCommand("insertText", false, variableName);
+    if (!didInsert || target.element.value === previousTemplate) {
+      return false;
+    }
+
+    const nextTemplate = target.element.value;
     setRuleDraft((currentDraft) => ({
       ...currentDraft,
       message: {
         ...currentDraft.message,
-        bodyTemplate: `${currentDraft.message.bodyTemplate}${variableName}`
+        [target.field]: nextTemplate
       }
     }));
+
+    return true;
+  }
+
+  function getFocusedTemplateTarget(): TemplateFieldTarget | null {
+    const activeElement = document.activeElement;
+    if (activeElement === usernameTemplateInputRef.current && usernameTemplateInputRef.current !== null) {
+      return { field: "usernameTemplate", element: usernameTemplateInputRef.current };
+    }
+    if (activeElement === titleTemplateInputRef.current && titleTemplateInputRef.current !== null) {
+      return { field: "titleTemplate", element: titleTemplateInputRef.current };
+    }
+    if (activeElement === bodyTemplateTextareaRef.current && bodyTemplateTextareaRef.current !== null) {
+      return { field: "bodyTemplate", element: bodyTemplateTextareaRef.current };
+    }
+
+    return null;
   }
 
   function scrollRuleEditorToBottom() {
@@ -1370,6 +1442,7 @@ export function NotificationSettingsDialog({
                     <span className="field__label">{"Discord\u8868\u793a\u540d"}</span>
                     <input
                       className="field__input field__input--wide"
+                      ref={usernameTemplateInputRef}
                       value={ruleDraft.message.usernameTemplate}
                       onChange={(event) => {
                         const usernameTemplate = event.target.value;
@@ -1428,6 +1501,7 @@ export function NotificationSettingsDialog({
                     <span className="field__label">{"\u901a\u77e5\u30bf\u30a4\u30c8\u30eb"}</span>
                     <input
                       className="field__input field__input--wide"
+                      ref={titleTemplateInputRef}
                       value={ruleDraft.message.titleTemplate}
                       onChange={(event) => {
                         const titleTemplate = event.target.value;
@@ -1442,6 +1516,7 @@ export function NotificationSettingsDialog({
                     <span className="field__label">{"\u901a\u77e5\u672c\u6587"}</span>
                     <textarea
                       className="field__input field__input--wide notification-rule-editor__textarea"
+                      ref={bodyTemplateTextareaRef}
                       value={ruleDraft.message.bodyTemplate}
                       onChange={(event) => {
                         const bodyTemplate = event.target.value;
@@ -1456,7 +1531,12 @@ export function NotificationSettingsDialog({
                     <h4>{"\u5229\u7528\u3067\u304d\u308b\u5909\u6570"}</h4>
                     <div className="notification-rule-editor__variables" aria-label="利用できる変数">
                       {NOTIFICATION_TEMPLATE_VARIABLES.map((variableName) => (
-                        <button key={variableName} type="button" onClick={() => insertVariable(variableName)}>
+                        <button
+                          key={variableName}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => insertVariable(variableName)}
+                        >
                           {createTemplateVariableLabel(variableName)}
                         </button>
                       ))}
