@@ -1445,6 +1445,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     const targetRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
     expect(targetRadios).toHaveLength(2);
+    expect(targetRadios[0]?.closest(".notification-rule-editor__target-guilds")?.className).toContain("is-readonly");
     expect(targetRadios[0]?.checked).toBe(true);
     expect(targetRadios[0]?.disabled).toBe(false);
     expect(targetRadios[0]?.getAttribute("aria-disabled")).toBe("true");
@@ -1455,6 +1456,13 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(targetRadios[1]?.tabIndex).toBe(-1);
     await act(async () => {
       targetRadios[1]?.click();
+      await flushPromises();
+    });
+    expect(targetRadios[0]?.checked).toBe(true);
+    expect(targetRadios[1]?.checked).toBe(false);
+    const targetLabels = document.querySelectorAll<HTMLElement>(".notification-rule-editor__target-guild-radio");
+    await act(async () => {
+      targetLabels[1]?.click();
       await flushPromises();
     });
     expect(targetRadios[0]?.checked).toBe(true);
@@ -1539,6 +1547,37 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(guildBattleTab.className).toContain("is-active");
     expect(grandBattleTab.className).not.toContain("is-active");
+  });
+
+  it("keeps the main notification settings dialog open on backdrop clicks", async () => {
+    const onClose = vi.fn();
+
+    await renderNotificationSettingsDialog({ onClose });
+
+    const backdrop = document.querySelector<HTMLElement>(".notification-settings-dialog-backdrop");
+    if (!backdrop) {
+      throw new Error("notification settings dialog backdrop was not found");
+    }
+
+    await act(async () => {
+      backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.querySelector(".notification-settings-dialog")).not.toBeNull();
+
+    const closeButton = document.querySelector<HTMLButtonElement>(".notification-settings-dialog .settings-dialog__close");
+    if (!closeButton) {
+      throw new Error("notification settings close button was not found");
+    }
+
+    await act(async () => {
+      closeButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("filters and edits Grand Battle v2 rules independently from Guild Battle rules", async () => {
@@ -1782,6 +1821,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
     expect(targetGuildModeRadios).toHaveLength(2);
+    expect(targetGuildModeRadios[0]?.closest(".notification-rule-editor__target-guilds")?.className).not.toContain("is-readonly");
     expect(targetGuildModeRadios[0]?.checked).toBe(true);
     expect(targetGuildModeRadios[1]?.checked).toBe(false);
     expect(document.body.textContent).toContain("対象ギルド");
@@ -2603,7 +2643,8 @@ async function renderNotificationSettingsDialog({
         { guildId: "guild-b", guildName: "Bravo隊", rank: 2 }
       ]
     })
-  )
+  ),
+  onClose = vi.fn()
 }: {
   readonly initialBattleType?: NotificationBattleType;
   readonly rules?: readonly NotificationRuleV2[];
@@ -2632,6 +2673,7 @@ async function renderNotificationSettingsDialog({
     readonly worldId: number;
     readonly candidates: readonly { readonly guildId: string; readonly guildName: string; readonly rank: number }[];
   }>;
+  readonly onClose?: () => void;
 } = {}) {
   container = document.createElement("div");
   document.body.append(container);
@@ -2650,7 +2692,7 @@ async function renderNotificationSettingsDialog({
         deleteNotificationRule={deleteNotificationRule}
         suspendNotificationRule={suspendNotificationRule}
         syncGuildBattleGuildCandidates={syncGuildBattleGuildCandidates}
-        onClose={() => {}}
+        onClose={onClose}
       />
     );
     await flushPromises();

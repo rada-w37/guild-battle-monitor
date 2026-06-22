@@ -903,7 +903,7 @@ export function NotificationSettingsDialog({
   }
 
   return (
-    <div className="settings-dialog-backdrop notification-settings-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="settings-dialog-backdrop notification-settings-dialog-backdrop" role="presentation">
       <section
         aria-labelledby="notification-settings-dialog-title"
         aria-modal="true"
@@ -1182,8 +1182,12 @@ export function NotificationSettingsDialog({
               {isGrandBattleRuleDraft ? (
                 <>
                   <p className="notification-settings-dialog__note">{"\u30b0\u30e9\u30f3\u30c9\u30d0\u30c8\u30eb\u3067\u306f\u5168\u30ae\u30eb\u30c9\u56fa\u5b9a\u3067\u3059\u3002"}</p>
-                  <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド">
-                    <label className="notification-rule-editor__target-guild-radio">
+                  <fieldset className="notification-rule-editor__target-guilds is-readonly" aria-label="対象ギルド">
+                    <label
+                      className="notification-rule-editor__target-guild-radio"
+                      aria-disabled="true"
+                      onClick={(event) => event.preventDefault()}
+                    >
                       <input
                         checked
                         aria-disabled="true"
@@ -1195,7 +1199,11 @@ export function NotificationSettingsDialog({
                       />
                       {"\u5168\u30ae\u30eb\u30c9"}
                     </label>
-                    <label className="notification-rule-editor__target-guild-radio">
+                    <label
+                      className="notification-rule-editor__target-guild-radio"
+                      aria-disabled="true"
+                      onClick={(event) => event.preventDefault()}
+                    >
                       <input
                         checked={false}
                         aria-disabled="true"

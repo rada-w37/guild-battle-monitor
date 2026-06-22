@@ -911,6 +911,17 @@ select {
   flex: 0 0 auto;
 }
 
+.notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio {
+  color: color-mix(in srgb, var(--app-text-muted) 88%, var(--app-text));
+  cursor: default;
+  user-select: none;
+}
+
+.notification-rule-editor__target-guilds.is-readonly .notification-rule-editor__target-guild-radio input {
+  accent-color: color-mix(in srgb, var(--app-text-muted) 72%, var(--app-surface));
+  cursor: default;
+}
+
 .notification-rule-editor__target-guild-list {
   display: grid;
   gap: 6px;
