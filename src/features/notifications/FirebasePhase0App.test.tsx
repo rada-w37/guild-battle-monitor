@@ -2099,6 +2099,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
         ruleId: "rule-1"
       })
     );
+    expect(document.body.textContent).not.toContain("通知ルールを保存しました。");
+    expect(document.querySelector(".notification-rule-workspace__action-bar")).toBeNull();
 
     await act(async () => {
       resolveSuspension?.({
@@ -2108,6 +2110,46 @@ describe("FirebasePhase0App notification settings dialog", () => {
       });
       await flushPromises();
     });
+  });
+
+  it("keeps the notification rule save error visible when saving fails", async () => {
+    const saveNotificationRule = vi.fn(() => Promise.reject(new Error("save failed")));
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [createNotificationRule({ id: "rule-1", name: "Rule One" })]
+        })
+      ),
+      undefined,
+      saveNotificationRule
+    );
+    await openNotificationSettings();
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("Rule One Edited");
+
+    const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__action-buttons button")).find(
+      (candidate) => candidate.textContent === "保存"
+    );
+    if (!saveButton) {
+      throw new Error("save notification rule button was not found");
+    }
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("通知ルールの保存に失敗しました。");
   });
 
   it("cancels editing when temporary suspension fails", async () => {

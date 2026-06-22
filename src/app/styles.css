@@ -725,13 +725,20 @@ select {
 .notification-rule-workspace {
   display: grid;
   gap: 14px;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: start;
   min-height: 0;
   overflow: hidden;
 }
 
+.notification-rule-workspace.has-action-bar {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
+}
+
 .notification-rule-workspace.is-empty {
   grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
 }
 
 .notification-rule-workspace__columns {
@@ -744,6 +751,12 @@ select {
 
 .notification-rule-workspace__columns.is-empty {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.notification-rule-workspace:not(.has-action-bar):not(.is-empty) .notification-rule-workspace__columns {
+  max-height: calc(100vh - 320px);
+  max-height: calc(100dvh - 320px);
+  overflow: hidden;
 }
 
 .notification-settings-dialog__grid > .notification-settings-dialog__panel {
@@ -2274,6 +2287,11 @@ select {
 
   .notification-rule-workspace__columns {
     grid-template-columns: 1fr;
+  }
+
+  .notification-rule-workspace:not(.has-action-bar):not(.is-empty) .notification-rule-workspace__columns {
+    max-height: none;
+    overflow: visible;
   }
 
   .notification-rule-preview-panel {

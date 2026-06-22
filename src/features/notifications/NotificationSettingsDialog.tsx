@@ -625,7 +625,6 @@ export function NotificationSettingsDialog({
       const nextDraft = createRuleDraft(savedRule);
       setRuleDraft(nextDraft);
       setSavedRuleDraft(nextDraft);
-      setMessage("通知ルールを保存しました。");
     } catch {
       setError("通知ルールの保存に失敗しました。");
     } finally {
@@ -1028,9 +1027,11 @@ export function NotificationSettingsDialog({
 
             <section
               className={
-                isRuleEditorVisible
-                  ? "notification-settings-dialog__panel notification-rule-workspace"
-                  : "notification-settings-dialog__panel notification-rule-workspace is-empty"
+                !isRuleEditorVisible
+                  ? "notification-settings-dialog__panel notification-rule-workspace is-empty"
+                  : shouldShowRuleActionBar
+                    ? "notification-settings-dialog__panel notification-rule-workspace has-action-bar"
+                    : "notification-settings-dialog__panel notification-rule-workspace"
               }
             >
               {isRuleEditorVisible ? (
