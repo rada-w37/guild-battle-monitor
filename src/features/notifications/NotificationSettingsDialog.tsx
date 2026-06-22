@@ -254,7 +254,7 @@ export function NotificationSettingsDialog({
   const previewTitle = applyNotificationTemplate(ruleDraft.message.titleTemplate);
   const previewBody = applyNotificationTemplate(ruleDraft.message.bodyTemplate);
   const shouldShowNonAttackingTargetWarning = hasNonAttackingTargetWarning(ruleDraft.detailConditions);
-  const isGrandBattlePreparing = activeBattleType === "grandBattle";
+  const isGrandBattleRuleDraft = ruleDraft.battleType === "grandBattle";
   const isRuleEditorVisible = ruleEditorMode !== "empty";
   const ruleEditorTitle = ruleEditorMode === "creating" ? "通知ルール新規作成" : "通知ルール編集";
   const isRuleDraftDirty =
@@ -410,18 +410,6 @@ export function NotificationSettingsDialog({
   }
 
   function selectRule(rule: RuleRecord) {
-    if (rule.battleType === "grandBattle") {
-      setSelectedRuleId(null);
-      setRuleEditorMode("empty");
-      setRuleDraft(createDefaultRuleDraft(activeBattleType));
-      setSavedRuleDraft(null);
-      setRuleError(null);
-      setMessage(null);
-      setDragSource(null);
-      setDropTarget(null);
-      return;
-    }
-
     const nextDraft = createRuleDraft(rule);
     setSelectedRuleId(rule.id);
     setRuleEditorMode("editing");
@@ -437,10 +425,6 @@ export function NotificationSettingsDialog({
   }
 
   function requestCreateNewRule() {
-    if (isGrandBattlePreparing) {
-      return;
-    }
-
     if (shouldConfirmDiscardCurrentDraft()) {
       setPendingDiscardAction({ type: "create" });
       return;
@@ -464,10 +448,6 @@ export function NotificationSettingsDialog({
   }
 
   function requestDuplicateRule(rule: RuleRecord) {
-    if (rule.battleType === "grandBattle" || isGrandBattlePreparing) {
-      return;
-    }
-
     setOpenRuleMenuId(null);
     if (shouldConfirmDiscardCurrentDraft()) {
       setPendingDiscardAction({ type: "duplicate", ruleId: rule.id });
@@ -642,7 +622,7 @@ export function NotificationSettingsDialog({
   }
 
   async function toggleRuleEnabled(rule: RuleRecord, enabled: boolean) {
-    if (status !== "idle" || rule.battleType === "grandBattle") {
+    if (status !== "idle") {
       return;
     }
 
@@ -675,7 +655,7 @@ export function NotificationSettingsDialog({
   }
 
   function changeRuleListEnabled(rule: RuleRecord, isDraftRule: boolean, enabled: boolean) {
-    if (status !== "idle" || rule.battleType === "grandBattle") {
+    if (status !== "idle") {
       return;
     }
 
@@ -1018,7 +998,7 @@ export function NotificationSettingsDialog({
             <section className="notification-settings-dialog__panel notification-rule-list-panel">
               <div className="notification-settings-dialog__section-header">
                 <h3>通知ルール一覧</h3>
-                <button className="load-form__button" disabled={isGrandBattlePreparing} type="button" onClick={requestCreateNewRule}>
+                <button className="load-form__button" type="button" onClick={requestCreateNewRule}>
                   新規ルール追加
                 </button>
               </div>
@@ -1048,7 +1028,7 @@ export function NotificationSettingsDialog({
                         <input
                           aria-label={`${rule.name}の有効状態`}
                           checked={displayedEnabled}
-                          disabled={status !== "idle" || rule.battleType === "grandBattle"}
+                          disabled={status !== "idle"}
                           type="checkbox"
                           onChange={(event) => {
                             changeRuleListEnabled(rule, isDraftRule, event.currentTarget.checked);
@@ -1060,7 +1040,6 @@ export function NotificationSettingsDialog({
                       </label>
                       <button
                         className="notification-rule-card__main"
-                        disabled={rule.battleType === "grandBattle"}
                         type="button"
                         onClick={() => {
                           if (!isDraftRule) {
@@ -1095,7 +1074,7 @@ export function NotificationSettingsDialog({
                         {openRuleMenuId === ruleMenuId ? (
                           <div className="notification-rule-card__actions-menu">
                             {isDraftRule ? null : (
-                              <button disabled={rule.battleType === "grandBattle"} type="button" onClick={() => requestDuplicateRule(rule)}>
+                              <button type="button" onClick={() => requestDuplicateRule(rule)}>
                                 複製
                               </button>
                             )}
@@ -1134,24 +1113,15 @@ export function NotificationSettingsDialog({
               >
             <section className="notification-rule-workspace__pane notification-rule-editor" ref={ruleEditorScrollRef}>
               {!isRuleEditorVisible ? (
-                isGrandBattlePreparing ? (
-                  <div className="notification-rule-editor__empty-state">
-                    <h3>{"Grand Battle\u901a\u77e5\u8a2d\u5b9a\u306f\u6e96\u5099\u4e2d\u3067\u3059"}</h3>
-                    <p className="notification-settings-dialog__empty">
-                      {"KOO\u5074\u306eGrand Battle v2\u5224\u5b9a\u5bfe\u5fdc\u5f8c\u306b\u4fdd\u5b58\u3067\u304d\u308b\u3088\u3046\u306b\u3057\u307e\u3059\u3002"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="notification-rule-editor__empty-state">
-                    <h3>{"\u901a\u77e5\u30eb\u30fc\u30eb\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044"}</h3>
-                    <p className="notification-settings-dialog__empty">
-                      {"\u65e2\u5b58\u30eb\u30fc\u30eb\u3092\u7de8\u96c6\u3059\u308b\u304b\u3001\u65b0\u898f\u4f5c\u6210\u304b\u3089\u901a\u77e5\u6761\u4ef6\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059\u3002"}
-                    </p>
-                    <button className="load-form__button" type="button" onClick={requestCreateNewRule}>
-                      {"\u65b0\u898f\u4f5c\u6210"}
-                    </button>
-                  </div>
-                )
+                <div className="notification-rule-editor__empty-state">
+                  <h3>{"\u901a\u77e5\u30eb\u30fc\u30eb\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044"}</h3>
+                  <p className="notification-settings-dialog__empty">
+                    {"\u65e2\u5b58\u30eb\u30fc\u30eb\u3092\u7de8\u96c6\u3059\u308b\u304b\u3001\u65b0\u898f\u4f5c\u6210\u304b\u3089\u901a\u77e5\u6761\u4ef6\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059\u3002"}
+                  </p>
+                  <button className="load-form__button" type="button" onClick={requestCreateNewRule}>
+                    {"\u65b0\u898f\u4f5c\u6210"}
+                  </button>
+                </div>
               ) : (
                 <>
               <h4 className="notification-settings-dialog__numbered-heading">
@@ -1209,78 +1179,101 @@ export function NotificationSettingsDialog({
                 <span>2</span>
                 {"\u5bfe\u8c61"}
               </h4>
-              <fieldset className="notification-rule-editor__target-guilds">
-                <legend className="field__label">
-                  {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
-                  <span className="field__label-note">{"\u672a\u6307\u5b9a\u306e\u5834\u5408\u306f\u5168\u30ae\u30eb\u30c9\u304c\u5bfe\u8c61\u3067\u3059"}</span>
-                </legend>
-                <label className="notification-rule-editor__target-guild-radio">
-                  <input
-                    checked={ruleDraft.targetGuildSelectionMode === "all"}
-                    type="radio"
-                    name="notification-target-guild-mode"
-                    onChange={() =>
-                      setRuleDraft((currentDraft) => ({
-                        ...currentDraft,
-                        targetGuildSelectionMode: "all",
-                        targetGuildIds: []
-                      }))
-                    }
-                  />
-                  {"\u5168\u30ae\u30eb\u30c9"}
-                </label>
-                <label className="notification-rule-editor__target-guild-radio">
-                  <input
-                    checked={ruleDraft.targetGuildSelectionMode === "specific"}
-                    disabled={targetGuildWorld === null && ruleDraft.targetGuildIds.length === 0}
-                    type="radio"
-                    name="notification-target-guild-mode"
-                    onChange={() =>
-                      setRuleDraft((currentDraft) => ({
-                        ...currentDraft,
-                        targetGuildSelectionMode: "specific"
-                      }))
-                    }
-                  />
-                  {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
-                </label>
-                {ruleDraft.targetGuildSelectionMode === "specific" ? (
-                  <div className="notification-rule-editor__target-guild-list">
-                    {targetGuildOptions.length === 0 ? (
-                      <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
-                    ) : (
-                      targetGuildOptions.map((candidate) => (
-                        <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
-                          <input
-                            checked={ruleDraft.targetGuildIds.includes(candidate.guildId)}
-                            type="checkbox"
-                            onChange={(event) => {
-                              const isChecked = event.target.checked;
-                              setRuleDraft((currentDraft) => ({
-                                ...currentDraft,
-                                targetGuildIds: isChecked
-                                  ? addTargetGuildId(currentDraft.targetGuildIds, candidate.guildId)
-                                  : currentDraft.targetGuildIds.filter((guildId) => guildId !== candidate.guildId)
-                              }));
-                            }}
-                          />
-                          {candidate.guildName}
-                        </label>
-                      ))
-                    )}
-                  </div>
-                ) : null}
-              </fieldset>
-              {targetGuildWorld === null ? (
-                <p className="notification-settings-dialog__note">
-                  {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u3092\u53d6\u5f97\u3059\u308b\u306b\u306f\u3001\u6240\u5c5e\u30ae\u30eb\u30c9\u8a2d\u5b9a\u3067\u30ef\u30fc\u30eb\u30c9\u3092\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
-                </p>
-              ) : null}
-              {targetGuildCandidateStatus === "error" ? (
-                <p className="notification-settings-dialog__note">
-                  {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002"}
-                </p>
-              ) : null}
+              {isGrandBattleRuleDraft ? (
+                <fieldset className="notification-rule-editor__target-guilds">
+                  <legend className="field__label">{"\u5bfe\u8c61"}</legend>
+                  <label className="notification-rule-editor__target-guild-radio">
+                    <input
+                      checked
+                      disabled
+                      type="radio"
+                      name="notification-target-guild-mode"
+                      readOnly
+                    />
+                    <span>
+                      {"\u5168\u5bfe\u8c61"}
+                      <span className="field__label-note">
+                        {"Grand Battle\u3067\u306f\u5bfe\u8c61\u30ae\u30eb\u30c9\u6307\u5b9a\u306f\u4f7f\u7528\u3057\u307e\u305b\u3093\u3002\u3059\u3079\u3066\u306e\u62e0\u70b9\u304c\u901a\u77e5\u6761\u4ef6\u306e\u5bfe\u8c61\u3067\u3059\u3002"}
+                      </span>
+                    </span>
+                  </label>
+                </fieldset>
+              ) : (
+                <>
+                  <fieldset className="notification-rule-editor__target-guilds">
+                    <legend className="field__label">
+                      {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
+                      <span className="field__label-note">{"\u672a\u6307\u5b9a\u306e\u5834\u5408\u306f\u5168\u30ae\u30eb\u30c9\u304c\u5bfe\u8c61\u3067\u3059"}</span>
+                    </legend>
+                    <label className="notification-rule-editor__target-guild-radio">
+                      <input
+                        checked={ruleDraft.targetGuildSelectionMode === "all"}
+                        type="radio"
+                        name="notification-target-guild-mode"
+                        onChange={() =>
+                          setRuleDraft((currentDraft) => ({
+                            ...currentDraft,
+                            targetGuildSelectionMode: "all",
+                            targetGuildIds: []
+                          }))
+                        }
+                      />
+                      {"\u5168\u30ae\u30eb\u30c9"}
+                    </label>
+                    <label className="notification-rule-editor__target-guild-radio">
+                      <input
+                        checked={ruleDraft.targetGuildSelectionMode === "specific"}
+                        disabled={targetGuildWorld === null && ruleDraft.targetGuildIds.length === 0}
+                        type="radio"
+                        name="notification-target-guild-mode"
+                        onChange={() =>
+                          setRuleDraft((currentDraft) => ({
+                            ...currentDraft,
+                            targetGuildSelectionMode: "specific"
+                          }))
+                        }
+                      />
+                      {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
+                    </label>
+                    {ruleDraft.targetGuildSelectionMode === "specific" ? (
+                      <div className="notification-rule-editor__target-guild-list">
+                        {targetGuildOptions.length === 0 ? (
+                          <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
+                        ) : (
+                          targetGuildOptions.map((candidate) => (
+                            <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
+                              <input
+                                checked={ruleDraft.targetGuildIds.includes(candidate.guildId)}
+                                type="checkbox"
+                                onChange={(event) => {
+                                  const isChecked = event.target.checked;
+                                  setRuleDraft((currentDraft) => ({
+                                    ...currentDraft,
+                                    targetGuildIds: isChecked
+                                      ? addTargetGuildId(currentDraft.targetGuildIds, candidate.guildId)
+                                      : currentDraft.targetGuildIds.filter((guildId) => guildId !== candidate.guildId)
+                                  }));
+                                }}
+                              />
+                              {candidate.guildName}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                  </fieldset>
+                  {targetGuildWorld === null ? (
+                    <p className="notification-settings-dialog__note">
+                      {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u3092\u53d6\u5f97\u3059\u308b\u306b\u306f\u3001\u6240\u5c5e\u30ae\u30eb\u30c9\u8a2d\u5b9a\u3067\u30ef\u30fc\u30eb\u30c9\u3092\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
+                    </p>
+                  ) : null}
+                  {targetGuildCandidateStatus === "error" ? (
+                    <p className="notification-settings-dialog__note">
+                      {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002"}
+                    </p>
+                  ) : null}
+                </>
+              )}
 
               <h4 className="notification-settings-dialog__numbered-heading">
                 <span>3</span>
@@ -1731,7 +1724,10 @@ function toLegacyRuleInput(ruleDraft: RuleDraft) {
 
 function toRuleV2Input(ruleDraft: RuleDraft): NotificationRuleV2Input {
   const { id: _id, targetGuildSelectionMode: _targetGuildSelectionMode, ...input } = ruleDraft;
-  return input;
+  return {
+    ...input,
+    targetGuildIds: input.battleType === "grandBattle" ? [] : input.targetGuildIds
+  };
 }
 
 function serializeRuleDraft(ruleDraft: RuleDraft): string {
