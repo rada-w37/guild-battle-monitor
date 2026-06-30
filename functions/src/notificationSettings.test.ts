@@ -84,6 +84,7 @@ describe("notification settings callables", () => {
         {
           id: "v2-rule",
           schemaVersion: 2,
+          battleSide: "defense",
           name: "V2 Rule",
           targetGuildIds: ["guild-a"]
         }
@@ -92,6 +93,26 @@ describe("notification settings callables", () => {
         id: "discord",
         type: "discord_webhook"
       }
+    });
+  });
+
+  it("defaults missing v2 battleSide to defense when reading existing rules", async () => {
+    const ruleWithoutBattleSide: Record<string, unknown> = { ...createRuleV2Input({ name: "Old V2 Rule" }) };
+    delete ruleWithoutBattleSide.battleSide;
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/v2-rule": ruleWithoutBattleSide
+    });
+
+    await expect(
+      handleGetNotificationSettingsV2({ guildId: "guild-1" }, { authUid: "owner-uid" }, createDependencies(firestore))
+    ).resolves.toMatchObject({
+      rules: [
+        {
+          id: "v2-rule",
+          battleSide: "defense"
+        }
+      ]
     });
   });
 
@@ -216,6 +237,7 @@ describe("notification settings callables", () => {
     ).resolves.toMatchObject({
       id: "generated-rule",
       schemaVersion: 2,
+      battleSide: "defense",
       sortOrder: 3,
       targetGuildIds: ["guild-a"],
       createdByRole: "guildOwner",
@@ -228,6 +250,7 @@ describe("notification settings callables", () => {
         path: "guildShares/guild-1/notificationRules/generated-rule",
         data: expect.objectContaining({
           schemaVersion: 2,
+          battleSide: "defense",
           sortOrder: 3,
           targetGuildIds: ["guild-a"],
           createdAt: "now-1",
@@ -306,6 +329,15 @@ describe("notification settings callables", () => {
     ).rejects.toMatchObject({ code: "invalid-argument" });
 
     expect(firestore.writes).toEqual([]);
+  });
+
+  it("rejects unsupported v2 battleSide values", async () => {
+    expect(() =>
+      validateNotificationRuleV2Input({
+        ...createRuleV2Input(),
+        battleSide: "both"
+      })
+    ).toThrow();
   });
 
   it("allows an empty webhook URL only when destination is disabled", async () => {
@@ -528,6 +560,7 @@ function createRuleInput() {
 function createRuleV2Input(
   overrides: {
     readonly name?: string;
+    readonly battleSide?: "defense" | "attack";
     readonly sortOrder?: number;
     readonly targetGuildIds?: readonly string[];
     readonly mention?: { readonly type: string; readonly customText?: string };
@@ -538,6 +571,7 @@ function createRuleV2Input(
   return {
     schemaVersion: 2,
     battleType: "guildBattle",
+    battleSide: overrides.battleSide ?? "defense",
     name: overrides.name ?? "\u898b\u843d\u3068\u3057\u9632\u6b62",
     enabled: true,
     sortOrder: overrides.sortOrder ?? 0,

@@ -1821,7 +1821,17 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    const battleSideRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__battle-side input");
+    expect(battleSideRadios).toHaveLength(2);
+    expect(battleSideRadios[0]?.checked).toBe(true);
+    expect(battleSideRadios[1]?.checked).toBe(false);
+    expect(document.body.textContent).toContain("通知対象");
+    expect(document.body.textContent).toContain("防衛中の拠点");
+    expect(document.body.textContent).toContain("攻撃中の拠点");
+
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
     expect(targetGuildModeRadios).toHaveLength(2);
     expect(targetGuildModeRadios[0]?.closest(".notification-rule-editor__target-guilds")?.className).not.toContain("is-readonly");
     expect(targetGuildModeRadios[0]?.checked).toBe(true);
@@ -1899,7 +1909,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
     await act(async () => {
       targetGuildModeRadios[1]?.click();
@@ -1924,6 +1936,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(saveNotificationRuleV2).toHaveBeenCalledWith({
       guildId: "saved-guild",
       rule: expect.objectContaining({
+        battleSide: "defense",
         targetGuildIds: ["guild-a", "guild-b"]
       })
     });
@@ -1972,7 +1985,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
     await act(async () => {
       targetGuildModeRadios[1]?.click();
       await flushPromises();
@@ -2017,7 +2032,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
     await openNotificationSettings();
     await openFirstNotificationRuleForEdit();
 
-    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
     expect(targetGuildModeRadios[0]?.checked).toBe(false);
     expect(targetGuildModeRadios[1]?.checked).toBe(true);
 
@@ -2087,6 +2104,16 @@ describe("FirebasePhase0App notification settings dialog", () => {
     const previewAvatar = document.querySelector<HTMLElement>(".notification-preview__avatar");
     expect(previewAvatar?.textContent?.trim()).toBe("");
     expect(previewAvatar?.querySelector("svg")).not.toBeNull();
+    const battleSideRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__battle-side input");
+    expect(battleSideRadios[0]?.checked).toBe(true);
+    expect(battleSideRadios[1]?.checked).toBe(false);
+
+    await act(async () => {
+      battleSideRadios[1]?.click();
+      await flushPromises();
+    });
+    expect(battleSideRadios[0]?.checked).toBe(false);
+    expect(battleSideRadios[1]?.checked).toBe(true);
 
     const createButton = getNotificationRuleEditorActionButton("作成");
 
@@ -2100,6 +2127,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       guildId: "saved-guild",
       rule: expect.objectContaining({
         schemaVersion: 2,
+        battleSide: "attack",
         targetGuildIds: [],
         detailConditions: expect.objectContaining({ operator: "OR" })
       })
@@ -2197,7 +2225,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
     await act(async () => {
       targetGuildModeRadios[1]?.click();
       await flushPromises();
@@ -2274,7 +2304,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-radio input");
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
     expect(targetGuildModeRadios[0]?.checked).toBe(true);
     expect(targetGuildModeRadios[1]?.disabled).toBe(true);
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
@@ -3091,6 +3123,7 @@ function createNotificationRuleV2(overrides: Partial<NotificationRuleV2> = {}): 
     id: "v2-rule",
     schemaVersion: 2,
     battleType: "guildBattle",
+    battleSide: "defense",
     name: "見落とし防止",
     enabled: true,
     sortOrder: 0,

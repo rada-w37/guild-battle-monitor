@@ -4,6 +4,7 @@ import type {
   NotificationDetailCondition,
   NotificationDetailConditionGroup,
   NotificationDestinationInput,
+  NotificationBattleSide,
   NotificationRule,
   NotificationRuleInput,
   NotificationRuleV2,
@@ -210,6 +211,7 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
     typeof data.id !== "string" ||
     data.schemaVersion !== 2 ||
     (data.battleType !== "guildBattle" && data.battleType !== "grandBattle") ||
+    (data.battleSide !== undefined && data.battleSide !== "defense" && data.battleSide !== "attack") ||
     typeof data.name !== "string" ||
     typeof data.enabled !== "boolean" ||
     typeof data.sortOrder !== "number" ||
@@ -225,6 +227,7 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
     id: data.id,
     schemaVersion: 2,
     battleType: data.battleType,
+    battleSide: createNotificationBattleSide(data.battleSide),
     name: data.name,
     enabled: data.enabled,
     sortOrder: data.sortOrder,
@@ -251,6 +254,10 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
     createdAt: data.createdAt,
     updatedAt: data.updatedAt
   };
+}
+
+function createNotificationBattleSide(data: unknown): NotificationBattleSide {
+  return data === "attack" ? "attack" : "defense";
 }
 
 function createDetailConditionRoot(data: Record<string, unknown>): NotificationRuleV2["detailConditions"] {

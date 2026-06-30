@@ -12,6 +12,7 @@ const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z
 const FUNCTION_REGION = "asia-northeast1";
 
 type NotificationBattleType = "guildBattle" | "grandBattle";
+type NotificationBattleSide = "defense" | "attack";
 type NotificationMentionType = "none" | "here" | "everyone" | "custom";
 type NotificationSettingsRole = "guildOwner" | "admin";
 type NotificationDetailConditionField = "defenseCount" | "attackCount";
@@ -79,6 +80,7 @@ interface NotificationDetailConditionGroupInput {
 interface NotificationRuleV2Input {
   readonly schemaVersion: 2;
   readonly battleType: NotificationBattleType;
+  readonly battleSide: NotificationBattleSide;
   readonly name: string;
   readonly enabled: boolean;
   readonly sortOrder: number;
@@ -641,6 +643,7 @@ function readNotificationRuleV2Input(data: Record<string, unknown>): Notificatio
   if (
     data.schemaVersion !== 2 ||
     (data.battleType !== "guildBattle" && data.battleType !== "grandBattle") ||
+    (data.battleSide !== undefined && data.battleSide !== "defense" && data.battleSide !== "attack") ||
     typeof data.name !== "string" ||
     data.name.trim().length === 0 ||
     typeof data.enabled !== "boolean" ||
@@ -658,6 +661,7 @@ function readNotificationRuleV2Input(data: Record<string, unknown>): Notificatio
   return {
     schemaVersion: 2,
     battleType: data.battleType,
+    battleSide: readBattleSide(data.battleSide),
     name: data.name.trim(),
     enabled: data.enabled,
     sortOrder: data.sortOrder,
@@ -669,6 +673,10 @@ function readNotificationRuleV2Input(data: Record<string, unknown>): Notificatio
       ? {}
       : { temporarySuspension: readTemporarySuspension(data.temporarySuspension) })
   };
+}
+
+function readBattleSide(data: unknown): NotificationBattleSide {
+  return data === "attack" ? "attack" : "defense";
 }
 
 function readSchedule(data: Record<string, unknown>): NotificationRuleV2Input["schedule"] {

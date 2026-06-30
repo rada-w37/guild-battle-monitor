@@ -13,6 +13,7 @@ describe("notification rule v2 draft", () => {
     expect(draft).toMatchObject({
       schemaVersion: 2,
       battleType: "guildBattle",
+      battleSide: "defense",
       sortOrder: 2,
       detailConditions: {
         operator: "OR",
@@ -37,6 +38,7 @@ describe("notification rule v2 draft", () => {
 
     expect(draft).toMatchObject({
       schemaVersion: 2,
+      battleSide: "defense",
       name: "終盤アラート",
       enabled: false,
       schedule: { startTime: "21:20", endTime: null }
