@@ -1174,6 +1174,37 @@ export function NotificationSettingsDialog({
                   />
                 </label>
               </div>
+              <fieldset className="notification-rule-editor__battle-side" aria-label="通知対象">
+                <legend className="field__label">通知対象</legend>
+                <label className="notification-rule-editor__target-guild-radio">
+                  <input
+                    checked={ruleDraft.battleSide === "defense"}
+                    type="radio"
+                    name="notification-battle-side"
+                    onChange={() =>
+                      setRuleDraft((currentDraft) => ({
+                        ...currentDraft,
+                        battleSide: "defense"
+                      }))
+                    }
+                  />
+                  防衛中の拠点
+                </label>
+                <label className="notification-rule-editor__target-guild-radio">
+                  <input
+                    checked={ruleDraft.battleSide === "attack"}
+                    type="radio"
+                    name="notification-battle-side"
+                    onChange={() =>
+                      setRuleDraft((currentDraft) => ({
+                        ...currentDraft,
+                        battleSide: "attack"
+                      }))
+                    }
+                  />
+                  攻撃中の拠点
+                </label>
+              </fieldset>
 
               <h4 className="notification-settings-dialog__numbered-heading">
                 <span>2</span>

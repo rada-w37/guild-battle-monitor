@@ -16,6 +16,7 @@ export function createDefaultNotificationRuleV2Draft(
   return {
     schemaVersion: 2,
     battleType,
+    battleSide: "defense",
     name: DEFAULT_NOTIFICATION_RULE_V2_NAME,
     enabled: true,
     sortOrder,
@@ -71,6 +72,7 @@ export function createNotificationRuleV2DraftFromLegacy(
   return {
     schemaVersion: 2,
     battleType: rule.battleType,
+    battleSide: "defense",
     name: rule.name,
     enabled: rule.enabled,
     sortOrder,

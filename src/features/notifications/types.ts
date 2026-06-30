@@ -1,5 +1,7 @@
 export type NotificationBattleType = "guildBattle" | "grandBattle";
 
+export type NotificationBattleSide = "defense" | "attack";
+
 export type NotificationMentionType = "none" | "here" | "everyone" | "custom";
 
 export type NotificationDetailConditionField = "defenseCount" | "attackCount";
@@ -54,6 +56,7 @@ export interface NotificationRuleV2 {
   readonly id: string;
   readonly schemaVersion: 2;
   readonly battleType: NotificationBattleType;
+  readonly battleSide: NotificationBattleSide;
   readonly name: string;
   readonly enabled: boolean;
   readonly sortOrder: number;

@@ -968,6 +968,15 @@ select {
   border: 0;
 }
 
+.notification-rule-editor__battle-side {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+
 .notification-rule-editor__target-guild-radio,
 .notification-rule-editor__target-guild-checkbox {
   display: flex;
