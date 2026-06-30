@@ -1204,9 +1204,6 @@ export function NotificationSettingsDialog({
                   />
                   攻撃中の拠点
                 </label>
-                <p className="notification-settings-dialog__note">
-                  防衛中の拠点は自ギルドが保持する拠点、攻撃中の拠点は自ギルドが攻撃している拠点を対象にします。
-                </p>
               </fieldset>
 
               <h4 className="notification-settings-dialog__numbered-heading">
