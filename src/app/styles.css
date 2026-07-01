@@ -2639,8 +2639,19 @@ select {
     align-content: start;
   }
 
+  .notification-rule-workspace:not(.is-empty) {
+    gap: 0;
+    background: var(--app-surface);
+  }
+
+  .notification-rule-workspace:not(.is-empty) .notification-rule-workspace__topbar {
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+  }
+
   .notification-rule-workspace__columns {
     grid-template-columns: 1fr;
+    gap: 0;
   }
 
   .notification-rule-workspace:not(.has-action-bar):not(.is-empty) .notification-rule-workspace__columns {
@@ -2648,8 +2659,27 @@ select {
     overflow: visible;
   }
 
+  .notification-rule-workspace:not(.is-empty) .notification-rule-workspace__pane {
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .notification-rule-editor > .notification-settings-dialog__numbered-heading:not(:first-child),
+  .notification-rule-preview-panel {
+    padding-top: 18px;
+    margin-top: 18px;
+    border-top: 1px solid var(--app-border);
+  }
+
   .notification-rule-preview-panel {
     grid-column: auto;
+  }
+
+  .notification-rule-preview-panel__divider {
+    margin: 18px 0 0;
   }
 
   .notification-rule-editor__conditions {
