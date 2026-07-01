@@ -1,7 +1,6 @@
 import {
   DEFAULT_NOTIFICATION_BODY_TEMPLATE,
-  DEFAULT_NOTIFICATION_TITLE_TEMPLATE,
-  DEFAULT_NOTIFICATION_USERNAME_TEMPLATE
+  DEFAULT_NOTIFICATION_TITLE_TEMPLATE
 } from "./notificationTemplates";
 import type { NotificationBattleType, NotificationRule, NotificationRuleInput, NotificationRuleV2Input } from "./types";
 
@@ -39,7 +38,7 @@ export function createDefaultNotificationRuleV2Draft(
       ]
     },
     message: {
-      usernameTemplate: DEFAULT_NOTIFICATION_USERNAME_TEMPLATE,
+      usernameTemplate: "",
       mention: { type: "here" },
       titleTemplate: DEFAULT_NOTIFICATION_TITLE_TEMPLATE,
       bodyTemplate: DEFAULT_NOTIFICATION_BODY_TEMPLATE

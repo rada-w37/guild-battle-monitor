@@ -402,7 +402,7 @@ function readNotificationRequest(input: unknown): NotificationRequest | null {
   const duplicateKey = readRequiredString(input.duplicateKey);
   const baseName = readRequiredString(input.baseName);
   const title = readRequiredString(input.message.title);
-  const body = readRequiredString(input.message.body);
+  const body = readOptionalMessageBody(input.message.body);
   const defenseCount = readNonNegativeInteger(input.defenseCount);
   const attackCount = readNonNegativeInteger(input.attackCount);
 
@@ -484,6 +484,10 @@ function readRequiredPathSegment(value: unknown): string | null {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readOptionalMessageBody(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }
 
 function readNonNegativeInteger(value: unknown): number | null {

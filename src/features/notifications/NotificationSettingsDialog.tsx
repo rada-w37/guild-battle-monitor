@@ -1489,6 +1489,7 @@ export function NotificationSettingsDialog({
                     <input
                       className="field__input field__input--wide"
                       ref={usernameTemplateInputRef}
+                      placeholder="空欄の場合はDiscord側で設定された表示名を使用します"
                       value={ruleDraft.message.usernameTemplate}
                       onChange={(event) => {
                         const usernameTemplate = event.target.value;
@@ -2232,12 +2233,8 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
     return "\u8a73\u7d30\u6761\u4ef6\u306f0\u4ee5\u4e0a\u306e\u6574\u6570\u3067\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
   }
 
-  if (
-    ruleDraft.message.usernameTemplate.trim().length === 0 ||
-    ruleDraft.message.titleTemplate.trim().length === 0 ||
-    ruleDraft.message.bodyTemplate.trim().length === 0
-  ) {
-    return "Discord表示名、通知タイトル、通知本文を入力してください。";
+  if (ruleDraft.message.titleTemplate.trim().length === 0) {
+    return "通知タイトルを入力してください。";
   }
 
   if (

@@ -864,11 +864,9 @@ function readConditions(data: Record<string, unknown>): NotificationRuleInput["c
 function readMessage(data: Record<string, unknown>): NotificationRuleInput["message"] {
   if (
     typeof data.usernameTemplate !== "string" ||
-    data.usernameTemplate.trim().length === 0 ||
     typeof data.titleTemplate !== "string" ||
     data.titleTemplate.trim().length === 0 ||
     typeof data.bodyTemplate !== "string" ||
-    data.bodyTemplate.trim().length === 0 ||
     !isPlainObject(data.mention)
   ) {
     throw new HttpsError("invalid-argument", "invalid_notification_message");

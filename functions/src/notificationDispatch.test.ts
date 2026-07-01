@@ -215,7 +215,7 @@ describe("notification dispatch trigger", () => {
           username: "  ",
           mentionText: "",
           title: "Base is under attack",
-          body: "Defense 3 / Attack 5"
+          body: ""
         },
         source: { observedAt: "not-a-timestamp" }
       }),
@@ -226,7 +226,7 @@ describe("notification dispatch trigger", () => {
       embeds: [
         {
           title: "Base is under attack",
-          description: "Defense 3 / Attack 5"
+          description: ""
         }
       ]
     });

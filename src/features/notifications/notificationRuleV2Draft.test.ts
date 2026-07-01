@@ -15,6 +15,9 @@ describe("notification rule v2 draft", () => {
       battleType: "guildBattle",
       battleSide: "defense",
       sortOrder: 2,
+      message: {
+        usernameTemplate: ""
+      },
       detailConditions: {
         operator: "OR",
         children: [

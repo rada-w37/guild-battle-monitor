@@ -366,6 +366,22 @@ describe("notification settings callables", () => {
     });
   });
 
+  it("allows v2 rules with empty Discord username and body templates", () => {
+    expect(
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          usernameTemplate: "",
+          bodyTemplate: ""
+        })
+      )
+    ).toMatchObject({
+      message: {
+        usernameTemplate: "",
+        bodyTemplate: ""
+      }
+    });
+  });
+
   it("rejects unsupported v2 battleSide values", async () => {
     expect(() =>
       validateNotificationRuleV2Input({
@@ -599,6 +615,8 @@ function createRuleV2Input(
     readonly sortOrder?: number;
     readonly targetGuildIds?: readonly string[];
     readonly mention?: { readonly type: string; readonly customText?: string };
+    readonly usernameTemplate?: string;
+    readonly bodyTemplate?: string;
     readonly detailConditions?: Record<string, unknown>;
     readonly temporarySuspension?: Record<string, unknown>;
   } = {}
@@ -629,10 +647,10 @@ function createRuleV2Input(
       ]
     },
     message: {
-      usernameTemplate: "ギルバト監視BOT - {拠点名}",
+      usernameTemplate: overrides.usernameTemplate ?? "ギルバト監視BOT - {拠点名}",
       mention: overrides.mention ?? { type: "none" },
       titleTemplate: "⚠ {拠点名}が攻撃されています！",
-      bodyTemplate: "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
+      bodyTemplate: overrides.bodyTemplate ?? "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
     },
     ...(overrides.temporarySuspension === undefined
       ? {}

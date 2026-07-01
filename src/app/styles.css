@@ -298,6 +298,10 @@ select {
   outline-offset: 2px;
 }
 
+.field__input::placeholder {
+  color: color-mix(in srgb, var(--app-text-muted) 62%, transparent);
+}
+
 .mode-tabs {
   display: inline-flex;
   gap: 4px;

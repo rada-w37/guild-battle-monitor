@@ -1281,6 +1281,65 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
   });
 
+  it("allows saving an empty Discord username and body for v2 rules", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({ saveNotificationRuleV2 });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const templateFields = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        ".notification-rule-preview-panel input.field__input--wide, .notification-rule-preview-panel textarea.field__input--wide"
+      )
+    );
+    const [usernameInput, , bodyTextarea] = templateFields;
+    if (!(usernameInput instanceof HTMLInputElement) || !(bodyTextarea instanceof HTMLTextAreaElement)) {
+      throw new Error("notification template fields were not found");
+    }
+
+    expect(usernameInput.value).toBe("");
+    expect(usernameInput.placeholder).toBe("空欄の場合はDiscord側で設定された表示名を使用します");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      valueSetter?.call(bodyTextarea, "");
+      bodyTextarea.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        message: expect.objectContaining({
+          usernameTemplate: "",
+          bodyTemplate: ""
+        })
+      })
+    });
+  });
+
   it("shows template variable labels without braces but inserts braced variables", async () => {
     await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
     await openNotificationSettings();
