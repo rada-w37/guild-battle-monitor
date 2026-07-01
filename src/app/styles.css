@@ -884,8 +884,9 @@ select {
   align-content: start;
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   overscroll-behavior: contain;
+  padding-bottom: 4px;
 }
 
 .notification-rule-list,
@@ -903,6 +904,7 @@ select {
 .notification-rule-preview-panel::-webkit-scrollbar,
 .notification-settings-dialog__body::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 .notification-rule-list::-webkit-scrollbar-thumb,
@@ -1283,10 +1285,12 @@ select {
 
 .notification-rule-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(260px, max-content) auto;
   gap: 10px;
   align-items: start;
   flex: 0 0 auto;
+  min-width: 100%;
+  width: max-content;
   padding: 10px 12px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
@@ -1383,14 +1387,14 @@ select {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .notification-rule-card__title {
-  min-width: 0;
-  overflow: hidden;
+  min-width: max-content;
+  overflow: visible;
   font-weight: 700;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
