@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Discord Webhook Tester</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Local only</p>
+          <h1>Discord Webhook Tester</h1>
+        </div>
+        <button id="sendButton" class="primary-button" type="button">Send</button>
+      </header>
+
+      <section class="workspace" aria-label="Webhook payload builder">
+        <form class="editor-panel" id="payloadForm">
+          <label class="field field-wide">
+            <span>Discord Webhook URL</span>
+            <input id="webhookUrl" name="webhookUrl" type="url" autocomplete="off" spellcheck="false" required />
+          </label>
+
+          <label class="field">
+            <span>Preset</span>
+            <select id="presetSelect" name="preset">
+              <option value="custom">Custom</option>
+              <option value="a">A. title in content / mention in embed</option>
+              <option value="b">B. title + body + mention in content</option>
+              <option value="c">C. title + mention in content / body in embed</option>
+              <option value="d">D. mention only in content / title and body in embed</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>allowed_mentions</span>
+            <select id="allowedMentions" name="allowedMentions">
+              <option value="none">none</option>
+              <option value="users">users</option>
+              <option value="roles">roles</option>
+              <option value="everyone">everyone</option>
+              <option value="users_roles">users + roles</option>
+              <option value="users_roles_everyone">users + roles + everyone</option>
+            </select>
+          </label>
+
+          <label class="field field-wide">
+            <span>content</span>
+            <textarea id="content" name="content" rows="5" spellcheck="false"></textarea>
+          </label>
+
+          <label class="field">
+            <span>embed title</span>
+            <input id="embedTitle" name="embedTitle" type="text" autocomplete="off" />
+          </label>
+
+          <label class="field">
+            <span>embed footer text</span>
+            <input id="embedFooterText" name="embedFooterText" type="text" autocomplete="off" />
+          </label>
+
+          <label class="field field-wide">
+            <span>embed description</span>
+            <textarea id="embedDescription" name="embedDescription" rows="5" spellcheck="false"></textarea>
+          </label>
+
+          <label class="field">
+            <span>username</span>
+            <input id="username" name="username" type="text" autocomplete="off" />
+          </label>
+
+          <label class="field">
+            <span>avatar_url</span>
+            <input id="avatarUrl" name="avatarUrl" type="url" autocomplete="off" spellcheck="false" />
+          </label>
+        </form>
+
+        <aside class="preview-panel" aria-label="Final payload and response">
+          <section>
+            <div class="panel-heading">
+              <h2>Final payload JSON</h2>
+              <button id="copyPayloadButton" class="secondary-button" type="button">Copy</button>
+            </div>
+            <pre id="payloadPreview" class="json-box"></pre>
+          </section>
+
+          <section>
+            <div class="panel-heading">
+              <h2>Response</h2>
+              <button id="clearResponseButton" class="secondary-button" type="button">Clear</button>
+            </div>
+            <dl class="response-summary">
+              <div>
+                <dt>HTTP status</dt>
+                <dd id="responseStatus">-</dd>
+              </div>
+              <div>
+                <dt>Error</dt>
+                <dd id="responseError">-</dd>
+              </div>
+            </dl>
+            <pre id="responseBody" class="json-box muted-box"></pre>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
