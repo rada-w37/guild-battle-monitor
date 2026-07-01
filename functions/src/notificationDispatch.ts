@@ -526,11 +526,13 @@ function readNotificationSummary(value: unknown): string | null {
 }
 
 function truncateNotificationSummary(summary: string): string {
-  if (summary.length <= NOTIFICATION_SUMMARY_MAX_LENGTH) {
+  const summaryCharacters = Array.from(summary);
+  if (summaryCharacters.length <= NOTIFICATION_SUMMARY_MAX_LENGTH) {
     return summary;
   }
 
-  return `${summary.slice(0, NOTIFICATION_SUMMARY_MAX_LENGTH - NOTIFICATION_SUMMARY_ELLIPSIS.length)}${NOTIFICATION_SUMMARY_ELLIPSIS}`;
+  const ellipsisLength = Array.from(NOTIFICATION_SUMMARY_ELLIPSIS).length;
+  return `${summaryCharacters.slice(0, NOTIFICATION_SUMMARY_MAX_LENGTH - ellipsisLength).join("")}${NOTIFICATION_SUMMARY_ELLIPSIS}`;
 }
 
 function readNonNegativeInteger(value: unknown): number | null {

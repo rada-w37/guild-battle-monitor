@@ -291,6 +291,35 @@ describe("notification dispatch trigger", () => {
     });
   });
 
+  it("truncates notification summaries without breaking emoji surrogate pairs", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+    const longTitle = `${"a".repeat(118)}😀bc`;
+    const expectedSummary = `${"a".repeat(118)}😀…`;
+
+    await handleNotificationRequestCreated(
+      "request-1",
+      createRequest({
+        message: {
+          username: "KOO Rule",
+          mentionText: "<@123>",
+          title: longTitle,
+          body: "Defense 3 / Attack 5"
+        }
+      }),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(Array.from(expectedSummary)).toHaveLength(120);
+    expect(discordPosts[0].payload.content).toBe(`<@123>\n${expectedSummary}`);
+    expect(discordPosts[0].payload.content).not.toContain("�");
+    expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
+      status: "sent"
+    });
+  });
+
   it("stores only sanitized HTTP status errors when Discord returns non-2xx", async () => {
     const firestore = createFirestore({
       "guildShares/guild-1/notificationDestinations/discord": createDestination()
