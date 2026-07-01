@@ -1488,12 +1488,28 @@ export function NotificationSettingsDialog({
                     <span>4</span>
                     {"Discord\u901a\u77e5\u5185\u5bb9"}
                   </h3>
-                  <label className="field">
-                    <span className="field__label">{"Discord\u8868\u793a\u540d"}</span>
+                  <div className="field">
+                    <span className="field__label-row">
+                      <label className="field__label" htmlFor="notification-rule-username-template">
+                        {"Discord\u8868\u793a\u540d"}
+                      </label>
+                      <button
+                        className="field__info-button"
+                        type="button"
+                        aria-label="Discord表示名の補足説明"
+                        aria-describedby="notification-rule-username-tooltip"
+                      >
+                        <span aria-hidden="true">i</span>
+                      </button>
+                      <span className="field__tooltip" id="notification-rule-username-tooltip" role="tooltip">
+                        {"\u7a7a\u6b04\u306e\u5834\u5408\u306fDiscord\u5074\u3067\u8a2d\u5b9a\u3055\u308c\u305f\u8868\u793a\u540d\u3092\u4f7f\u7528\u3057\u307e\u3059\u3002"}
+                      </span>
+                    </span>
                     <input
+                      id="notification-rule-username-template"
                       className="field__input field__input--wide"
                       ref={usernameTemplateInputRef}
-                      placeholder="空欄の場合はDiscord側で設定された表示名を使用します"
+                      placeholder="任意"
                       value={ruleDraft.message.usernameTemplate}
                       onChange={(event) => {
                         const usernameTemplate = event.target.value;
@@ -1503,7 +1519,7 @@ export function NotificationSettingsDialog({
                         }));
                       }}
                     />
-                  </label>
+                  </div>
                   <label className="field">
                     <span className="field__label">{"\u30e1\u30f3\u30b7\u30e7\u30f3\u5148"}</span>
                     <select
@@ -1548,9 +1564,25 @@ export function NotificationSettingsDialog({
                       />
                     </label>
                   ) : null}
-                  <label className="field">
-                    <span className="field__label">{"\u901a\u77e5\u30b5\u30de\u30ea\u30fc"}</span>
+                  <div className="field">
+                    <span className="field__label-row">
+                      <label className="field__label" htmlFor="notification-rule-title-template">
+                        {"\u901a\u77e5\u30b5\u30de\u30ea\u30fc"}
+                      </label>
+                      <button
+                        className="field__info-button"
+                        type="button"
+                        aria-label="通知サマリーの補足説明"
+                        aria-describedby="notification-rule-summary-tooltip"
+                      >
+                        <span aria-hidden="true">i</span>
+                      </button>
+                      <span className="field__tooltip" id="notification-rule-summary-tooltip" role="tooltip">
+                        {"\u30b9\u30de\u30db\u901a\u77e5\u306b\u3082\u8868\u793a\u3055\u308c\u308b\u77ed\u3044\u8981\u7d04\u3067\u3059\u3002"}
+                      </span>
+                    </span>
                     <input
+                      id="notification-rule-title-template"
                       className="field__input field__input--wide"
                       ref={titleTemplateInputRef}
                       value={ruleDraft.message.titleTemplate}
@@ -1562,8 +1594,7 @@ export function NotificationSettingsDialog({
                         }));
                       }}
                     />
-                    <span className="field__hint">スマホ通知にも表示される短い要約です。</span>
-                  </label>
+                  </div>
                   <label className="field">
                     <span className="field__label">{"\u901a\u77e5\u672c\u6587"}</span>
                     <textarea

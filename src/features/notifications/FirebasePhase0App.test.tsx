@@ -1420,7 +1420,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     }
 
     expect(usernameInput.value).toBe("");
-    expect(usernameInput.placeholder).toBe("空欄の場合はDiscord側で設定された表示名を使用します");
+    expect(usernameInput.placeholder).toBe("任意");
     expect(document.querySelector(".notification-preview__username")?.textContent).toBe("Webhook側の表示名");
     expect(document.querySelector(".notification-preview__mention")).toBeNull();
     expect(document.querySelector(".notification-preview__content")?.textContent).toContain("ブラッセルが攻撃されています");
@@ -1449,6 +1449,46 @@ describe("FirebasePhase0App notification settings dialog", () => {
         })
       })
     });
+  });
+
+  it("shows notification form help text through accessible tooltips", async () => {
+    await renderNotificationSettingsDialog();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".field__hint")).toBeNull();
+
+    const summaryHelpButton = document.querySelector<HTMLButtonElement>(
+      "button[aria-label='通知サマリーの補足説明']"
+    );
+    const usernameHelpButton = document.querySelector<HTMLButtonElement>(
+      "button[aria-label='Discord表示名の補足説明']"
+    );
+    expect(summaryHelpButton).not.toBeNull();
+    expect(usernameHelpButton).not.toBeNull();
+
+    const summaryTooltipId = summaryHelpButton?.getAttribute("aria-describedby");
+    const usernameTooltipId = usernameHelpButton?.getAttribute("aria-describedby");
+    expect(summaryTooltipId).toBe("notification-rule-summary-tooltip");
+    expect(usernameTooltipId).toBe("notification-rule-username-tooltip");
+    expect(document.getElementById(summaryTooltipId ?? "")?.getAttribute("role")).toBe("tooltip");
+    expect(document.getElementById(usernameTooltipId ?? "")?.getAttribute("role")).toBe("tooltip");
+    expect(document.getElementById(summaryTooltipId ?? "")?.textContent).toBe(
+      "スマホ通知にも表示される短い要約です。"
+    );
+    expect(document.getElementById(usernameTooltipId ?? "")?.textContent).toBe(
+      "空欄の場合はDiscord側で設定された表示名を使用します。"
+    );
   });
 
   it("blocks saving v2 rules when the notification summary is longer than 120 characters", async () => {
