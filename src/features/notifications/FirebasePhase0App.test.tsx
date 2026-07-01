@@ -1227,6 +1227,60 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.querySelector(`[title="攻撃中でない拠点もこの条件に一致する可能性があります。"]`)).not.toBeNull();
   });
 
+  it("allows saving a v2 notification rule without detail conditions", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({ saveNotificationRuleV2 });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const removeGroupButton = document.querySelector<HTMLButtonElement>(
+      ".notification-rule-editor__condition-group-actions button:last-child"
+    );
+    if (!removeGroupButton) {
+      throw new Error("remove detail condition group button was not found");
+    }
+
+    await act(async () => {
+      removeGroupButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).not.toContain("いずれかの条件ブロックに一致");
+    expect(document.body.textContent).toContain("開始時刻になったら通知されます。");
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        detailConditions: {
+          operator: "OR",
+          children: []
+        }
+      })
+    });
+  });
+
   it("shows template variable labels without braces but inserts braced variables", async () => {
     await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
     await openNotificationSettings();

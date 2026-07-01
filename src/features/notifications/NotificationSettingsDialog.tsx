@@ -254,6 +254,7 @@ export function NotificationSettingsDialog({
   const previewTitle = applyNotificationTemplate(ruleDraft.message.titleTemplate);
   const previewBody = applyNotificationTemplate(ruleDraft.message.bodyTemplate);
   const shouldShowNonAttackingTargetWarning = hasNonAttackingTargetWarning(ruleDraft.detailConditions);
+  const hasDetailConditionNodes = ruleDraft.detailConditions.children.length > 0;
   const isGrandBattleRuleDraft = ruleDraft.battleType === "grandBattle";
   const isRuleEditorVisible = ruleEditorMode !== "empty";
   const ruleEditorTitle = ruleEditorMode === "creating" ? "通知ルール新規作成" : "通知ルール編集";
@@ -1311,7 +1312,9 @@ export function NotificationSettingsDialog({
                 <span>3</span>
                 {"\u8a73\u7d30\u6761\u4ef6"}
               </h4>
-              <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
+              {hasDetailConditionNodes ? (
+                <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
+              ) : null}
               <div
                 className="notification-rule-editor__condition-tree"
                 onDragOver={(event) =>
@@ -1458,7 +1461,11 @@ export function NotificationSettingsDialog({
                   {"\uff0b \u6761\u4ef6\u3092\u8ffd\u52a0"}
                 </button>
               </div>
-              {shouldShowNonAttackingTargetWarning ? (
+              {!hasDetailConditionNodes ? (
+                <div className="notification-rule-editor__condition-warning">
+                  {"\u958b\u59cb\u6642\u523b\u306b\u306a\u3063\u305f\u3089\u901a\u77e5\u3055\u308c\u307e\u3059\u3002"}
+                </div>
+              ) : shouldShowNonAttackingTargetWarning ? (
                 <div className="notification-rule-editor__condition-warning">
                   {"\u653b\u6483\u4e2d\u3067\u306a\u3044\u62e0\u70b9\u3082\u901a\u77e5\u5bfe\u8c61\u306b\u306a\u308b\u6761\u4ef6\u304c\u3042\u308a\u307e\u3059\u3002"}
                   <br />
@@ -1983,10 +1990,20 @@ function updateGroupCondition(
 }
 
 function removeGroupCondition(ruleDraft: RuleDraft, groupIndex: number, conditionIndex: number): RuleDraft {
-  return updateConditionGroup(ruleDraft, groupIndex, (group) => ({
-    ...group,
-    children: group.children.filter((_, currentIndex) => currentIndex !== conditionIndex)
-  }));
+  return {
+    ...ruleDraft,
+    detailConditions: {
+      ...ruleDraft.detailConditions,
+      children: ruleDraft.detailConditions.children.flatMap((currentNode, currentIndex) => {
+        if (currentIndex !== groupIndex || currentNode.type !== "group") {
+          return [currentNode];
+        }
+
+        const nextChildren = currentNode.children.filter((_, currentConditionIndex) => currentConditionIndex !== conditionIndex);
+        return nextChildren.length === 0 ? [] : [{ ...currentNode, children: nextChildren }];
+      })
+    }
+  };
 }
 
 function updateRootCondition(ruleDraft: RuleDraft, nodeIndex: number, condition: NotificationDetailCondition): RuleDraft {
@@ -2007,7 +2024,7 @@ function removeRootConditionNode(ruleDraft: RuleDraft, nodeIndex: number): RuleD
     ...ruleDraft,
     detailConditions: {
       ...ruleDraft.detailConditions,
-      children: nextChildren.length === 0 ? [createDefaultConditionGroup()] : nextChildren
+      children: nextChildren
     }
   };
 }
@@ -2236,7 +2253,6 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
 function isValidDetailConditionRoot(detailConditions: RuleDraft["detailConditions"]): boolean {
   return (
     detailConditions.operator === "OR" &&
-    detailConditions.children.length > 0 &&
     detailConditions.children.every((node) =>
       node.type === "condition"
         ? isValidDetailCondition(node)

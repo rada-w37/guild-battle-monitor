@@ -716,7 +716,7 @@ function readTargetGuildIds(values: readonly unknown[]): readonly string[] {
 }
 
 function readDetailConditionRoot(data: Record<string, unknown>): NotificationRuleV2Input["detailConditions"] {
-  if (data.operator !== "OR" || !Array.isArray(data.children) || data.children.length === 0) {
+  if (data.operator !== "OR" || !Array.isArray(data.children)) {
     throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
   }
 

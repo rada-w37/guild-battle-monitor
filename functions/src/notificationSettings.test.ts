@@ -331,6 +331,41 @@ describe("notification settings callables", () => {
     expect(firestore.writes).toEqual([]);
   });
 
+  it("allows v2 rules without detail conditions through the save callable", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            detailConditions: {
+              operator: "OR",
+              children: []
+            }
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      id: "generated-rule",
+      detailConditions: {
+        operator: "OR",
+        children: []
+      }
+    });
+
+    expect(firestore.writes[0].data).toMatchObject({
+      detailConditions: {
+        operator: "OR",
+        children: []
+      }
+    });
+  });
+
   it("rejects unsupported v2 battleSide values", async () => {
     expect(() =>
       validateNotificationRuleV2Input({
