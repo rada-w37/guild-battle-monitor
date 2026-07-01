@@ -49,7 +49,7 @@ import type {
 } from "./types";
 
 const DISCORD_WEBHOOK_URL_PATTERN = /^https:\/\/discord(?:app)?\.com\/api\/webhooks\/[^/\s]+\/[^/\s]+$/;
-const START_TIME_PATTERN = /^\d{2}:\d{2}$/;
+const START_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DETAIL_CONDITION_FIELDS: readonly NotificationDetailConditionField[] = ["defenseCount", "attackCount"];
 const DETAIL_CONDITION_OPERATORS: readonly NotificationDetailConditionOperator[] = ["<=", ">="];
 const DRAFT_RULE_ID = "__notification_rule_draft__";
@@ -1735,12 +1735,7 @@ function createRuleRecordFromV2(rule: NotificationRuleV2): RuleRecord {
     schedule: { ...rule.schedule },
     targetGuildIds: [...rule.targetGuildIds],
     targetGuildSelectionMode: rule.targetGuildIds.length > 0 ? "specific" : "all",
-    detailConditions: {
-      ...rule.detailConditions,
-      children: rule.detailConditions.children.map((node) =>
-        node.type === "condition" ? { ...node } : { ...node, children: node.children.map((condition) => ({ ...condition })) }
-      )
-    }
+    detailConditions: normalizeDetailConditionRoot(rule.detailConditions)
   };
 }
 
@@ -1767,12 +1762,7 @@ function createRuleDraft(rule: RuleRecord): RuleDraft {
     schedule: { ...rule.schedule },
     targetGuildIds: [...rule.targetGuildIds],
     targetGuildSelectionMode: rule.targetGuildSelectionMode,
-    detailConditions: {
-      ...rule.detailConditions,
-      children: rule.detailConditions.children.map((node) =>
-        node.type === "condition" ? { ...node } : { ...node, children: node.children.map((condition) => ({ ...condition })) }
-      )
-    }
+    detailConditions: normalizeDetailConditionRoot(rule.detailConditions)
   };
 }
 
@@ -1785,7 +1775,31 @@ function toRuleV2Input(ruleDraft: RuleDraft): NotificationRuleV2Input {
   const { id: _id, targetGuildSelectionMode: _targetGuildSelectionMode, ...input } = ruleDraft;
   return {
     ...input,
-    targetGuildIds: input.battleType === "grandBattle" ? [] : input.targetGuildIds
+    targetGuildIds: input.battleType === "grandBattle" ? [] : input.targetGuildIds,
+    detailConditions: normalizeDetailConditionRoot(input.detailConditions)
+  };
+}
+
+function normalizeDetailConditionRoot(detailConditions: RuleDraft["detailConditions"]): RuleDraft["detailConditions"] {
+  const children: RuleDraft["detailConditions"]["children"][number][] = [];
+
+  for (const node of detailConditions.children) {
+    if (node.type === "condition") {
+      children.push({ ...node });
+      continue;
+    }
+
+    if (node.children.length > 0) {
+      children.push({
+        ...node,
+        children: node.children.map((condition) => ({ ...condition }))
+      });
+    }
+  }
+
+  return {
+    operator: "OR",
+    children
   };
 }
 
@@ -2276,7 +2290,7 @@ function isValidDetailConditionRoot(detailConditions: RuleDraft["detailCondition
     detailConditions.children.every((node) =>
       node.type === "condition"
         ? isValidDetailCondition(node)
-        : node.children.length > 0 && node.children.every(isValidDetailCondition)
+        : node.children.every(isValidDetailCondition)
     )
   );
 }

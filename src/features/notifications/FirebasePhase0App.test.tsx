@@ -1281,6 +1281,112 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
   });
 
+  it("normalizes empty v2 detail condition groups before saving", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly ruleId?: string; readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: input.ruleId ?? "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({
+      rules: [
+        createNotificationRuleV2({
+          id: "empty-group-rule",
+          detailConditions: {
+            operator: "OR",
+            children: [
+              {
+                type: "group",
+                operator: "AND",
+                children: []
+              }
+            ]
+          }
+        })
+      ],
+      saveNotificationRuleV2
+    });
+    await openFirstNotificationRuleForEdit();
+    await editSelectedNotificationRuleName("空group正規化");
+
+    const saveButton = getNotificationRuleEditorActionButton("保存");
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      ruleId: "empty-group-rule",
+      rule: expect.objectContaining({
+        name: "空group正規化",
+        detailConditions: {
+          operator: "OR",
+          children: []
+        }
+      })
+    });
+  });
+
+  it("validates v2 schedule times with the KOO-compatible HH:mm range", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({ saveNotificationRuleV2 });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const startTimeInput = document.querySelector<HTMLInputElement>("input[placeholder='21:00']");
+    if (!startTimeInput) {
+      throw new Error("start time input was not found");
+    }
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+    for (const invalidTime of ["24:00", "99:99", "12:99"]) {
+      await act(async () => {
+        const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        valueSetter?.call(startTimeInput, invalidTime);
+        startTimeInput.dispatchEvent(new Event("input", { bubbles: true }));
+        createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await flushPromises();
+      });
+
+      expect(saveNotificationRuleV2).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("開始時刻はHH:mm形式で入力してください。");
+    }
+
+    saveNotificationRuleV2.mockClear();
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(startTimeInput, "00:00");
+      startTimeInput.dispatchEvent(new Event("input", { bubbles: true }));
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        schedule: expect.objectContaining({ startTime: "00:00" })
+      })
+    });
+  });
+
   it("allows saving an empty Discord username and body for v2 rules", async () => {
     const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
       Promise.resolve({

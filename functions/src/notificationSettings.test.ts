@@ -366,6 +366,87 @@ describe("notification settings callables", () => {
     });
   });
 
+  it("normalizes empty v2 detail condition groups through the save callable", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            detailConditions: {
+              operator: "OR",
+              children: [
+                {
+                  type: "group",
+                  operator: "AND",
+                  children: []
+                }
+              ]
+            }
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      id: "generated-rule",
+      detailConditions: {
+        operator: "OR",
+        children: []
+      }
+    });
+
+    expect(firestore.writes[0].data).toMatchObject({
+      detailConditions: {
+        operator: "OR",
+        children: []
+      }
+    });
+  });
+
+  it("validates v2 schedule times with the KOO-compatible HH:mm range", () => {
+    for (const startTime of ["00:00", "23:59"]) {
+      expect(validateNotificationRuleV2Input(createRuleV2Input({ schedule: { startTime, endTime: null } }))).toMatchObject({
+        schedule: { startTime, endTime: null }
+      });
+    }
+
+    for (const startTime of ["24:00", "99:99", "12:99"]) {
+      expect(() => validateNotificationRuleV2Input(createRuleV2Input({ schedule: { startTime, endTime: null } }))).toThrowError(
+        expect.objectContaining({ code: "invalid-argument" })
+      );
+    }
+  });
+
+  it("rejects legacy rules with times outside the HH:mm range", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRule(
+        {
+          guildId: "guild-1",
+          rule: {
+            ...createRuleInput(),
+            conditions: {
+              startTime: "24:00",
+              defenseCountMax: 20,
+              attackCountMin: 15
+            }
+          }
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+
+    expect(firestore.writes).toEqual([]);
+  });
+
   it("allows v2 rules with empty Discord username and body templates", () => {
     expect(
       validateNotificationRuleV2Input(
@@ -623,6 +704,7 @@ function createRuleV2Input(
     readonly name?: string;
     readonly battleSide?: "defense" | "attack";
     readonly sortOrder?: number;
+    readonly schedule?: { readonly startTime: string; readonly endTime?: string | null };
     readonly targetGuildIds?: readonly string[];
     readonly mention?: { readonly type: string; readonly customText?: string };
     readonly usernameTemplate?: string;
@@ -640,8 +722,8 @@ function createRuleV2Input(
     enabled: true,
     sortOrder: overrides.sortOrder ?? 0,
     schedule: {
-      startTime: "21:00",
-      endTime: null
+      startTime: overrides.schedule?.startTime ?? "21:00",
+      endTime: overrides.schedule?.endTime ?? null
     },
     targetGuildIds: overrides.targetGuildIds ?? [],
     detailConditions: overrides.detailConditions ?? {

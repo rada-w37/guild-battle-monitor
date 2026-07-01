@@ -7,6 +7,7 @@ const FUNCTION_REGION = "asia-northeast1";
 const NOTIFICATION_REQUESTS_COLLECTION = "notificationRequests";
 const DISCORD_CONTENT_MAX_LENGTH = 2000;
 const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
+const NOTIFICATION_SUMMARY_ELLIPSIS = "…";
 
 type NotificationBattleType = "guildBattle" | "grandBattle";
 type NotificationStatus = "processing" | "sent" | "skipped" | "failed";
@@ -518,10 +519,18 @@ function readOptionalMessageBody(value: unknown): string | null {
 
 function readNotificationSummary(value: unknown): string | null {
   const summary = readRequiredString(value);
-  if (summary === null || summary.length > NOTIFICATION_SUMMARY_MAX_LENGTH) {
+  if (summary === null) {
     return null;
   }
-  return summary;
+  return truncateNotificationSummary(summary);
+}
+
+function truncateNotificationSummary(summary: string): string {
+  if (summary.length <= NOTIFICATION_SUMMARY_MAX_LENGTH) {
+    return summary;
+  }
+
+  return `${summary.slice(0, NOTIFICATION_SUMMARY_MAX_LENGTH - NOTIFICATION_SUMMARY_ELLIPSIS.length)}${NOTIFICATION_SUMMARY_ELLIPSIS}`;
 }
 
 function readNonNegativeInteger(value: unknown): number | null {

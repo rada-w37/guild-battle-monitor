@@ -7,7 +7,7 @@ const NOTIFICATION_RULES_COLLECTION = "notificationRules";
 const NOTIFICATION_DESTINATIONS_COLLECTION = "notificationDestinations";
 const DISCORD_DESTINATION_ID = "discord";
 const DISCORD_WEBHOOK_URL_PATTERN = /^https:\/\/discord(?:app)?\.com\/api\/webhooks\/[^/\s]+\/[^/\s]+$/;
-const START_TIME_PATTERN = /^\d{2}:\d{2}$/;
+const START_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const FUNCTION_REGION = "asia-northeast1";
 const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
@@ -723,13 +723,16 @@ function readDetailConditionRoot(data: Record<string, unknown>): NotificationRul
 
   return {
     operator: "OR",
-    children: data.children.map(readDetailConditionRootChild)
+    children: data.children.flatMap((child) => {
+      const normalizedChild = readDetailConditionRootChild(child);
+      return normalizedChild === null ? [] : [normalizedChild];
+    })
   };
 }
 
 function readDetailConditionRootChild(
   data: unknown
-): NotificationDetailConditionInput | NotificationDetailConditionGroupInput {
+): NotificationDetailConditionInput | NotificationDetailConditionGroupInput | null {
   if (!isPlainObject(data)) {
     throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
   }
@@ -745,9 +748,13 @@ function readDetailConditionRootChild(
   throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
 }
 
-function readDetailConditionGroup(data: Record<string, unknown>): NotificationDetailConditionGroupInput {
-  if ((data.operator !== "AND" && data.operator !== "OR") || !Array.isArray(data.children) || data.children.length === 0) {
+function readDetailConditionGroup(data: Record<string, unknown>): NotificationDetailConditionGroupInput | null {
+  if ((data.operator !== "AND" && data.operator !== "OR") || !Array.isArray(data.children)) {
     throw new HttpsError("invalid-argument", "invalid_notification_detail_conditions");
+  }
+
+  if (data.children.length === 0) {
+    return null;
   }
 
   return {

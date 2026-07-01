@@ -256,11 +256,12 @@ describe("notification dispatch trigger", () => {
     });
   });
 
-  it("rejects requests whose notification summary is too long", async () => {
+  it("truncates requests whose notification summary is too long", async () => {
     const firestore = createFirestore({
       "guildShares/guild-1/notificationDestinations/discord": createDestination()
     });
     const discordPosts: DiscordPost[] = [];
+    const longTitle = "a".repeat(121);
 
     await handleNotificationRequestCreated(
       "request-1",
@@ -268,17 +269,25 @@ describe("notification dispatch trigger", () => {
         message: {
           username: "KOO Rule",
           mentionText: "<@123>",
-          title: "a".repeat(121),
+          title: longTitle,
           body: "Defense 3 / Attack 5"
         }
       }),
       createDependencies(firestore, { discordPosts })
     );
 
-    expect(discordPosts).toEqual([]);
+    expect(discordPosts[0].payload).toMatchObject({
+      username: "KOO Rule",
+      content: `<@123>\n${"a".repeat(119)}…`,
+      allowed_mentions: { parse: ["users"] },
+      embeds: [
+        {
+          description: "Defense 3 / Attack 5"
+        }
+      ]
+    });
     expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
-      status: "failed",
-      errorCode: "invalid_request"
+      status: "sent"
     });
   });
 
