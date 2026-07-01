@@ -2527,8 +2527,52 @@ select {
     width: 100%;
   }
 
+  .notification-settings-dialog-backdrop {
+    align-items: start;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .notification-settings-dialog {
+    width: min(100%, 720px);
+    max-height: none;
+    overflow: visible;
+  }
+
+  .notification-settings-dialog__body {
+    overflow: visible;
+  }
+
+  .notification-settings-dialog__destination {
+    width: 100%;
+    justify-self: stretch;
+  }
+
   .notification-settings-dialog__grid {
     grid-template-columns: 1fr;
+  }
+
+  .notification-settings-dialog__grid > .notification-settings-dialog__panel {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .notification-rule-list-panel,
+  .notification-rule-workspace,
+  .notification-rule-workspace__pane {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .notification-rule-list {
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
+  .notification-rule-workspace.has-action-bar {
+    grid-template-rows: auto auto auto;
+    align-content: start;
   }
 
   .notification-rule-workspace__columns {
