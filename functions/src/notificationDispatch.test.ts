@@ -19,11 +19,10 @@ describe("notification dispatch trigger", () => {
         webhookUrl: "https://discord.com/api/webhooks/webhook-id/webhook-token",
         payload: {
           username: "KOO Rule",
-          content: "<@123>",
-          allowed_mentions: { parse: ["users", "roles"] },
+          content: "<@123>\nBase is under attack",
+          allowed_mentions: { parse: ["users"] },
           embeds: [
             {
-              title: "Base is under attack",
               description: "Defense 3 / Attack 5",
               timestamp: "2026-06-17T20:55:00.000Z"
             }
@@ -223,17 +222,64 @@ describe("notification dispatch trigger", () => {
     );
 
     expect(discordPosts[0].payload).toEqual({
-      embeds: [
-        {
-          title: "Base is under attack",
-          description: ""
-        }
-      ]
+      content: "Base is under attack"
     });
     expect(firestore.documents["guildShares/guild-1/notificationHistories/request-1"]).not.toHaveProperty("baseId");
     expect(firestore.documents["guildShares/guild-1/notificationHistories/request-1"]).not.toHaveProperty(
       "attackerGuildId"
     );
+  });
+
+  it("keeps here, everyone, role, and user mentions in content with matching allowed mentions", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+
+    await handleNotificationRequestCreated(
+      "request-1",
+      createRequest({
+        message: {
+          username: "KOO Rule",
+          mentionText: "@here <@123> <@&456>",
+          title: "Join the battle",
+          body: ""
+        }
+      }),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(discordPosts[0].payload).toEqual({
+      username: "KOO Rule",
+      content: "@here <@123> <@&456>\nJoin the battle",
+      allowed_mentions: { parse: ["everyone", "users", "roles"] }
+    });
+  });
+
+  it("rejects requests whose notification summary is too long", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+
+    await handleNotificationRequestCreated(
+      "request-1",
+      createRequest({
+        message: {
+          username: "KOO Rule",
+          mentionText: "<@123>",
+          title: "a".repeat(121),
+          body: "Defense 3 / Attack 5"
+        }
+      }),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(discordPosts).toEqual([]);
+    expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
+      status: "failed",
+      errorCode: "invalid_request"
+    });
   });
 
   it("stores only sanitized HTTP status errors when Discord returns non-2xx", async () => {

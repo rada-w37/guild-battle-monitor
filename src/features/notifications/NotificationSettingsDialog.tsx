@@ -55,6 +55,7 @@ const DETAIL_CONDITION_OPERATORS: readonly NotificationDetailConditionOperator[]
 const DRAFT_RULE_ID = "__notification_rule_draft__";
 const NEW_RULE_DRAFT_NAME = "新規ルール";
 const NON_ATTACKING_WARNING_TITLE = "攻撃中でない拠点もこの条件に一致する可能性があります。";
+const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
 const CONDITION_DROP_HYSTERESIS_PX = 10;
 const DRAG_HANDLE_LABEL = "\u22ee\u22ee";
 const DRAG_HANDLE_ARIA_LABEL = "\u4e26\u3079\u66ff\u3048";
@@ -253,6 +254,9 @@ export function NotificationSettingsDialog({
   const previewUsername = applyNotificationTemplate(ruleDraft.message.usernameTemplate);
   const previewTitle = applyNotificationTemplate(ruleDraft.message.titleTemplate);
   const previewBody = applyNotificationTemplate(ruleDraft.message.bodyTemplate);
+  const previewUsernameDisplay = previewUsername.trim().length === 0 ? "Webhook側の表示名" : previewUsername;
+  const previewContentLines = previewMention.length > 0 ? [previewMention, previewTitle] : [previewTitle];
+  const shouldShowPreviewBody = previewBody.trim().length > 0;
   const shouldShowNonAttackingTargetWarning = hasNonAttackingTargetWarning(ruleDraft.detailConditions);
   const hasDetailConditionNodes = ruleDraft.detailConditions.children.length > 0;
   const isGrandBattleRuleDraft = ruleDraft.battleType === "grandBattle";
@@ -1545,7 +1549,7 @@ export function NotificationSettingsDialog({
                     </label>
                   ) : null}
                   <label className="field">
-                    <span className="field__label">{"\u901a\u77e5\u30bf\u30a4\u30c8\u30eb"}</span>
+                    <span className="field__label">{"\u901a\u77e5\u30b5\u30de\u30ea\u30fc"}</span>
                     <input
                       className="field__input field__input--wide"
                       ref={titleTemplateInputRef}
@@ -1558,6 +1562,7 @@ export function NotificationSettingsDialog({
                         }));
                       }}
                     />
+                    <span className="field__hint">スマホ通知にも表示される短い要約です。</span>
                   </label>
                   <label className="field">
                     <span className="field__label">{"\u901a\u77e5\u672c\u6587"}</span>
@@ -1603,14 +1608,28 @@ export function NotificationSettingsDialog({
                       </svg>
                     </div>
                     <div>
-                      <div className="notification-preview__username">{previewUsername}</div>
-                      {previewMention.length > 0 ? <div className="notification-preview__mention">{previewMention}</div> : null}
+                      <div className="notification-preview__username">{previewUsernameDisplay}</div>
+                      {previewUsername.trim().length === 0 ? (
+                        <div className="notification-preview__note">Discord側で設定された表示名を使用します</div>
+                      ) : null}
                     </div>
                   </div>
-                  <div className="notification-preview__embed">
-                    <strong>{previewTitle}</strong>
-                    <p>{previewBody}</p>
+                  <div className="notification-preview__content">
+                    {previewContentLines.map((line, lineIndex) =>
+                      previewMention.length > 0 && lineIndex === 0 ? (
+                        <div key={`${lineIndex}-${line}`} className="notification-preview__mention">
+                          {line}
+                        </div>
+                      ) : (
+                        <p key={`${lineIndex}-${line}`}>{line}</p>
+                      )
+                    )}
                   </div>
+                  {shouldShowPreviewBody ? (
+                    <div className="notification-preview__embed">
+                      <p>{previewBody}</p>
+                    </div>
+                  ) : null}
                 </div>
               {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
               {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
@@ -2234,7 +2253,11 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
   }
 
   if (ruleDraft.message.titleTemplate.trim().length === 0) {
-    return "通知タイトルを入力してください。";
+    return "通知サマリーを入力してください。";
+  }
+
+  if (ruleDraft.message.titleTemplate.length > NOTIFICATION_SUMMARY_MAX_LENGTH) {
+    return `通知サマリーは${NOTIFICATION_SUMMARY_MAX_LENGTH}文字以内で入力してください。`;
   }
 
   if (

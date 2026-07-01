@@ -39,7 +39,7 @@ export function createDefaultNotificationRuleV2Draft(
     },
     message: {
       usernameTemplate: "",
-      mention: { type: "here" },
+      mention: { type: "none" },
       titleTemplate: DEFAULT_NOTIFICATION_TITLE_TEMPLATE,
       bodyTemplate: DEFAULT_NOTIFICATION_BODY_TEMPLATE
     }

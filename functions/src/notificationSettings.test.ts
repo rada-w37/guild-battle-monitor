@@ -382,6 +382,16 @@ describe("notification settings callables", () => {
     });
   });
 
+  it("rejects v2 rules when the notification summary is longer than 120 characters", () => {
+    expect(() =>
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          titleTemplate: "a".repeat(121)
+        })
+      )
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+  });
+
   it("rejects unsupported v2 battleSide values", async () => {
     expect(() =>
       validateNotificationRuleV2Input({
@@ -616,6 +626,7 @@ function createRuleV2Input(
     readonly targetGuildIds?: readonly string[];
     readonly mention?: { readonly type: string; readonly customText?: string };
     readonly usernameTemplate?: string;
+    readonly titleTemplate?: string;
     readonly bodyTemplate?: string;
     readonly detailConditions?: Record<string, unknown>;
     readonly temporarySuspension?: Record<string, unknown>;
@@ -649,7 +660,7 @@ function createRuleV2Input(
     message: {
       usernameTemplate: overrides.usernameTemplate ?? "ギルバト監視BOT - {拠点名}",
       mention: overrides.mention ?? { type: "none" },
-      titleTemplate: "⚠ {拠点名}が攻撃されています！",
+      titleTemplate: overrides.titleTemplate ?? "⚠ {拠点名}が攻撃されています！",
       bodyTemplate: overrides.bodyTemplate ?? "{拠点名}が{侵攻ギルド}から攻撃を受けています。"
     },
     ...(overrides.temporarySuspension === undefined

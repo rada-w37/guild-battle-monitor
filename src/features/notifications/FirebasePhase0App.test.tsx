@@ -1315,6 +1315,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(usernameInput.value).toBe("");
     expect(usernameInput.placeholder).toBe("空欄の場合はDiscord側で設定された表示名を使用します");
+    expect(document.querySelector(".notification-preview__username")?.textContent).toBe("Webhook側の表示名");
+    expect(document.querySelector(".notification-preview__mention")).toBeNull();
+    expect(document.querySelector(".notification-preview__content")?.textContent).toContain("ブラッセルが攻撃されています");
 
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -1322,6 +1325,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
       bodyTextarea.dispatchEvent(new Event("input", { bubbles: true }));
       await flushPromises();
     });
+
+    expect(document.querySelector(".notification-preview__embed")).toBeNull();
 
     const createButton = getNotificationRuleEditorActionButton("作成");
     await act(async () => {
@@ -1338,6 +1343,52 @@ describe("FirebasePhase0App notification settings dialog", () => {
         })
       })
     });
+  });
+
+  it("blocks saving v2 rules when the notification summary is longer than 120 characters", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({ saveNotificationRuleV2 });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const titleInput = Array.from(
+      document.querySelectorAll<HTMLInputElement>(".notification-rule-preview-panel input.field__input--wide")
+    ).find((input) => input.value.includes("攻撃"));
+    if (!titleInput) {
+      throw new Error("notification summary input was not found");
+    }
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(titleInput, "a".repeat(121));
+      titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("通知サマリーは120文字以内で入力してください。");
   });
 
   it("shows template variable labels without braces but inserts braced variables", async () => {

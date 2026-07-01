@@ -1565,6 +1565,22 @@ select {
   font-weight: 700;
 }
 
+.notification-preview__note {
+  color: #9ca3af;
+  font-size: 0.82rem;
+}
+
+.notification-preview__content {
+  display: grid;
+  gap: 6px;
+}
+
+.notification-preview__content p {
+  margin: 0;
+  color: #f9fafb;
+  white-space: pre-wrap;
+}
+
 .notification-preview__mention {
   width: fit-content;
   padding: 2px 6px;
@@ -1585,6 +1601,7 @@ select {
 
 .notification-preview__embed p {
   margin: 0;
+  white-space: pre-wrap;
 }
 
 .field {

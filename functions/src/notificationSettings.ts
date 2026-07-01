@@ -10,6 +10,7 @@ const DISCORD_WEBHOOK_URL_PATTERN = /^https:\/\/discord(?:app)?\.com\/api\/webho
 const START_TIME_PATTERN = /^\d{2}:\d{2}$/;
 const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const FUNCTION_REGION = "asia-northeast1";
+const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
 
 type NotificationBattleType = "guildBattle" | "grandBattle";
 type NotificationBattleSide = "defense" | "attack";
@@ -866,6 +867,7 @@ function readMessage(data: Record<string, unknown>): NotificationRuleInput["mess
     typeof data.usernameTemplate !== "string" ||
     typeof data.titleTemplate !== "string" ||
     data.titleTemplate.trim().length === 0 ||
+    data.titleTemplate.length > NOTIFICATION_SUMMARY_MAX_LENGTH ||
     typeof data.bodyTemplate !== "string" ||
     !isPlainObject(data.mention)
   ) {

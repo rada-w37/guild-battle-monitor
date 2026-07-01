@@ -5,6 +5,8 @@ import * as logger from "firebase-functions/logger";
 const DISCORD_DESTINATION_ID = "discord";
 const FUNCTION_REGION = "asia-northeast1";
 const NOTIFICATION_REQUESTS_COLLECTION = "notificationRequests";
+const DISCORD_CONTENT_MAX_LENGTH = 2000;
+const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
 
 type NotificationBattleType = "guildBattle" | "grandBattle";
 type NotificationStatus = "processing" | "sent" | "skipped" | "failed";
@@ -87,18 +89,19 @@ interface Dependencies {
 
 interface DiscordWebhookPayload {
   readonly username?: string;
-  readonly content?: string;
+  readonly content: string;
   readonly allowed_mentions?: {
-    readonly parse: readonly ["users", "roles"];
+    readonly parse: readonly DiscordAllowedMentionType[];
   };
-  readonly embeds: readonly [
+  readonly embeds?: readonly [
     {
-      readonly title: string;
       readonly description: string;
       readonly timestamp?: string;
     }
   ];
 }
+
+type DiscordAllowedMentionType = "everyone" | "users" | "roles";
 
 interface SafeLogContext {
   readonly requestId: string;
@@ -299,23 +302,46 @@ function isValidDiscordWebhookUrl(webhookUrl: string): boolean {
 function createDiscordPayload(request: NotificationRequest): DiscordWebhookPayload {
   const timestamp = createDiscordTimestamp(request.source?.observedAt);
   const mentionText = request.message.mentionText;
+  const body = request.message.body.trim();
+  const allowedMentionTypes = mentionText === undefined ? [] : createAllowedMentionTypes(mentionText);
 
   return {
     ...(request.message.username === undefined ? {} : { username: request.message.username }),
-    ...(mentionText === undefined
+    content: truncateDiscordContent([mentionText, request.message.title].filter((part) => part !== undefined).join("\n")),
+    ...(allowedMentionTypes.length === 0
       ? {}
       : {
-          content: mentionText,
-          allowed_mentions: { parse: ["users", "roles"] as const }
+          allowed_mentions: { parse: allowedMentionTypes }
         }),
-    embeds: [
-      {
-        title: request.message.title,
-        description: request.message.body,
-        ...(timestamp === undefined ? {} : { timestamp })
-      }
-    ]
+    ...(body.length === 0
+      ? {}
+      : {
+          embeds: [
+            {
+              description: body,
+              ...(timestamp === undefined ? {} : { timestamp })
+            }
+          ] as const
+        })
   };
+}
+
+function createAllowedMentionTypes(mentionText: string): readonly DiscordAllowedMentionType[] {
+  const mentionTypes: DiscordAllowedMentionType[] = [];
+  if (mentionText.includes("@here") || mentionText.includes("@everyone")) {
+    mentionTypes.push("everyone");
+  }
+  if (/<@!?\d+>/.test(mentionText)) {
+    mentionTypes.push("users");
+  }
+  if (/<@&\d+>/.test(mentionText)) {
+    mentionTypes.push("roles");
+  }
+  return mentionTypes;
+}
+
+function truncateDiscordContent(content: string): string {
+  return content.length <= DISCORD_CONTENT_MAX_LENGTH ? content : content.slice(0, DISCORD_CONTENT_MAX_LENGTH);
 }
 
 function createDiscordTimestamp(value: unknown): string | undefined {
@@ -401,7 +427,7 @@ function readNotificationRequest(input: unknown): NotificationRequest | null {
   const ruleName = readRequiredString(input.ruleName);
   const duplicateKey = readRequiredString(input.duplicateKey);
   const baseName = readRequiredString(input.baseName);
-  const title = readRequiredString(input.message.title);
+  const title = readNotificationSummary(input.message.title);
   const body = readOptionalMessageBody(input.message.body);
   const defenseCount = readNonNegativeInteger(input.defenseCount);
   const attackCount = readNonNegativeInteger(input.attackCount);
@@ -488,6 +514,14 @@ function readOptionalString(value: unknown): string | undefined {
 
 function readOptionalMessageBody(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function readNotificationSummary(value: unknown): string | null {
+  const summary = readRequiredString(value);
+  if (summary === null || summary.length > NOTIFICATION_SUMMARY_MAX_LENGTH) {
+    return null;
+  }
+  return summary;
 }
 
 function readNonNegativeInteger(value: unknown): number | null {
