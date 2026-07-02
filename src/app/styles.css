@@ -1375,7 +1375,7 @@ select {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 0;
+  padding: 0 42px 0 0;
   border: 0;
   color: inherit;
   text-align: left;
@@ -1433,11 +1433,20 @@ select {
 }
 
 .notification-rule-card__actions {
-  position: relative;
+  position: sticky;
+  right: 0;
+  z-index: 1;
   justify-self: end;
+  background: transparent;
+}
+
+.notification-rule-card__actions:has(.notification-rule-card__actions-menu) {
+  z-index: 8;
 }
 
 .notification-rule-card__actions-trigger {
+  position: relative;
+  z-index: 1;
   display: grid;
   min-width: 32px;
   min-height: 32px;
@@ -1460,11 +1469,11 @@ select {
 .notification-rule-card__actions-menu {
   position: absolute;
   right: 0;
-  z-index: 2;
+  top: calc(100% + 4px);
+  z-index: 24;
   display: grid;
   min-width: 96px;
   gap: 4px;
-  margin-top: 4px;
   padding: 6px;
   border: 1px solid var(--app-border);
   border-radius: 6px;
@@ -1534,17 +1543,13 @@ select {
 
 .notification-preview {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
   padding: 12px;
   border-radius: 8px;
   color: #e5e7eb;
   background: #313338;
-}
-
-.notification-preview__header {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
 }
 
 .notification-preview__avatar {
@@ -1562,6 +1567,12 @@ select {
   width: 23px;
   height: 23px;
   fill: currentColor;
+}
+
+.notification-preview__body {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
 }
 
 .notification-preview__username {

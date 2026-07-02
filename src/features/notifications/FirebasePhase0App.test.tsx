@@ -1005,6 +1005,35 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).toContain("複製");
     expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).not.toContain("編集");
 
+    await act(async () => {
+      document.querySelector(".notification-rule-card__actions-menu")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card__actions-menu")).not.toBeNull();
+
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card__actions-menu")).toBeNull();
+
+    await act(async () => {
+      menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card__actions-menu")).not.toBeNull();
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card__actions-menu")).toBeNull();
+
+    await act(async () => {
+      menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
     const duplicateButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions-menu button")).find(
       (candidate) => candidate.textContent === "複製"
     );
@@ -1423,6 +1452,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(usernameInput.placeholder).toBe("任意");
     expect(document.querySelector(".notification-preview__username")?.textContent).toBe("Webhook側の表示名");
     expect(document.querySelector(".notification-preview__mention")).toBeNull();
+    expect(document.querySelector(".notification-preview__body .notification-preview__username")).not.toBeNull();
+    expect(document.querySelector(".notification-preview__body .notification-preview__content")).not.toBeNull();
+    expect(document.querySelector(".notification-preview__body .notification-preview__embed")).not.toBeNull();
     expect(document.querySelector(".notification-preview__content")?.textContent).toContain("ブラッセルが攻撃されています");
 
     await act(async () => {
