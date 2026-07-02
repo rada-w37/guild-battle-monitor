@@ -107,7 +107,6 @@ interface TemplateFieldTarget {
   readonly field: TemplateFieldName;
   readonly element: TemplateFieldElement;
 }
-type RuleMenuPlacement = "down" | "up";
 interface DiscardConfirmationContent {
   readonly title: string;
   readonly message: string;
@@ -149,7 +148,6 @@ export function NotificationSettingsDialog({
   const [dragSource, setDragSource] = useState<NotificationDetailConditionDragSource | null>(null);
   const [dropTarget, setDropTarget] = useState<NotificationDetailConditionDropTarget | null>(null);
   const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null);
-  const [openRuleMenuPlacement, setOpenRuleMenuPlacement] = useState<RuleMenuPlacement>("down");
   const [pendingDiscardAction, setPendingDiscardAction] = useState<PendingDiscardAction | null>(null);
   const ruleEditorScrollRef = useRef<HTMLElement | null>(null);
   const usernameTemplateInputRef = useRef<HTMLInputElement | null>(null);
@@ -1075,13 +1073,7 @@ export function NotificationSettingsDialog({
                         {draftStatus !== null ? <span className="notification-rule-card__draft-status">{draftStatus}</span> : null}
                         {pauseStatus !== null ? <span className="notification-rule-card__pause-status">{pauseStatus}</span> : null}
                       </button>
-                      <div
-                        className={
-                          openRuleMenuId === ruleMenuId
-                            ? `notification-rule-card__actions is-open opens-${openRuleMenuPlacement}`
-                            : "notification-rule-card__actions"
-                        }
-                      >
+                      <div className="notification-rule-card__actions">
                         <button
                           aria-expanded={openRuleMenuId === ruleMenuId}
                           aria-label={`${rule.name}の操作`}
@@ -1089,15 +1081,7 @@ export function NotificationSettingsDialog({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            const nextPlacement = getRuleMenuPlacement(event.currentTarget);
-                            setOpenRuleMenuId((currentId) => {
-                              if (currentId === ruleMenuId) {
-                                return null;
-                              }
-
-                              setOpenRuleMenuPlacement(nextPlacement);
-                              return ruleMenuId;
-                            });
+                            setOpenRuleMenuId((currentId) => (currentId === ruleMenuId ? null : ruleMenuId));
                           }}
                         >
                           ...
@@ -1758,17 +1742,6 @@ export function NotificationSettingsDialog({
       </section>
     </div>
   );
-}
-
-function getRuleMenuPlacement(trigger: HTMLElement): RuleMenuPlacement {
-  const rect = trigger.getBoundingClientRect();
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-  const menuHeightEstimate = 96;
-  const verticalMargin = 12;
-  const spaceBelow = viewportHeight - rect.bottom;
-  const spaceAbove = rect.top;
-
-  return spaceBelow < menuHeightEstimate + verticalMargin && spaceAbove > spaceBelow ? "up" : "down";
 }
 
 function createDefaultRuleDraft(battleType: NotificationBattleType): RuleDraft {

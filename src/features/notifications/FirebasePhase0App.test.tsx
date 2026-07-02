@@ -1024,26 +1024,10 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(document.querySelector(".notification-rule-card__actions-menu")).toBeNull();
 
-    const rectSpy = vi.spyOn(menuButton, "getBoundingClientRect").mockReturnValue({
-      x: 320,
-      y: 740,
-      top: 740,
-      right: 352,
-      bottom: 760,
-      left: 320,
-      width: 32,
-      height: 20,
-      toJSON: () => ({})
-    });
-
     await act(async () => {
       menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flushPromises();
     });
-
-    expect(document.querySelector(".notification-rule-card__actions")?.className).toContain("is-open");
-    expect(document.querySelector(".notification-rule-card__actions")?.className).toContain("opens-up");
-    rectSpy.mockRestore();
 
     const duplicateButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions-menu button")).find(
       (candidate) => candidate.textContent === "複製"
