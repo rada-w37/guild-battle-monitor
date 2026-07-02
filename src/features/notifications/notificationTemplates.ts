@@ -11,7 +11,7 @@ export const NOTIFICATION_TEMPLATE_VARIABLES = [
 export const DEFAULT_NOTIFICATION_PREVIEW_CONTEXT = {
   拠点名: "ブラッセル",
   侵攻ギルド: "敵ギルドA",
-  防衛ギルド: "防衛ギルド",
+  防衛ギルド: "敵ギルドB",
   防衛数: "20",
   防御数: "20",
   侵攻数: "15",
