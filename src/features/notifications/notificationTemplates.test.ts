@@ -13,6 +13,13 @@ describe("notification templates", () => {
     expect(DEFAULT_NOTIFICATION_BODY_TEMPLATE).toContain("防衛数：{防衛数}");
   });
 
+  it("supports the defending guild variable for UI buttons and preview", () => {
+    expect(NOTIFICATION_TEMPLATE_VARIABLES).toContain("{防衛ギルド}");
+    expect(applyNotificationTemplate("侵攻：{侵攻ギルド} / 防衛：{防衛ギルド}")).toBe(
+      "侵攻：敵ギルドA / 防衛：防衛ギルド"
+    );
+  });
+
   it("keeps preview compatibility for the old defense count variable", () => {
     expect(applyNotificationTemplate("防衛数：{防衛数} / 防御数：{防御数}")).toBe("防衛数：20 / 防御数：20");
   });

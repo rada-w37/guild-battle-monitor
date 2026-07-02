@@ -1673,13 +1673,14 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(variableButtons.map((button) => button.textContent)).toEqual([
       "拠点名",
       "侵攻ギルド",
+      "防衛ギルド",
       "防衛数",
       "侵攻数",
       "通知時刻",
       "通知ルール名"
     ]);
 
-    const [baseNameButton, attackerGuildButton, , , notificationTimeButton] = variableButtons;
+    const [baseNameButton, attackerGuildButton, , , , notificationTimeButton] = variableButtons;
     const templateFields = Array.from(
       document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
         ".notification-rule-preview-panel input.field__input--wide, .notification-rule-preview-panel textarea.field__input--wide"
