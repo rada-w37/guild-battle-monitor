@@ -1285,13 +1285,13 @@ select {
 
 .notification-rule-card {
   display: grid;
-  grid-template-columns: auto minmax(260px, max-content) auto;
+  grid-template-columns: auto minmax(260px, max-content) minmax(44px, auto);
   gap: 10px;
   align-items: start;
   flex: 0 0 auto;
   min-width: 100%;
   width: max-content;
-  padding: 10px 12px;
+  padding: 10px 0 10px 12px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-surface);
@@ -1375,7 +1375,7 @@ select {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 0;
+  padding: 0 12px 0 0;
   border: 0;
   color: inherit;
   text-align: left;
@@ -1433,8 +1433,18 @@ select {
 }
 
 .notification-rule-card__actions {
-  position: relative;
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  display: grid;
+  min-height: 34px;
+  align-self: stretch;
+  align-items: start;
   justify-self: end;
+  padding: 0 8px 0 6px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0), var(--app-surface) 12px),
+    var(--app-surface);
 }
 
 .notification-rule-card__actions-trigger {
@@ -1541,6 +1551,7 @@ select {
   background: #313338;
 }
 
+.notification-preview__message,
 .notification-preview__header {
   display: flex;
   gap: 10px;
@@ -1569,6 +1580,12 @@ select {
   font-weight: 700;
 }
 
+.notification-preview__body {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
 .notification-preview__note {
   color: #9ca3af;
   font-size: 0.82rem;
@@ -1576,12 +1593,14 @@ select {
 
 .notification-preview__content {
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .notification-preview__content p {
   margin: 0;
   color: #f9fafb;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
@@ -1596,10 +1615,13 @@ select {
 .notification-preview__embed {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  margin-top: 4px;
   padding: 10px;
   border-left: 4px solid #3b82f6;
   border-radius: 6px;
   background: #2b2d31;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
@@ -2593,19 +2615,25 @@ select {
 
   .notification-settings-dialog-backdrop {
     align-items: start;
-    overflow-y: auto;
+    overflow: hidden;
+    overscroll-behavior: none;
     padding: 0;
+    touch-action: pan-y;
   }
 
   .notification-settings-dialog {
     width: 100%;
     max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
     min-height: 100vh;
     min-height: 100dvh;
+    min-width: 0;
     max-height: none;
     border: 0;
     border-radius: 0;
-    overflow: visible;
+    overflow: hidden;
+    overscroll-behavior: none;
     box-shadow: none;
   }
 
@@ -2618,9 +2646,16 @@ select {
   }
 
   .notification-settings-dialog__body {
+    flex: 1 1 auto;
     min-width: 0;
-    overflow: visible;
+    min-height: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 16px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .notification-settings-dialog__destination {
@@ -2647,15 +2682,20 @@ select {
   .notification-settings-dialog__grid > .notification-settings-dialog__panel {
     min-width: 0;
     max-height: none;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
   }
 
   .notification-rule-list-panel,
   .notification-rule-workspace,
   .notification-rule-workspace__pane {
     min-width: 0;
+    max-width: 100%;
     max-height: none;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
   }
 
   .notification-rule-list {
@@ -2664,6 +2704,8 @@ select {
     max-height: none;
     overflow-x: auto;
     overflow-y: visible;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
   }
 
   .notification-rule-workspace.has-action-bar {
@@ -2684,6 +2726,7 @@ select {
   .notification-rule-workspace__columns {
     grid-template-columns: 1fr;
     min-width: 0;
+    max-width: 100%;
     gap: 0;
   }
 

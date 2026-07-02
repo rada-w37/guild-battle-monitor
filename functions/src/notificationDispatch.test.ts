@@ -313,8 +313,13 @@ describe("notification dispatch trigger", () => {
     );
 
     expect(Array.from(expectedSummary)).toHaveLength(120);
-    expect(discordPosts[0].payload.content).toBe(`<@123>\n${expectedSummary}`);
-    expect(discordPosts[0].payload.content).not.toContain("�");
+    const [discordPost] = discordPosts;
+    if (discordPost === undefined) {
+      throw new Error("Discord post was not captured");
+    }
+    const payload = discordPost.payload as { readonly content?: string };
+    expect(payload.content).toBe(`<@123>\n${expectedSummary}`);
+    expect(payload.content).not.toContain("�");
     expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
       status: "sent"
     });

@@ -1005,6 +1005,30 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).toContain("複製");
     expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).not.toContain("編集");
 
+    await act(async () => {
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card__actions-menu")).toBeNull();
+
+    await act(async () => {
+      menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector(".notification-rule-card__actions-menu")).toBeNull();
+
+    await act(async () => {
+      menuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
     const duplicateButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-card__actions-menu button")).find(
       (candidate) => candidate.textContent === "複製"
     );
@@ -1424,6 +1448,11 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.querySelector(".notification-preview__username")?.textContent).toBe("Webhook側の表示名");
     expect(document.querySelector(".notification-preview__mention")).toBeNull();
     expect(document.querySelector(".notification-preview__content")?.textContent).toContain("ブラッセルが攻撃されています");
+    const previewBody = document.querySelector(".notification-preview__body");
+    expect(previewBody?.querySelector(".notification-preview__username")?.textContent).toBe("Webhook側の表示名");
+    expect(previewBody?.querySelector(".notification-preview__content")?.textContent).toContain("ブラッセルが攻撃されています");
+    expect(previewBody?.querySelector(".notification-preview__embed")).not.toBeNull();
+    expect(document.querySelector(".notification-preview > .notification-preview__content")).toBeNull();
 
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;

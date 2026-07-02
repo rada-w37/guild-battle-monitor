@@ -156,10 +156,20 @@ export function NotificationSettingsDialog({
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
+    const previousBodyOverscrollBehavior = document.body.style.getPropertyValue("overscroll-behavior");
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    const previousDocumentOverscrollBehavior = document.documentElement.style.getPropertyValue("overscroll-behavior");
+
     document.body.style.overflow = "hidden";
+    document.body.style.setProperty("overscroll-behavior", "none");
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.setProperty("overscroll-behavior", "none");
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.body.style.setProperty("overscroll-behavior", previousBodyOverscrollBehavior);
+      document.documentElement.style.overflow = previousDocumentOverflow;
+      document.documentElement.style.setProperty("overscroll-behavior", previousDocumentOverscrollBehavior);
     };
   }, []);
 
@@ -168,7 +178,7 @@ export function NotificationSettingsDialog({
       return;
     }
 
-    function closeMenuOnOutsidePointer(event: MouseEvent) {
+    function closeMenuOnOutsidePointer(event: PointerEvent) {
       const target = event.target;
       if (target instanceof Element && target.closest(".notification-rule-card__actions") !== null) {
         return;
@@ -183,11 +193,11 @@ export function NotificationSettingsDialog({
       }
     }
 
-    document.addEventListener("mousedown", closeMenuOnOutsidePointer);
+    document.addEventListener("pointerdown", closeMenuOnOutsidePointer);
     document.addEventListener("keydown", closeMenuOnEscape);
 
     return () => {
-      document.removeEventListener("mousedown", closeMenuOnOutsidePointer);
+      document.removeEventListener("pointerdown", closeMenuOnOutsidePointer);
       document.removeEventListener("keydown", closeMenuOnEscape);
     };
   }, [openRuleMenuId]);
@@ -1632,35 +1642,35 @@ export function NotificationSettingsDialog({
                 通知プレビュー
               </h3>
                 <div className="notification-preview">
-                  <div className="notification-preview__header">
+                  <div className="notification-preview__message">
                     <div className="notification-preview__avatar" aria-hidden="true">
                       <svg className="notification-preview__avatar-icon" viewBox="0 0 24 24" focusable="false">
                         <path d="M20.32 4.37A19.8 19.8 0 0 0 15.43 2.86a.08.08 0 0 0-.08.04c-.21.37-.44.86-.61 1.25a18.3 18.3 0 0 0-5.49 0 12.6 12.6 0 0 0-.62-1.25.08.08 0 0 0-.08-.04A19.7 19.7 0 0 0 3.68 4.37a.07.07 0 0 0-.03.03C.53 9.05-.32 13.58.1 18.06a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 5.99 3.03.08.08 0 0 0 .09-.03c.46-.63.87-1.3 1.23-1.99a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.89.08.08 0 0 1-.01-.13c.13-.1.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.93 1.79 8.18 1.79 12.06 0a.07.07 0 0 1 .08.01c.12.1.25.2.37.29a.08.08 0 0 1-.01.13c-.6.35-1.23.65-1.87.89a.08.08 0 0 0-.04.11c.36.7.77 1.36 1.22 1.99a.08.08 0 0 0 .09.03 19.8 19.8 0 0 0 6-3.03.08.08 0 0 0 .03-.05c.5-5.18-.84-9.67-3.55-13.66a.06.06 0 0 0-.03-.03ZM8.02 15.33c-1.18 0-2.16-1.09-2.16-2.42 0-1.33.96-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.33-.96 2.42-2.16 2.42Zm7.98 0c-1.18 0-2.16-1.09-2.16-2.42 0-1.33.96-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.33-.95 2.42-2.16 2.42Z" />
                       </svg>
                     </div>
-                    <div>
+                    <div className="notification-preview__body">
                       <div className="notification-preview__username">{previewUsernameDisplay}</div>
                       {previewUsername.trim().length === 0 ? (
                         <div className="notification-preview__note">Discord側で設定された表示名を使用します</div>
                       ) : null}
-                    </div>
-                  </div>
-                  <div className="notification-preview__content">
-                    {previewContentLines.map((line, lineIndex) =>
-                      previewMention.length > 0 && lineIndex === 0 ? (
-                        <div key={`${lineIndex}-${line}`} className="notification-preview__mention">
-                          {line}
+                      <div className="notification-preview__content">
+                        {previewContentLines.map((line, lineIndex) =>
+                          previewMention.length > 0 && lineIndex === 0 ? (
+                            <div key={`${lineIndex}-${line}`} className="notification-preview__mention">
+                              {line}
+                            </div>
+                          ) : (
+                            <p key={`${lineIndex}-${line}`}>{line}</p>
+                          )
+                        )}
+                      </div>
+                      {shouldShowPreviewBody ? (
+                        <div className="notification-preview__embed">
+                          <p>{previewBody}</p>
                         </div>
-                      ) : (
-                        <p key={`${lineIndex}-${line}`}>{line}</p>
-                      )
-                    )}
-                  </div>
-                  {shouldShowPreviewBody ? (
-                    <div className="notification-preview__embed">
-                      <p>{previewBody}</p>
+                      ) : null}
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
               {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
