@@ -836,6 +836,90 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).not.toContain("通知ルールを保存しました。");
   });
 
+  it("selects a notification rule from the card surface without selecting from row actions or scroll drags", async () => {
+    const saveNotificationRule = vi.fn((input: { readonly rule: Omit<NotificationRule, "id" | "createdAt" | "createdByRole" | "updatedAt"> }) =>
+      Promise.resolve({
+        id: "rule-1",
+        ...input.rule
+      })
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() =>
+        Promise.resolve({
+          rules: [
+            createNotificationRule({ id: "rule-1", name: "見落とし防止", enabled: true }),
+            createNotificationRule({ id: "rule-2", name: "参加依頼", enabled: true })
+          ]
+        })
+      ),
+      undefined,
+      saveNotificationRule
+    );
+    await openNotificationSettings();
+
+    const cards = Array.from(document.querySelectorAll<HTMLElement>(".notification-rule-card"));
+    const [firstCard, secondCard] = cards;
+    if (!firstCard || !secondCard) {
+      throw new Error("notification rule cards were not found");
+    }
+
+    await act(async () => {
+      secondCard.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("参加依頼");
+
+    await act(async () => {
+      firstCard.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 0, clientY: 0 }));
+      firstCard.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 32, clientY: 0 }));
+      firstCard.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("参加依頼");
+
+    await act(async () => {
+      firstCard.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("見落とし防止");
+
+    await act(async () => {
+      secondCard.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const firstToggle = firstCard.querySelector<HTMLInputElement>(".notification-rule-card__enabled-toggle input");
+    if (!firstToggle) {
+      throw new Error("notification rule enabled toggle was not found");
+    }
+    await act(async () => {
+      firstToggle.click();
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("参加依頼");
+
+    const firstMenuButton = firstCard.querySelector<HTMLButtonElement>(".notification-rule-card__actions-trigger");
+    if (!firstMenuButton) {
+      throw new Error("notification rule actions menu button was not found");
+    }
+    await act(async () => {
+      firstMenuButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(document.querySelector(".notification-rule-card.is-selected")?.textContent).toContain("参加依頼");
+    expect(document.querySelector(".notification-rule-card__actions-menu")?.textContent).toContain("複製");
+  });
+
   it("uses the same rule editor for new rules after the empty state", async () => {
     await renderApp("/", signedInState, vi.fn(() => Promise.resolve(createProfile())), vi.fn());
     await openNotificationSettings();
@@ -2676,13 +2760,13 @@ describe("FirebasePhase0App notification settings dialog", () => {
     );
     await openNotificationSettings();
 
-    const ruleButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__main");
-    if (!ruleButton) {
-      throw new Error("notification rule row button was not found");
+    const ruleCard = document.querySelector<HTMLElement>(".notification-rule-card[role='button']");
+    if (!ruleCard) {
+      throw new Error("notification rule card was not found");
     }
 
     await act(async () => {
-      ruleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      ruleCard.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flushPromises();
     });
 
@@ -3251,13 +3335,13 @@ async function openNotificationSettings() {
 }
 
 async function openFirstNotificationRuleForEdit() {
-  const ruleButton = document.querySelector<HTMLButtonElement>(".notification-rule-card__main");
-  if (!ruleButton) {
-    throw new Error("notification rule row button was not found");
+  const ruleCard = document.querySelector<HTMLElement>(".notification-rule-card[role='button']");
+  if (!ruleCard) {
+    throw new Error("notification rule card was not found");
   }
 
   await act(async () => {
-    ruleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    ruleCard.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await flushPromises();
   });
 }

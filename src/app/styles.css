@@ -1296,6 +1296,7 @@ select {
   border-radius: 8px;
   background: var(--app-surface);
   box-shadow: 0 1px 2px var(--app-shadow);
+  cursor: pointer;
   transition:
     border-color 120ms ease,
     background 120ms ease,
@@ -1380,7 +1381,7 @@ select {
   color: inherit;
   text-align: left;
   background: transparent;
-  cursor: pointer;
+  cursor: inherit;
 }
 
 .notification-rule-card__heading {

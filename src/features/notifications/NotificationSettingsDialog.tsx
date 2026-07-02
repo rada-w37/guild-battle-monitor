@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyNotificationTemplate,
   DEFAULT_NOTIFICATION_USERNAME_TEMPLATE,
@@ -107,6 +107,12 @@ interface TemplateFieldTarget {
   readonly field: TemplateFieldName;
   readonly element: TemplateFieldElement;
 }
+interface RuleCardPointerState {
+  readonly ruleId: string;
+  readonly startX: number;
+  readonly startY: number;
+  moved: boolean;
+}
 interface DiscardConfirmationContent {
   readonly title: string;
   readonly message: string;
@@ -153,6 +159,7 @@ export function NotificationSettingsDialog({
   const usernameTemplateInputRef = useRef<HTMLInputElement | null>(null);
   const titleTemplateInputRef = useRef<HTMLInputElement | null>(null);
   const bodyTemplateTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const ruleCardPointerRef = useRef<RuleCardPointerState | null>(null);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -412,6 +419,51 @@ export function NotificationSettingsDialog({
     }
 
     selectRule(rule);
+  }
+
+  function startRuleCardPointerTracking(ruleId: string, event: ReactPointerEvent<HTMLElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      ruleCardPointerRef.current = null;
+      return;
+    }
+
+    ruleCardPointerRef.current = {
+      ruleId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
+  }
+
+  function updateRuleCardPointerTracking(ruleId: string, event: ReactPointerEvent<HTMLElement>) {
+    const pointerState = ruleCardPointerRef.current;
+    if (pointerState === null || pointerState.ruleId !== ruleId) {
+      return;
+    }
+
+    const deltaX = Math.abs(event.clientX - pointerState.startX);
+    const deltaY = Math.abs(event.clientY - pointerState.startY);
+    if (deltaX > 6 || deltaY > 6) {
+      pointerState.moved = true;
+    }
+  }
+
+  function requestSelectRuleFromCard(rule: RuleRecord, event?: ReactKeyboardEvent<HTMLElement>) {
+    if (event !== undefined) {
+      if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
+        return;
+      }
+
+      event.preventDefault();
+    }
+
+    const pointerState = ruleCardPointerRef.current;
+    ruleCardPointerRef.current = null;
+    if (event === undefined && pointerState?.ruleId === rule.id && pointerState.moved) {
+      return;
+    }
+
+    requestSelectRule(rule);
   }
 
   function selectRule(rule: RuleRecord) {
@@ -1023,8 +1075,35 @@ export function NotificationSettingsDialog({
 
                   return (
                     <article
+                      aria-current={isSelectedRule ? "true" : undefined}
+                      aria-label={rule.name}
                       className={isSelectedRule ? "notification-rule-card is-selected" : "notification-rule-card"}
                       key={ruleMenuId}
+                      role={isDraftRule ? undefined : "button"}
+                      tabIndex={isDraftRule ? undefined : 0}
+                      onClick={() => {
+                        if (!isDraftRule) {
+                          requestSelectRuleFromCard(rule);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (!isDraftRule) {
+                          requestSelectRuleFromCard(rule, event);
+                        }
+                      }}
+                      onPointerCancel={() => {
+                        ruleCardPointerRef.current = null;
+                      }}
+                      onPointerDown={(event) => {
+                        if (!isDraftRule) {
+                          startRuleCardPointerTracking(rule.id, event);
+                        }
+                      }}
+                      onPointerMove={(event) => {
+                        if (!isDraftRule) {
+                          updateRuleCardPointerTracking(rule.id, event);
+                        }
+                      }}
                     >
                       <label
                         className="notification-rule-card__enabled-toggle"
@@ -1043,14 +1122,8 @@ export function NotificationSettingsDialog({
                           <span className="notification-rule-card__toggle-thumb" />
                         </span>
                       </label>
-                      <button
+                      <div
                         className="notification-rule-card__main"
-                        type="button"
-                        onClick={() => {
-                          if (!isDraftRule) {
-                            requestSelectRule(rule);
-                          }
-                        }}
                       >
                         <span className="notification-rule-card__heading">
                           <span className="notification-rule-card__title">{rule.name}</span>
@@ -1062,8 +1135,8 @@ export function NotificationSettingsDialog({
                         <span className="notification-rule-card__summary">{createRuleConditionSummary(rule)}</span>
                         {draftStatus !== null ? <span className="notification-rule-card__draft-status">{draftStatus}</span> : null}
                         {pauseStatus !== null ? <span className="notification-rule-card__pause-status">{pauseStatus}</span> : null}
-                      </button>
-                      <div className="notification-rule-card__actions">
+                      </div>
+                      <div className="notification-rule-card__actions" onClick={(event) => event.stopPropagation()}>
                         <button
                           aria-expanded={openRuleMenuId === ruleMenuId}
                           aria-label={`${rule.name}の操作`}
