@@ -1285,7 +1285,7 @@ select {
 
 .notification-rule-card {
   display: grid;
-  grid-template-columns: auto minmax(260px, max-content) auto;
+  grid-template-columns: auto minmax(280px, 1fr) auto;
   gap: 10px;
   align-items: start;
   flex: 0 0 auto;
@@ -1375,7 +1375,7 @@ select {
 .notification-rule-card__main {
   display: grid;
   gap: 4px;
-  min-width: 0;
+  min-width: max-content;
   padding: 0 42px 0 0;
   border: 0;
   color: inherit;
@@ -1385,10 +1385,10 @@ select {
 }
 
 .notification-rule-card__heading {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) max-content;
+  gap: 16px;
   align-items: baseline;
-  justify-content: flex-start;
 }
 
 .notification-rule-card__title {
@@ -1401,6 +1401,7 @@ select {
 
 .notification-rule-card__time {
   flex: 0 0 auto;
+  justify-self: end;
   color: var(--app-text-muted);
   font-size: 0.84rem;
   font-variant-numeric: tabular-nums;
