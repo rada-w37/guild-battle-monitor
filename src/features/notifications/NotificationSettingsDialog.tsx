@@ -1293,13 +1293,10 @@ export function NotificationSettingsDialog({
                   <span>{ruleDraft.detailRuleEnabled ? "ON" : "OFF"}</span>
                 </label>
               </div>
-              {!ruleDraft.detailRuleEnabled ? (
-                <p className="notification-settings-dialog__note">
-                  {"詳細ルールOFF時は時刻だけで通知します。対象拠点・対象ギルド・詳細条件の保存値は保持されます。"}
-                </p>
-              ) : null}
+              {ruleDraft.detailRuleEnabled ? (
+                <>
               <div className="notification-rule-editor__section">
-                <fieldset className="notification-rule-editor__battle-side" aria-label="対象拠点" disabled={!ruleDraft.detailRuleEnabled}>
+                <fieldset className="notification-rule-editor__battle-side" aria-label="対象拠点">
                   <legend className="field__label">対象拠点</legend>
                   <label className="notification-rule-editor__target-guild-radio">
                     <input
@@ -1359,7 +1356,7 @@ export function NotificationSettingsDialog({
                   </>
                 ) : (
                   <>
-                    <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド" disabled={!ruleDraft.detailRuleEnabled}>
+                    <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド">
                       <legend className="field__label">{"対象ギルド"}</legend>
                       <label className="notification-rule-editor__target-guild-radio">
                         <input
@@ -1583,9 +1580,15 @@ export function NotificationSettingsDialog({
                 </button>
               </div>
               </div>
-              {!hasDetailConditionNodes ? (
+                </>
+              ) : null}
+              {!ruleDraft.detailRuleEnabled ? (
                 <div className="notification-rule-editor__condition-warning">
-                  {"\u958b\u59cb\u6642\u523b\u306b\u306a\u3063\u305f\u3089\u901a\u77e5\u3055\u308c\u307e\u3059\u3002"}
+                  {"時刻のみを条件として通知判定します。"}
+                </div>
+              ) : !hasDetailConditionNodes ? (
+                <div className="notification-rule-editor__condition-warning">
+                  {"詳細ルールはONですが、詳細条件が未設定です。この状態では通知は実行されません。"}
                 </div>
               ) : shouldShowNonAttackingTargetWarning ? (
                 <div className="notification-rule-editor__condition-warning">

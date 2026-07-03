@@ -1375,7 +1375,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
 
     expect(document.body.textContent).not.toContain("いずれかの条件ブロックに一致");
-    expect(document.body.textContent).toContain("開始時刻になったら通知されます。");
+    expect(document.body.textContent).toContain("詳細ルールはONですが、詳細条件が未設定です。この状態では通知は実行されません。");
 
     const createButton = getNotificationRuleEditorActionButton("作成");
     await act(async () => {
@@ -2419,6 +2419,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).toContain("通知ルール名");
     expect(document.body.textContent).toContain("開始時刻");
     expect(document.body.textContent).toContain("終了時刻");
+    expect(document.body.textContent).not.toContain("詳細ルールはONですが、詳細条件が未設定です。この状態では通知は実行されません。");
 
     const battleSideRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__battle-side input");
     const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
@@ -2434,7 +2435,6 @@ describe("FirebasePhase0App notification settings dialog", () => {
       targetGuildCheckboxes[0]?.click();
       await flushPromises();
     });
-
     const detailRuleToggle = document.querySelector<HTMLInputElement>(".notification-rule-editor__detail-toggle input");
     if (!detailRuleToggle) {
       throw new Error("detail rule toggle was not found");
@@ -2446,9 +2446,12 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
 
     expect(detailRuleToggle.checked).toBe(false);
-    expect(battleSideRadios[1]?.checked).toBe(true);
-    expect(targetGuildModeRadios[1]?.checked).toBe(true);
-    expect(targetGuildCheckboxes[0]?.checked).toBe(true);
+    expect(document.body.textContent).toContain("時刻のみを条件として通知判定します。");
+    expect(document.body.textContent).not.toContain("詳細ルールOFF時は時刻だけで通知します。対象拠点・対象ギルド・詳細条件の保存値は保持されます。");
+    expect(document.querySelector(".notification-rule-editor__battle-side")).toBeNull();
+    expect(document.querySelector(".notification-rule-editor__target-guilds")).toBeNull();
+    expect(document.querySelector(".notification-rule-editor__condition-tree")).toBeNull();
+    expect(document.querySelector(".notification-rule-editor__condition-actions")).toBeNull();
 
     const variableButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__variables button"));
     for (const disabledVariableName of ["拠点名", "侵攻ギルド", "防衛ギルド", "防衛数", "侵攻数"]) {
@@ -2484,9 +2487,16 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
     expect(detailRuleToggle.checked).toBe(true);
-    expect(battleSideRadios[1]?.checked).toBe(true);
-    expect(targetGuildModeRadios[1]?.checked).toBe(true);
-    expect(targetGuildCheckboxes[0]?.checked).toBe(true);
+    const restoredBattleSideRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__battle-side input");
+    const restoredTargetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
+    const restoredTargetGuildCheckboxes = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input");
+    expect(restoredBattleSideRadios[1]?.checked).toBe(true);
+    expect(restoredTargetGuildModeRadios[1]?.checked).toBe(true);
+    expect(restoredTargetGuildCheckboxes[0]?.checked).toBe(true);
+    expect(document.querySelector(".notification-rule-editor__condition-tree")).not.toBeNull();
+    expect(document.querySelectorAll(".notification-rule-editor__condition-group")).toHaveLength(1);
 
     await act(async () => {
       detailRuleToggle.click();
