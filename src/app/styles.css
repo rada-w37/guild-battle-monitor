@@ -874,6 +874,10 @@ select {
   background: var(--app-surface);
 }
 
+.notification-rule-preview-panel {
+  gap: 10px;
+}
+
 .notification-rule-list,
 .notification-rule-editor {
   display: grid;
@@ -963,6 +967,10 @@ select {
   margin-top: 2px;
 }
 
+.notification-rule-editor > .field__label + .notification-settings-dialog__note {
+  margin-top: 0;
+}
+
 .notification-rule-editor > .notification-settings-dialog__numbered-heading:first-child,
 .notification-rule-preview-panel > .notification-settings-dialog__numbered-heading:first-child {
   margin-top: 0;
@@ -1023,6 +1031,7 @@ select {
 
 .notification-rule-editor__battle-side legend {
   flex: 0 0 100%;
+  margin: 0;
   padding: 0;
 }
 

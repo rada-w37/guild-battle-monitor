@@ -1743,9 +1743,6 @@ export function NotificationSettingsDialog({
                         );
                       })}
                     </div>
-                    {!ruleDraft.detailRuleEnabled ? (
-                      <p className="notification-settings-dialog__note">{DETAIL_RULE_OFF_VARIABLE_DISABLED_REASON}</p>
-                    ) : null}
                   </div>
                   <div className="notification-rule-preview-panel__divider" />
                 </>
