@@ -613,7 +613,7 @@ select {
   border: 1px solid var(--app-border);
   border-radius: 8px;
   color: var(--app-text);
-  background: var(--app-surface);
+  background: color-mix(in srgb, var(--app-surface-muted) 72%, var(--app-surface));
   box-shadow: 0 22px 70px rgba(15, 23, 42, 0.3);
 }
 
@@ -627,7 +627,7 @@ select {
 
 .notification-settings-dialog__body {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
@@ -690,7 +690,7 @@ select {
   padding: 16px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: var(--app-surface-muted);
+  background: color-mix(in srgb, var(--app-surface) 58%, var(--app-surface-muted));
 }
 
 .notification-settings-dialog__destination {
@@ -852,7 +852,7 @@ select {
   gap: 12px;
   align-items: center;
   justify-content: flex-start;
-  padding-bottom: 10px;
+  padding: 0 2px 10px;
   border-bottom: 1px solid var(--app-border);
 }
 
@@ -863,12 +863,12 @@ select {
 
 .notification-rule-workspace__pane {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   min-height: 0;
   max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-surface);
@@ -942,7 +942,7 @@ select {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-size: 0.95rem;
   font-weight: 700;
 }
@@ -959,6 +959,42 @@ select {
   font-size: 0.78rem;
 }
 
+.notification-rule-editor .field__label {
+  margin-top: 2px;
+}
+
+.notification-rule-editor > .notification-settings-dialog__numbered-heading:first-child,
+.notification-rule-preview-panel > .notification-settings-dialog__numbered-heading:first-child {
+  margin-top: 0;
+}
+
+.notification-rule-editor__section-heading-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--app-border);
+}
+
+.notification-rule-editor__section-heading-row .notification-settings-dialog__numbered-heading {
+  margin: 0;
+}
+
+.notification-rule-editor__detail-toggle {
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+  padding: 3px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  color: var(--app-text);
+  background: var(--app-surface-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .field__label-note {
   margin-left: 8px;
   color: var(--app-text-muted);
@@ -966,7 +1002,8 @@ select {
 }
 
 .notification-rule-editor__target-guilds {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
   margin: 0;
@@ -975,7 +1012,8 @@ select {
 }
 
 .notification-rule-editor__battle-side {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
   margin: 12px 0 0;
@@ -983,11 +1021,52 @@ select {
   border: 0;
 }
 
+.notification-rule-editor__battle-side legend {
+  flex: 0 0 100%;
+  padding: 0;
+}
+
 .notification-rule-editor__target-guild-radio,
 .notification-rule-editor__target-guild-checkbox {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.notification-rule-editor__target-guild-radio {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  cursor: pointer;
+  font-weight: 700;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.notification-rule-editor__target-guild-radio:has(input:checked),
+.notification-rule-editor__target-guild-radio[aria-checked="true"] {
+  border-color: color-mix(in srgb, var(--app-primary) 60%, var(--app-border));
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 9%, var(--app-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-primary) 28%, transparent);
+}
+
+.notification-rule-editor__target-guild-radio:hover:has(input:not(:disabled)),
+.notification-rule-editor__target-guild-radio:focus-within:has(input:not(:disabled)) {
+  border-color: color-mix(in srgb, var(--app-primary) 50%, var(--app-border));
+  background: color-mix(in srgb, var(--app-primary) 5%, var(--app-surface));
+}
+
+.notification-rule-editor__target-guild-radio:has(input:disabled),
+.notification-rule-editor__target-guilds:disabled .notification-rule-editor__target-guild-radio,
+.notification-rule-editor__battle-side:disabled .notification-rule-editor__target-guild-radio {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .notification-rule-editor__target-guild-radio input,
@@ -1025,6 +1104,7 @@ select {
 .notification-rule-editor__target-guild-list {
   display: grid;
   gap: 6px;
+  flex: 1 1 100%;
   max-height: 190px;
   min-width: 0;
   overflow-y: auto;
@@ -1036,10 +1116,20 @@ select {
   scrollbar-width: thin;
 }
 
+.notification-rule-editor__target-guild-checkbox {
+  min-height: 30px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.notification-rule-editor__target-guild-checkbox:hover {
+  background: var(--app-surface-muted);
+}
+
 .notification-rule-editor__condition-group {
   display: grid;
   gap: 10px;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--app-border);
   border-left: 4px solid #22c55e;
   border-radius: 8px;
@@ -1057,7 +1147,7 @@ select {
 }
 
 .notification-rule-editor__condition-card {
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--app-border);
   border-left: 4px solid var(--app-primary);
   border-radius: 8px;
@@ -1232,6 +1322,24 @@ select {
   line-height: 1.55;
 }
 
+.notification-rule-editor__condition-row .field__input {
+  min-width: 0;
+}
+
+.notification-rule-editor__condition-warning p,
+.notification-rule-editor__condition-warning ul {
+  margin: 0;
+}
+
+.notification-rule-editor__condition-warning ul {
+  margin-top: 6px;
+  padding-left: 1.3em;
+}
+
+.notification-rule-editor__preview-warning {
+  margin-top: 2px;
+}
+
 .notification-rule-workspace__action-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1239,7 +1347,7 @@ select {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  padding: 10px;
+  padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--app-primary) 34%, var(--app-border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--app-primary) 12%, var(--app-surface));
@@ -1285,12 +1393,12 @@ select {
 
 .notification-rule-card {
   display: grid;
-  grid-template-columns: auto minmax(280px, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
   flex: 0 0 auto;
   min-width: 100%;
-  width: max-content;
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
@@ -1319,9 +1427,16 @@ select {
   position: relative;
   display: inline-flex;
   min-height: 28px;
-  align-items: flex-start;
+  align-items: center;
   padding-top: 2px;
   cursor: pointer;
+}
+
+.notification-rule-editor__action-buttons .notification-rule-footer-save-button:disabled {
+  border-color: var(--app-border-strong);
+  color: var(--app-text-muted);
+  background: var(--app-surface-muted);
+  box-shadow: none;
 }
 
 .notification-rule-card__enabled-toggle input {
@@ -1375,8 +1490,8 @@ select {
 .notification-rule-card__main {
   display: grid;
   gap: 4px;
-  min-width: max-content;
-  padding: 0 42px 0 0;
+  min-width: 0;
+  padding: 0 8px 0 0;
   border: 0;
   color: inherit;
   text-align: left;
@@ -1386,16 +1501,16 @@ select {
 
 .notification-rule-card__heading {
   display: grid;
-  grid-template-columns: minmax(max-content, 1fr) max-content;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 12px;
   align-items: baseline;
 }
 
 .notification-rule-card__title {
-  min-width: max-content;
-  overflow: visible;
+  min-width: 0;
+  overflow: hidden;
   font-weight: 700;
-  text-overflow: clip;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1486,12 +1601,27 @@ select {
 .notification-rule-card__actions-menu button,
 .notification-rule-editor__variables button {
   min-height: 28px;
-  padding: 4px 8px;
+  padding: 5px 9px;
   border: 1px solid var(--app-border-strong);
-  border-radius: 6px;
+  border-radius: 999px;
   color: var(--app-text);
   background: var(--app-surface);
   cursor: pointer;
+}
+
+.notification-rule-editor__variables button:hover:not(:disabled),
+.notification-rule-editor__variables button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--app-primary) 62%, var(--app-border-strong));
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface));
+}
+
+.notification-rule-editor__variables button:disabled {
+  border-color: var(--app-border);
+  color: var(--app-text-muted);
+  background: var(--app-surface-muted);
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .notification-rule-card__actions-menu button {
@@ -1530,6 +1660,10 @@ select {
 .notification-rule-editor__variables-block {
   display: grid;
   gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-muted);
 }
 
 .notification-rule-editor__variables-block h4 {
@@ -1539,7 +1673,7 @@ select {
 
 .notification-rule-preview-panel__divider {
   height: 1px;
-  margin: 4px 0;
+  margin: 6px 0 2px;
   background: var(--app-border);
 }
 
@@ -1548,10 +1682,11 @@ select {
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  padding: 12px;
+  padding: 14px;
   border-radius: 8px;
   color: #e5e7eb;
   background: #313338;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .notification-preview__avatar {
@@ -2707,17 +2842,22 @@ select {
 
   .notification-rule-workspace:not(.is-empty) .notification-rule-workspace__pane {
     gap: 12px;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
+    padding: 14px;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    background: var(--app-surface);
   }
 
-  .notification-rule-editor > .notification-settings-dialog__numbered-heading:not(:first-child),
+  .notification-rule-editor__section-heading-row,
   .notification-rule-workspace:not(.is-empty) .notification-rule-preview-panel {
     padding-top: 18px;
     margin-top: 18px;
     border-top: 1px solid var(--app-border);
+  }
+
+  .notification-rule-editor__section-heading-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .notification-rule-preview-panel {
@@ -2730,6 +2870,16 @@ select {
 
   .notification-rule-editor__conditions {
     grid-template-columns: 1fr;
+  }
+
+  .notification-rule-editor__battle-side,
+  .notification-rule-editor__target-guilds {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .notification-rule-editor__target-guild-radio {
+    width: 100%;
   }
 
   .notification-rule-editor__condition-row {
@@ -2758,6 +2908,23 @@ select {
   .field__input,
   .field__input--wide {
     width: 100%;
+  }
+
+  .notification-rule-editor__variables-block {
+    padding: 10px;
+  }
+
+  .notification-rule-workspace__action-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notification-rule-editor__action-buttons {
+    justify-content: stretch;
+  }
+
+  .notification-rule-editor__action-buttons button {
+    flex: 1 1 140px;
   }
 
   .field__tooltip {

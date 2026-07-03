@@ -1269,28 +1269,30 @@ export function NotificationSettingsDialog({
                   />
                 </label>
               </div>
-              <h4 className="notification-settings-dialog__numbered-heading">
-                <span>2</span>
-                {"詳細ルール"}
-              </h4>
-              <label className="notification-rule-card__enabled-toggle notification-rule-editor__detail-toggle">
-                <input
-                  checked={ruleDraft.detailRuleEnabled}
-                  type="checkbox"
-                  onChange={(event) => {
-                    const detailRuleEnabled = event.target.checked;
-                    setRuleDraft((currentDraft) => {
-                      const nextDraft = { ...currentDraft, detailRuleEnabled };
-                      setRuleError(validateRuleDraft(nextDraft));
-                      return nextDraft;
-                    });
-                  }}
-                />
-                <span className="notification-rule-card__toggle-track" aria-hidden="true">
-                  <span className="notification-rule-card__toggle-thumb" />
-                </span>
-                <span>{ruleDraft.detailRuleEnabled ? "ON" : "OFF"}</span>
-              </label>
+              <div className="notification-rule-editor__section-heading-row">
+                <h4 className="notification-settings-dialog__numbered-heading">
+                  <span>2</span>
+                  {"詳細ルール"}
+                </h4>
+                <label className="notification-rule-card__enabled-toggle notification-rule-editor__detail-toggle">
+                  <input
+                    checked={ruleDraft.detailRuleEnabled}
+                    type="checkbox"
+                    onChange={(event) => {
+                      const detailRuleEnabled = event.target.checked;
+                      setRuleDraft((currentDraft) => {
+                        const nextDraft = { ...currentDraft, detailRuleEnabled };
+                        setRuleError(validateRuleDraft(nextDraft));
+                        return nextDraft;
+                      });
+                    }}
+                  />
+                  <span className="notification-rule-card__toggle-track" aria-hidden="true">
+                    <span className="notification-rule-card__toggle-thumb" />
+                  </span>
+                  <span>{ruleDraft.detailRuleEnabled ? "ON" : "OFF"}</span>
+                </label>
+              </div>
               {!ruleDraft.detailRuleEnabled ? (
                 <p className="notification-settings-dialog__note">
                   {"詳細ルールOFF時は時刻だけで通知します。対象拠点・対象ギルド・詳細条件の保存値は保持されます。"}
@@ -1775,18 +1777,18 @@ export function NotificationSettingsDialog({
                         <p>{previewBody}</p>
                       </div>
                     ) : null}
-                    {detailRuleOffVariableWarning !== null ? (
-                      <div className="notification-rule-editor__condition-warning">
-                        <p>{detailRuleOffVariableWarning.title}</p>
-                        <ul>
-                          {detailRuleOffVariableWarning.variables.map((variableName) => (
-                            <li key={variableName}>{variableName}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
+                {detailRuleOffVariableWarning !== null ? (
+                  <div className="notification-rule-editor__condition-warning notification-rule-editor__preview-warning">
+                    <p>{detailRuleOffVariableWarning.title}</p>
+                    <ul>
+                      {detailRuleOffVariableWarning.variables.map((variableName) => (
+                        <li key={variableName}>{variableName}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
               {error !== null ? <p className="firebase-message firebase-message--error">{error}</p> : null}
             </section>
