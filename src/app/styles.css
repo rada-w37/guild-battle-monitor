@@ -1018,7 +1018,6 @@ select {
 
 .notification-rule-editor__section {
   display: grid;
-  gap: 8px;
   min-width: 0;
 }
 
