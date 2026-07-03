@@ -1665,20 +1665,31 @@ describe("FirebasePhase0App notification settings dialog", () => {
     const usernameHelpButton = document.querySelector<HTMLButtonElement>(
       "button[aria-label='Discord表示名の補足説明']"
     );
+    const repeatHelpButton = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__repeat-heading .field__info-button")
+    ).find((button) => button.getAttribute("aria-label") === "繰り返し通知の補足説明");
     expect(summaryHelpButton).not.toBeNull();
     expect(usernameHelpButton).not.toBeNull();
+    expect(repeatHelpButton).not.toBeNull();
+    expect(document.querySelector(".notification-rule-editor__repeat-section > .notification-settings-dialog__note")).toBeNull();
 
     const summaryTooltipId = summaryHelpButton?.getAttribute("aria-describedby");
     const usernameTooltipId = usernameHelpButton?.getAttribute("aria-describedby");
+    const repeatTooltipId = repeatHelpButton?.getAttribute("aria-describedby");
     expect(summaryTooltipId).toBe("notification-rule-summary-tooltip");
     expect(usernameTooltipId).toBe("notification-rule-username-tooltip");
+    expect(repeatTooltipId).toBe("notification-rule-repeat-tooltip");
     expect(document.getElementById(summaryTooltipId ?? "")?.getAttribute("role")).toBe("tooltip");
     expect(document.getElementById(usernameTooltipId ?? "")?.getAttribute("role")).toBe("tooltip");
+    expect(document.getElementById(repeatTooltipId ?? "")?.getAttribute("role")).toBe("tooltip");
     expect(document.getElementById(summaryTooltipId ?? "")?.textContent).toBe(
       "スマホ通知にも表示される短い要約です。"
     );
     expect(document.getElementById(usernameTooltipId ?? "")?.textContent).toBe(
       "空欄の場合はDiscord側で設定された表示名を使用します。"
+    );
+    expect(document.getElementById(repeatTooltipId ?? "")?.textContent).toBe(
+      "詳細条件が成立している間、指定した間隔ごとに再通知します。"
     );
   });
 

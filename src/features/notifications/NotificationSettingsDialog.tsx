@@ -1272,7 +1272,20 @@ export function NotificationSettingsDialog({
               </div>
               <div className="notification-rule-editor__section notification-rule-editor__repeat-section">
                 <div className="notification-rule-editor__repeat-heading">
-                  <span className="field__label">{"\u7e70\u308a\u8fd4\u3057\u901a\u77e5"}</span>
+                  <span className="field__label-row">
+                    <span className="field__label">{"\u7e70\u308a\u8fd4\u3057\u901a\u77e5"}</span>
+                    <button
+                      className="field__info-button"
+                      type="button"
+                      aria-label="繰り返し通知の補足説明"
+                      aria-describedby="notification-rule-repeat-tooltip"
+                    >
+                      <span aria-hidden="true">i</span>
+                    </button>
+                    <span className="field__tooltip" id="notification-rule-repeat-tooltip" role="tooltip">
+                      {"\u8a73\u7d30\u6761\u4ef6\u304c\u6210\u7acb\u3057\u3066\u3044\u308b\u9593\u3001\u6307\u5b9a\u3057\u305f\u9593\u9694\u3054\u3068\u306b\u518d\u901a\u77e5\u3057\u307e\u3059\u3002"}
+                    </span>
+                  </span>
                   <label className="notification-rule-card__enabled-toggle notification-rule-editor__repeat-toggle">
                     <input
                       aria-label="繰り返し通知"
@@ -1296,11 +1309,6 @@ export function NotificationSettingsDialog({
                     <span>{ruleDraft.detailRuleEnabled && ruleDraft.repeatNotification.enabled ? "ON" : "OFF"}</span>
                   </label>
                 </div>
-                {ruleDraft.detailRuleEnabled ? (
-                  <p className="notification-settings-dialog__note">
-                    {"\u8a73\u7d30\u6761\u4ef6\u304c\u6210\u7acb\u3057\u3066\u3044\u308b\u9593\u3001\u6307\u5b9a\u3057\u305f\u9593\u9694\u3054\u3068\u306b\u518d\u901a\u77e5\u3057\u307e\u3059\u3002"}
-                  </p>
-                ) : null}
                 {ruleDraft.detailRuleEnabled && ruleDraft.repeatNotification.enabled ? (
                   <label className="field notification-rule-editor__repeat-interval">
                     <span className="field__label">{"\u901a\u77e5\u9593\u9694"}</span>
