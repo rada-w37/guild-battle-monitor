@@ -14,7 +14,9 @@ describe("notification rule v2 draft", () => {
       schemaVersion: 2,
       battleType: "guildBattle",
       battleSide: "defense",
+      detailRuleEnabled: true,
       sortOrder: 2,
+      guildFilter: [],
       message: {
         usernameTemplate: "",
         mention: { type: "none" }
@@ -43,6 +45,8 @@ describe("notification rule v2 draft", () => {
     expect(draft).toMatchObject({
       schemaVersion: 2,
       battleSide: "defense",
+      detailRuleEnabled: true,
+      guildFilter: [],
       name: "終盤アラート",
       enabled: false,
       schedule: { startTime: "21:20", endTime: null }

@@ -216,7 +216,6 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
     typeof data.enabled !== "boolean" ||
     typeof data.sortOrder !== "number" ||
     !isPlainObject(data.schedule) ||
-    !Array.isArray(data.targetGuildIds) ||
     !isPlainObject(data.detailConditions) ||
     !isPlainObject(data.message)
   ) {
@@ -231,13 +230,14 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
     name: data.name,
     enabled: data.enabled,
     sortOrder: data.sortOrder,
+    detailRuleEnabled: typeof data.detailRuleEnabled === "boolean" ? data.detailRuleEnabled : true,
     schedule: {
       startTime: typeof data.schedule.startTime === "string" ? data.schedule.startTime : "",
       ...(typeof data.schedule.endTime === "string" || data.schedule.endTime === null
         ? { endTime: data.schedule.endTime }
         : {})
     },
-    targetGuildIds: data.targetGuildIds.filter((guildId): guildId is string => typeof guildId === "string"),
+    guildFilter: createGuildFilter(data),
     detailConditions: createDetailConditionRoot(data.detailConditions),
     message: {
       usernameTemplate: typeof data.message.usernameTemplate === "string" ? data.message.usernameTemplate : "",
@@ -258,6 +258,18 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
 
 function createNotificationBattleSide(data: unknown): NotificationBattleSide {
   return data === "attack" ? "attack" : "defense";
+}
+
+function createGuildFilter(data: Record<string, unknown>): readonly string[] {
+  const source =
+    Array.isArray(data.guildFilter)
+      ? data.guildFilter
+      : Array.isArray(data.attackerGuildIds)
+        ? data.attackerGuildIds
+        : Array.isArray(data.targetGuildIds)
+          ? data.targetGuildIds
+          : [];
+  return source.filter((guildId): guildId is string => typeof guildId === "string");
 }
 
 function createDetailConditionRoot(data: Record<string, unknown>): NotificationRuleV2["detailConditions"] {

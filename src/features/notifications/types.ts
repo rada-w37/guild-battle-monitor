@@ -60,11 +60,12 @@ export interface NotificationRuleV2 {
   readonly name: string;
   readonly enabled: boolean;
   readonly sortOrder: number;
+  readonly detailRuleEnabled: boolean;
   readonly schedule: {
     readonly startTime: string;
     readonly endTime?: string | null;
   };
-  readonly targetGuildIds: readonly string[];
+  readonly guildFilter: readonly string[];
   readonly detailConditions: NotificationDetailConditionRoot;
   readonly message: NotificationRule["message"];
   readonly temporarySuspension?: {
