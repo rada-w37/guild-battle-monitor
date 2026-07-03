@@ -19,11 +19,12 @@ export function createDefaultNotificationRuleV2Draft(
     name: DEFAULT_NOTIFICATION_RULE_V2_NAME,
     enabled: true,
     sortOrder,
+    detailRuleEnabled: true,
     schedule: {
       startTime: "21:00",
       endTime: null
     },
-    targetGuildIds: [],
+    guildFilter: [],
     detailConditions: {
       operator: "OR",
       children: [
@@ -75,11 +76,12 @@ export function createNotificationRuleV2DraftFromLegacy(
     name: rule.name,
     enabled: rule.enabled,
     sortOrder,
+    detailRuleEnabled: true,
     schedule: {
       startTime: rule.conditions.startTime,
       endTime: null
     },
-    targetGuildIds: [],
+    guildFilter: [],
     detailConditions: {
       operator: "OR",
       children: [

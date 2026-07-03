@@ -85,11 +85,12 @@ interface NotificationRuleV2Input {
   readonly name: string;
   readonly enabled: boolean;
   readonly sortOrder: number;
+  readonly detailRuleEnabled: boolean;
   readonly schedule: {
     readonly startTime: string;
     readonly endTime?: string | null;
   };
-  readonly targetGuildIds: readonly string[];
+  readonly guildFilter: readonly string[];
   readonly detailConditions: {
     readonly operator: "OR";
     readonly children: readonly (NotificationDetailConditionInput | NotificationDetailConditionGroupInput)[];
@@ -339,7 +340,7 @@ export async function handleSaveNotificationRuleV2(
   const document = {
     ...payload.rule,
     schedule: { ...payload.rule.schedule },
-    targetGuildIds: [...payload.rule.targetGuildIds],
+    guildFilter: [...payload.rule.guildFilter],
     detailConditions: cloneDetailConditionRoot(payload.rule.detailConditions),
     message: {
       ...payload.rule.message,
@@ -651,8 +652,8 @@ function readNotificationRuleV2Input(data: Record<string, unknown>): Notificatio
     !Number.isSafeInteger(data.sortOrder) ||
     typeof data.sortOrder !== "number" ||
     data.sortOrder < 0 ||
+    (data.detailRuleEnabled !== undefined && typeof data.detailRuleEnabled !== "boolean") ||
     !isPlainObject(data.schedule) ||
-    !Array.isArray(data.targetGuildIds) ||
     !isPlainObject(data.detailConditions) ||
     !isPlainObject(data.message)
   ) {
@@ -666,8 +667,9 @@ function readNotificationRuleV2Input(data: Record<string, unknown>): Notificatio
     name: data.name.trim(),
     enabled: data.enabled,
     sortOrder: data.sortOrder,
+    detailRuleEnabled: data.detailRuleEnabled === undefined ? true : data.detailRuleEnabled,
     schedule: readSchedule(data.schedule),
-    targetGuildIds: readTargetGuildIds(data.targetGuildIds),
+    guildFilter: readGuildFilter(data),
     detailConditions: readDetailConditionRoot(data.detailConditions),
     message: readMessage(data.message),
     ...(data.temporarySuspension === undefined
@@ -696,21 +698,33 @@ function readSchedule(data: Record<string, unknown>): NotificationRuleV2Input["s
   return { startTime: data.startTime, ...(data.endTime === null ? { endTime: null } : {}) };
 }
 
-function readTargetGuildIds(values: readonly unknown[]): readonly string[] {
+function readGuildFilter(data: Record<string, unknown>): readonly string[] {
+  const values =
+    data.guildFilter === undefined
+      ? Array.isArray(data.attackerGuildIds)
+        ? data.attackerGuildIds
+        : Array.isArray(data.targetGuildIds)
+          ? data.targetGuildIds
+          : []
+      : data.guildFilter;
+  if (!Array.isArray(values)) {
+    throw new HttpsError("invalid-argument", "invalid_notification_guild_filter");
+  }
+
   if (values.length > 16) {
-    throw new HttpsError("invalid-argument", "invalid_notification_target_guilds");
+    throw new HttpsError("invalid-argument", "invalid_notification_guild_filter");
   }
 
   const guildIds = values.map((value) => {
     if (typeof value !== "string" || value.trim().length === 0) {
-      throw new HttpsError("invalid-argument", "invalid_notification_target_guilds");
+      throw new HttpsError("invalid-argument", "invalid_notification_guild_filter");
     }
 
     return value.trim();
   });
 
   if (new Set(guildIds).size !== guildIds.length) {
-    throw new HttpsError("invalid-argument", "invalid_notification_target_guilds");
+    throw new HttpsError("invalid-argument", "invalid_notification_guild_filter");
   }
 
   return guildIds;

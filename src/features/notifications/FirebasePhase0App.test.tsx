@@ -1865,7 +1865,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(document.body.textContent).toContain("対象ギルド");
     expect(document.body.textContent).toContain("グランドバトルでは全ギルド固定です。");
     expect(document.body.textContent).toContain("全ギルド");
-    expect(document.body.textContent).toContain("指定ギルドのみ");
+    expect(document.body.textContent).toContain("指定ギルド");
     expect(document.body.textContent).not.toContain("Grand Battleでは対象ギルド指定は使用しません。");
     expect(document.body.textContent).not.toContain("Alpha連盟");
     expect(document.querySelector(".notification-rule-editor__target-guild-list")).toBeNull();
@@ -1911,7 +1911,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       rule: expect.objectContaining({
         schemaVersion: 2,
         battleType: "grandBattle",
-        targetGuildIds: [],
+        guildFilter: [],
         detailConditions: expect.objectContaining({ operator: "OR" })
       })
     });
@@ -2030,7 +2030,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
           id: "grand-rule",
           battleType: "grandBattle",
           name: "Grand Rule",
-          targetGuildIds: ["guild-a"]
+          guildFilter: ["guild-a"]
         })
       ],
       saveNotificationRuleV2,
@@ -2077,7 +2077,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       rule: expect.objectContaining({
         battleType: "grandBattle",
         name: "Grand Rule Edited",
-        targetGuildIds: []
+        guildFilter: []
       })
     });
 
@@ -2128,7 +2128,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
         rule: expect.objectContaining({
           battleType: "grandBattle",
           enabled: false,
-          targetGuildIds: []
+          guildFilter: []
         })
       });
     });
@@ -2185,7 +2185,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       rule: expect.objectContaining({
         battleType: "grandBattle",
         name: "Grand Rule コピー",
-        targetGuildIds: []
+        guildFilter: []
       })
     });
   });
@@ -2252,9 +2252,9 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(battleSideRadios).toHaveLength(2);
     expect(battleSideRadios[0]?.checked).toBe(true);
     expect(battleSideRadios[1]?.checked).toBe(false);
-    expect(document.body.textContent).toContain("通知対象");
-    expect(document.body.textContent).toContain("防衛中の拠点");
-    expect(document.body.textContent).toContain("攻撃中の拠点");
+    expect(document.body.textContent).toContain("対象拠点");
+    expect(document.body.textContent).toContain("防衛拠点");
+    expect(document.body.textContent).toContain("侵攻拠点");
 
     const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
       ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
@@ -2364,10 +2364,165 @@ describe("FirebasePhase0App notification settings dialog", () => {
       guildId: "saved-guild",
       rule: expect.objectContaining({
         battleSide: "defense",
-        targetGuildIds: ["guild-a", "guild-b"]
+        guildFilter: ["guild-a", "guild-b"]
       })
     });
-    expect(saveNotificationRuleV2.mock.calls[0]?.[0].rule).not.toHaveProperty("targetGuildSelectionMode");
+    expect(saveNotificationRuleV2.mock.calls[0]?.[0].rule).not.toHaveProperty("guildFilterSelectionMode");
+    expect(saveNotificationRuleV2.mock.calls[0]?.[0].rule).not.toHaveProperty("targetGuildSide");
+  });
+
+  it("keeps detail rule values and blocks location variables while detail rule is off", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderApp(
+      "/",
+      signedInState,
+      vi.fn(() => Promise.resolve(createProfile())),
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => Promise.resolve({ rules: [] })),
+      saveNotificationRuleV2,
+      true
+    );
+    await openNotificationSettings();
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent).toContain("基本ルール");
+    expect(document.body.textContent).toContain("詳細ルール");
+    expect(document.body.textContent).toContain("通知内容");
+    expect(document.body.textContent).toContain("通知ルール名");
+    expect(document.body.textContent).toContain("開始時刻");
+    expect(document.body.textContent).toContain("終了時刻");
+
+    const battleSideRadios = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__battle-side input");
+    const targetGuildModeRadios = document.querySelectorAll<HTMLInputElement>(
+      ".notification-rule-editor__target-guilds .notification-rule-editor__target-guild-radio input"
+    );
+    await act(async () => {
+      battleSideRadios[1]?.click();
+      targetGuildModeRadios[1]?.click();
+      await flushPromises();
+    });
+    const targetGuildCheckboxes = document.querySelectorAll<HTMLInputElement>(".notification-rule-editor__target-guild-checkbox input");
+    await act(async () => {
+      targetGuildCheckboxes[0]?.click();
+      await flushPromises();
+    });
+
+    const detailRuleToggle = document.querySelector<HTMLInputElement>(".notification-rule-editor__detail-toggle input");
+    if (!detailRuleToggle) {
+      throw new Error("detail rule toggle was not found");
+    }
+
+    await act(async () => {
+      detailRuleToggle.click();
+      await flushPromises();
+    });
+
+    expect(detailRuleToggle.checked).toBe(false);
+    expect(battleSideRadios[1]?.checked).toBe(true);
+    expect(targetGuildModeRadios[1]?.checked).toBe(true);
+    expect(targetGuildCheckboxes[0]?.checked).toBe(true);
+
+    const variableButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor__variables button"));
+    for (const disabledVariableName of ["拠点名", "侵攻ギルド", "防衛ギルド", "防衛数", "侵攻数"]) {
+      const disabledVariableButton = variableButtons.find((button) => button.textContent === disabledVariableName);
+      expect(disabledVariableButton?.disabled).toBe(true);
+      expect(disabledVariableButton?.title).toBe("詳細ルールOFF時は利用できません");
+    }
+    const disabledVariableButton = variableButtons.find((button) => button.textContent === "拠点名");
+    const timeVariableButton = variableButtons.find((button) => button.textContent === "通知時刻");
+    const ruleNameVariableButton = variableButtons.find((button) => button.textContent === "通知ルール名");
+    expect(timeVariableButton?.disabled).toBe(false);
+    expect(ruleNameVariableButton?.disabled).toBe(false);
+    const titleTemplateInputBeforeDisabledClick = document.querySelector<HTMLInputElement>("#notification-rule-title-template");
+    const titleTemplateBeforeDisabledClick = titleTemplateInputBeforeDisabledClick?.value;
+    await act(async () => {
+      disabledVariableButton?.click();
+      await flushPromises();
+    });
+    expect(titleTemplateInputBeforeDisabledClick?.value).toBe(titleTemplateBeforeDisabledClick);
+    expect(document.body.textContent).toContain("⚠ 詳細ルールがOFFのため、以下の変数は利用できません。");
+    expect(document.body.textContent).toContain("{拠点名}");
+    expect(document.body.textContent).toContain("{侵攻ギルド}");
+    const warningVariables = Array.from(document.querySelectorAll<HTMLLIElement>(".notification-rule-editor__condition-warning li")).map(
+      (item) => item.textContent
+    );
+    expect(warningVariables.filter((variableName) => variableName === "{拠点名}")).toHaveLength(1);
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+    expect(createButton.disabled).toBe(true);
+
+    await act(async () => {
+      detailRuleToggle.click();
+      await flushPromises();
+    });
+    expect(detailRuleToggle.checked).toBe(true);
+    expect(battleSideRadios[1]?.checked).toBe(true);
+    expect(targetGuildModeRadios[1]?.checked).toBe(true);
+    expect(targetGuildCheckboxes[0]?.checked).toBe(true);
+
+    await act(async () => {
+      detailRuleToggle.click();
+      await flushPromises();
+    });
+
+    const templateFields = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        ".notification-rule-preview-panel input.field__input--wide, .notification-rule-preview-panel textarea.field__input--wide"
+      )
+    );
+    const [usernameInput, titleInput, bodyTextarea] = templateFields;
+    if (!usernameInput || !titleInput || !bodyTextarea) {
+      throw new Error("notification template fields were not found");
+    }
+
+    await changeTemplateFieldForTest(usernameInput, "");
+    await changeTemplateFieldForTest(titleInput, "通知{通知時刻}");
+    await changeTemplateFieldForTest(bodyTextarea, "ルール{通知ルール名}");
+
+    expect(getNotificationRuleEditorActionButton("作成").disabled).toBe(false);
+    await act(async () => {
+      getNotificationRuleEditorActionButton("作成").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        detailRuleEnabled: false,
+        battleSide: "attack",
+        guildFilter: ["guild-a"],
+        detailConditions: expect.objectContaining({ operator: "OR" })
+      })
+    });
+    expect(saveNotificationRuleV2.mock.calls[0]?.[0].rule).not.toHaveProperty("targetGuildSide");
   });
 
   it("blocks saving when specific target guild mode has no checked guilds", async () => {
@@ -2429,6 +2584,42 @@ describe("FirebasePhase0App notification settings dialog", () => {
 
     expect(saveNotificationRuleV2).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain("対象ギルドを1件以上選択してください。");
+
+    const detailRuleToggle = document.querySelector<HTMLInputElement>(".notification-rule-editor__detail-toggle input");
+    if (!detailRuleToggle) {
+      throw new Error("detail rule toggle was not found");
+    }
+    await act(async () => {
+      detailRuleToggle.click();
+      await flushPromises();
+    });
+
+    const templateFields = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        ".notification-rule-preview-panel input.field__input--wide, .notification-rule-preview-panel textarea.field__input--wide"
+      )
+    );
+    const [usernameInput, titleInput, bodyTextarea] = templateFields;
+    if (!usernameInput || !titleInput || !bodyTextarea) {
+      throw new Error("notification template fields were not found");
+    }
+
+    await changeTemplateFieldForTest(usernameInput, "");
+    await changeTemplateFieldForTest(titleInput, "通知{通知時刻}");
+    await changeTemplateFieldForTest(bodyTextarea, "ルール{通知ルール名}");
+
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        detailRuleEnabled: false,
+        guildFilter: []
+      })
+    });
   });
 
   it("restores selected target guilds and keeps out-of-candidate ids visible", async () => {
@@ -2450,7 +2641,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       undefined,
       vi.fn(() =>
         Promise.resolve({
-          rules: [createNotificationRuleV2({ id: "v2-rule", name: "指定通知", targetGuildIds: ["guild-a", "guild-z"] })]
+          rules: [createNotificationRuleV2({ id: "v2-rule", name: "指定通知", guildFilter: ["guild-a", "guild-z"] })]
         })
       ),
       undefined,
@@ -2555,7 +2746,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
       rule: expect.objectContaining({
         schemaVersion: 2,
         battleSide: "attack",
-        targetGuildIds: [],
+        guildFilter: [],
         detailConditions: expect.objectContaining({ operator: "OR" })
       })
     });
@@ -2678,7 +2869,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     expect(saveNotificationRuleV2).toHaveBeenCalledWith({
       guildId: "saved-guild",
       rule: expect.objectContaining({
-        targetGuildIds: ["guild-a", "guild-b"]
+        guildFilter: ["guild-a", "guild-b"]
       })
     });
   });
@@ -3554,11 +3745,12 @@ function createNotificationRuleV2(overrides: Partial<NotificationRuleV2> = {}): 
     name: "見落とし防止",
     enabled: true,
     sortOrder: 0,
+    detailRuleEnabled: true,
     schedule: {
       startTime: "21:00",
       endTime: null
     },
-    targetGuildIds: [],
+    guildFilter: [],
     detailConditions: {
       operator: "OR",
       children: [
@@ -3667,6 +3859,18 @@ function createGvgSnapshotWithGuilds(): GvgSnapshot {
   };
 }
 
+async function changeTemplateFieldForTest(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+      "value"
+    )?.set;
+    valueSetter?.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    await flushPromises();
+  });
+}
 
 async function flushPromises() {
   await Promise.resolve();

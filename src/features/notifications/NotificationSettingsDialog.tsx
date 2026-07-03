@@ -59,6 +59,14 @@ const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
 const CONDITION_DROP_HYSTERESIS_PX = 10;
 const DRAG_HANDLE_LABEL = "\u22ee\u22ee";
 const DRAG_HANDLE_ARIA_LABEL = "\u4e26\u3079\u66ff\u3048";
+const DETAIL_RULE_OFF_DISABLED_VARIABLES = [
+  "{拠点名}",
+  "{侵攻ギルド}",
+  "{防衛ギルド}",
+  "{防衛数}",
+  "{侵攻数}"
+] as const;
+const DETAIL_RULE_OFF_VARIABLE_DISABLED_REASON = "詳細ルールOFF時は利用できません";
 
 interface NotificationSettingsDialogProps {
   readonly request: NotificationSettingsRequest;
@@ -79,7 +87,7 @@ interface NotificationSettingsDialogProps {
 
 interface RuleDraft extends NotificationRuleV2Draft {
   readonly id?: string;
-  readonly targetGuildSelectionMode: "all" | "specific";
+  readonly guildFilterSelectionMode: "all" | "specific";
 }
 
 interface RuleRecord extends RuleDraft {
@@ -265,6 +273,11 @@ export function NotificationSettingsDialog({
   const previewContentLines = previewMention.length > 0 ? [previewMention, previewTitle] : [previewTitle];
   const shouldShowPreviewBody = previewBody.trim().length > 0;
   const shouldShowNonAttackingTargetWarning = hasNonAttackingTargetWarning(ruleDraft.detailConditions);
+  const detailRuleOffForbiddenVariables = collectDetailRuleOffForbiddenVariables(ruleDraft);
+  const detailRuleOffVariableWarning =
+    !ruleDraft.detailRuleEnabled && detailRuleOffForbiddenVariables.length > 0
+      ? createDetailRuleOffVariableWarning(detailRuleOffForbiddenVariables)
+      : null;
   const hasDetailConditionNodes = ruleDraft.detailConditions.children.length > 0;
   const isGrandBattleRuleDraft = ruleDraft.battleType === "grandBattle";
   const isRuleEditorVisible = ruleEditorMode !== "empty";
@@ -282,8 +295,8 @@ export function NotificationSettingsDialog({
       ? null
       : createDiscardConfirmationContent(pendingDiscardAction, ruleEditorMode, pendingDiscardTargetRule);
   const targetGuildOptions = useMemo(
-    () => createTargetGuildOptions(targetGuildCandidates, ruleDraft.targetGuildIds),
-    [ruleDraft.targetGuildIds, targetGuildCandidates]
+    () => createTargetGuildOptions(targetGuildCandidates, ruleDraft.guildFilter),
+    [ruleDraft.guildFilter, targetGuildCandidates]
   );
 
   useEffect(() => {
@@ -794,6 +807,10 @@ export function NotificationSettingsDialog({
   }
 
   function insertVariable(variableName: string) {
+    if (isTemplateVariableDisabled(ruleDraft, variableName)) {
+      return;
+    }
+
     const target = getFocusedTemplateTarget();
     if (target === null) {
       return;
@@ -1204,7 +1221,7 @@ export function NotificationSettingsDialog({
                 <>
               <h4 className="notification-settings-dialog__numbered-heading">
                 <span>1</span>
-                基本設定
+                基本ルール
               </h4>
               <label className="field">
                 <span className="field__label">通知ルール名</span>
@@ -1252,8 +1269,35 @@ export function NotificationSettingsDialog({
                   />
                 </label>
               </div>
-              <fieldset className="notification-rule-editor__battle-side" aria-label="通知対象">
-                <legend className="field__label">通知対象</legend>
+              <h4 className="notification-settings-dialog__numbered-heading">
+                <span>2</span>
+                {"詳細ルール"}
+              </h4>
+              <label className="notification-rule-card__enabled-toggle notification-rule-editor__detail-toggle">
+                <input
+                  checked={ruleDraft.detailRuleEnabled}
+                  type="checkbox"
+                  onChange={(event) => {
+                    const detailRuleEnabled = event.target.checked;
+                    setRuleDraft((currentDraft) => {
+                      const nextDraft = { ...currentDraft, detailRuleEnabled };
+                      setRuleError(validateRuleDraft(nextDraft));
+                      return nextDraft;
+                    });
+                  }}
+                />
+                <span className="notification-rule-card__toggle-track" aria-hidden="true">
+                  <span className="notification-rule-card__toggle-thumb" />
+                </span>
+                <span>{ruleDraft.detailRuleEnabled ? "ON" : "OFF"}</span>
+              </label>
+              {!ruleDraft.detailRuleEnabled ? (
+                <p className="notification-settings-dialog__note">
+                  {"詳細ルールOFF時は時刻だけで通知します。対象拠点・対象ギルド・詳細条件の保存値は保持されます。"}
+                </p>
+              ) : null}
+              <fieldset className="notification-rule-editor__battle-side" aria-label="対象拠点" disabled={!ruleDraft.detailRuleEnabled}>
+                <legend className="field__label">対象拠点</legend>
                 <label className="notification-rule-editor__target-guild-radio">
                   <input
                     checked={ruleDraft.battleSide === "defense"}
@@ -1266,7 +1310,7 @@ export function NotificationSettingsDialog({
                       }))
                     }
                   />
-                  防衛中の拠点
+                  防衛拠点
                 </label>
                 <label className="notification-rule-editor__target-guild-radio">
                   <input
@@ -1280,14 +1324,10 @@ export function NotificationSettingsDialog({
                       }))
                     }
                   />
-                  攻撃中の拠点
+                  侵攻拠点
                 </label>
               </fieldset>
-
-              <h4 className="notification-settings-dialog__numbered-heading">
-                <span>2</span>
-                {"\u5bfe\u8c61\u30ae\u30eb\u30c9"}
-              </h4>
+              <h5 className="field__label">{"対象ギルド"}</h5>
               {isGrandBattleRuleDraft ? (
                 <>
                   <p className="notification-settings-dialog__note">{"\u30b0\u30e9\u30f3\u30c9\u30d0\u30c8\u30eb\u3067\u306f\u5168\u30ae\u30eb\u30c9\u56fa\u5b9a\u3067\u3059\u3002"}</p>
@@ -1308,23 +1348,23 @@ export function NotificationSettingsDialog({
                       aria-checked="false"
                     >
                       <span className="notification-rule-editor__readonly-radio" aria-hidden="true" />
-                      {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
+                      {"\u6307\u5b9a\u30ae\u30eb\u30c9"}
                     </div>
                   </fieldset>
                 </>
               ) : (
                 <>
-                  <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド">
+                  <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド" disabled={!ruleDraft.detailRuleEnabled}>
                     <label className="notification-rule-editor__target-guild-radio">
                       <input
-                        checked={ruleDraft.targetGuildSelectionMode === "all"}
+                        checked={ruleDraft.guildFilterSelectionMode === "all"}
                         type="radio"
                         name="notification-target-guild-mode"
                         onChange={() =>
                           setRuleDraft((currentDraft) => ({
                             ...currentDraft,
-                            targetGuildSelectionMode: "all",
-                            targetGuildIds: []
+                            guildFilterSelectionMode: "all",
+                            guildFilter: []
                           }))
                         }
                       />
@@ -1332,20 +1372,20 @@ export function NotificationSettingsDialog({
                     </label>
                     <label className="notification-rule-editor__target-guild-radio">
                       <input
-                        checked={ruleDraft.targetGuildSelectionMode === "specific"}
-                        disabled={targetGuildWorld === null && ruleDraft.targetGuildIds.length === 0}
+                        checked={ruleDraft.guildFilterSelectionMode === "specific"}
+                        disabled={targetGuildWorld === null && ruleDraft.guildFilter.length === 0}
                         type="radio"
                         name="notification-target-guild-mode"
                         onChange={() =>
                           setRuleDraft((currentDraft) => ({
                             ...currentDraft,
-                            targetGuildSelectionMode: "specific"
+                            guildFilterSelectionMode: "specific"
                           }))
                         }
                       />
-                      {"\u6307\u5b9a\u30ae\u30eb\u30c9\u306e\u307f"}
+                      {"\u6307\u5b9a\u30ae\u30eb\u30c9"}
                     </label>
-                    {ruleDraft.targetGuildSelectionMode === "specific" ? (
+                    {ruleDraft.guildFilterSelectionMode === "specific" ? (
                       <div className="notification-rule-editor__target-guild-list">
                         {targetGuildOptions.length === 0 ? (
                           <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
@@ -1353,15 +1393,15 @@ export function NotificationSettingsDialog({
                           targetGuildOptions.map((candidate) => (
                             <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
                               <input
-                                checked={ruleDraft.targetGuildIds.includes(candidate.guildId)}
+                                checked={ruleDraft.guildFilter.includes(candidate.guildId)}
                                 type="checkbox"
                                 onChange={(event) => {
                                   const isChecked = event.target.checked;
                                   setRuleDraft((currentDraft) => ({
                                     ...currentDraft,
-                                    targetGuildIds: isChecked
-                                      ? addTargetGuildId(currentDraft.targetGuildIds, candidate.guildId)
-                                      : currentDraft.targetGuildIds.filter((guildId) => guildId !== candidate.guildId)
+                                    guildFilter: isChecked
+                                      ? addGuildFilterId(currentDraft.guildFilter, candidate.guildId)
+                                      : currentDraft.guildFilter.filter((guildId) => guildId !== candidate.guildId)
                                   }));
                                 }}
                               />
@@ -1384,11 +1424,7 @@ export function NotificationSettingsDialog({
                   ) : null}
                 </>
               )}
-
-              <h4 className="notification-settings-dialog__numbered-heading">
-                <span>3</span>
-                {"\u8a73\u7d30\u6761\u4ef6"}
-              </h4>
+              <h5 className="field__label">{"詳細条件"}</h5>
               {hasDetailConditionNodes ? (
                 <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
               ) : null}
@@ -1558,8 +1594,8 @@ export function NotificationSettingsDialog({
             <section className="notification-rule-workspace__pane notification-rule-preview-panel">
                 <>
                   <h3 className="notification-settings-dialog__numbered-heading">
-                    <span>4</span>
-                    {"Discord\u901a\u77e5\u5185\u5bb9"}
+                    <span>3</span>
+                    {"通知内容"}
                   </h3>
                   <div className="field">
                     <span className="field__label-row">
@@ -1591,6 +1627,7 @@ export function NotificationSettingsDialog({
                           message: { ...currentDraft.message, usernameTemplate }
                         }));
                       }}
+                      onBlur={() => setRuleError(validateRuleDraft(ruleDraft))}
                     />
                   </div>
                   <label className="field">
@@ -1666,6 +1703,7 @@ export function NotificationSettingsDialog({
                           message: { ...currentDraft.message, titleTemplate }
                         }));
                       }}
+                      onBlur={() => setRuleError(validateRuleDraft(ruleDraft))}
                     />
                   </div>
                   <label className="field">
@@ -1681,29 +1719,35 @@ export function NotificationSettingsDialog({
                           message: { ...currentDraft.message, bodyTemplate }
                         }));
                       }}
+                      onBlur={() => setRuleError(validateRuleDraft(ruleDraft))}
                     />
                   </label>
                   <div className="notification-rule-editor__variables-block">
                     <h4>{"\u5229\u7528\u3067\u304d\u308b\u5909\u6570"}</h4>
                     <div className="notification-rule-editor__variables" aria-label="利用できる変数">
-                      {NOTIFICATION_TEMPLATE_VARIABLES.map((variableName) => (
-                        <button
-                          key={variableName}
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => insertVariable(variableName)}
-                        >
-                          {createTemplateVariableLabel(variableName)}
-                        </button>
-                      ))}
+                      {NOTIFICATION_TEMPLATE_VARIABLES.map((variableName) => {
+                        const isDisabled = isTemplateVariableDisabled(ruleDraft, variableName);
+                        return (
+                          <button
+                            key={variableName}
+                            type="button"
+                            disabled={isDisabled}
+                            title={isDisabled ? DETAIL_RULE_OFF_VARIABLE_DISABLED_REASON : undefined}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => insertVariable(variableName)}
+                          >
+                            {createTemplateVariableLabel(variableName)}
+                          </button>
+                        );
+                      })}
                     </div>
+                    {!ruleDraft.detailRuleEnabled ? (
+                      <p className="notification-settings-dialog__note">{DETAIL_RULE_OFF_VARIABLE_DISABLED_REASON}</p>
+                    ) : null}
                   </div>
                   <div className="notification-rule-preview-panel__divider" />
                 </>
-              <h3 className="notification-settings-dialog__numbered-heading">
-                <span>5</span>
-                通知プレビュー
-              </h3>
+              <h4 className="field__label">通知プレビュー</h4>
                 <div className="notification-preview">
                   <div className="notification-preview__avatar" aria-hidden="true">
                     <svg className="notification-preview__avatar-icon" viewBox="0 0 24 24" focusable="false">
@@ -1731,6 +1775,16 @@ export function NotificationSettingsDialog({
                         <p>{previewBody}</p>
                       </div>
                     ) : null}
+                    {detailRuleOffVariableWarning !== null ? (
+                      <div className="notification-rule-editor__condition-warning">
+                        <p>{detailRuleOffVariableWarning.title}</p>
+                        <ul>
+                          {detailRuleOffVariableWarning.variables.map((variableName) => (
+                            <li key={variableName}>{variableName}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               {message !== null ? <p className="firebase-message firebase-message--success">{message}</p> : null}
@@ -1756,7 +1810,7 @@ export function NotificationSettingsDialog({
                     </button>
                     <button
                       className="load-form__button notification-rule-footer-save-button"
-                      disabled={status !== "idle"}
+                      disabled={status !== "idle" || detailRuleOffVariableWarning !== null}
                       type="button"
                       onClick={() => void saveRule()}
                     >
@@ -1808,7 +1862,7 @@ export function NotificationSettingsDialog({
 function createDefaultRuleDraft(battleType: NotificationBattleType): RuleDraft {
   return {
     ...createDefaultNotificationRuleV2Draft(battleType, 0),
-    targetGuildSelectionMode: "all"
+    guildFilterSelectionMode: "all"
   };
 }
 
@@ -1823,7 +1877,7 @@ function createRuleRecordFromLegacy(rule: NotificationRule): RuleRecord {
   return {
     id: rule.id,
     ...createNotificationRuleV2DraftFromLegacy(rule, 0),
-    targetGuildSelectionMode: "all"
+    guildFilterSelectionMode: "all"
   };
 }
 
@@ -1835,8 +1889,8 @@ function createRuleRecordFromV2(rule: NotificationRuleV2): RuleRecord {
       mention: { ...rule.message.mention }
     },
     schedule: { ...rule.schedule },
-    targetGuildIds: [...rule.targetGuildIds],
-    targetGuildSelectionMode: rule.targetGuildIds.length > 0 ? "specific" : "all",
+    guildFilter: [...rule.guildFilter],
+    guildFilterSelectionMode: rule.guildFilter.length > 0 ? "specific" : "all",
     detailConditions: normalizeDetailConditionRoot(rule.detailConditions)
   };
 }
@@ -1862,22 +1916,22 @@ function createRuleDraft(rule: RuleRecord): RuleDraft {
       mention: { ...rule.message.mention }
     },
     schedule: { ...rule.schedule },
-    targetGuildIds: [...rule.targetGuildIds],
-    targetGuildSelectionMode: rule.targetGuildSelectionMode,
+    guildFilter: [...rule.guildFilter],
+    guildFilterSelectionMode: rule.guildFilterSelectionMode,
     detailConditions: normalizeDetailConditionRoot(rule.detailConditions)
   };
 }
 
 function toLegacyRuleInput(ruleDraft: RuleDraft) {
-  const { targetGuildSelectionMode: _targetGuildSelectionMode, ...draft } = ruleDraft;
+  const { guildFilterSelectionMode: _guildFilterSelectionMode, ...draft } = ruleDraft;
   return createLegacyNotificationRuleInputFromV2Draft(draft);
 }
 
 function toRuleV2Input(ruleDraft: RuleDraft): NotificationRuleV2Input {
-  const { id: _id, targetGuildSelectionMode: _targetGuildSelectionMode, ...input } = ruleDraft;
+  const { id: _id, guildFilterSelectionMode: _guildFilterSelectionMode, ...input } = ruleDraft;
   return {
     ...input,
-    targetGuildIds: input.battleType === "grandBattle" ? [] : input.targetGuildIds,
+    guildFilter: input.battleType === "grandBattle" ? [] : input.guildFilter,
     detailConditions: normalizeDetailConditionRoot(input.detailConditions)
   };
 }
@@ -1909,8 +1963,8 @@ function serializeRuleDraft(ruleDraft: RuleDraft): string {
   return JSON.stringify(ruleDraft);
 }
 
-function addTargetGuildId(targetGuildIds: readonly string[], targetGuildId: string): readonly string[] {
-  return targetGuildIds.includes(targetGuildId) ? targetGuildIds : [...targetGuildIds, targetGuildId];
+function addGuildFilterId(guildFilter: readonly string[], guildId: string): readonly string[] {
+  return guildFilter.includes(guildId) ? guildFilter : [...guildFilter, guildId];
 }
 
 function createTargetGuildOptions(
@@ -2343,6 +2397,33 @@ function createDestinationDraft(destination: NotificationDestination | undefined
   };
 }
 
+function isTemplateVariableDisabled(ruleDraft: RuleDraft, variableName: string): boolean {
+  return !ruleDraft.detailRuleEnabled && DETAIL_RULE_OFF_DISABLED_VARIABLES.includes(variableName as (typeof DETAIL_RULE_OFF_DISABLED_VARIABLES)[number]);
+}
+
+function collectDetailRuleOffForbiddenVariables(ruleDraft: RuleDraft): readonly string[] {
+  if (ruleDraft.detailRuleEnabled) {
+    return [];
+  }
+
+  const templateText = [
+    ruleDraft.message.usernameTemplate,
+    ruleDraft.message.titleTemplate,
+    ruleDraft.message.bodyTemplate
+  ].join("\n");
+  return DETAIL_RULE_OFF_DISABLED_VARIABLES.filter((variableName) => templateText.includes(variableName));
+}
+
+function createDetailRuleOffVariableWarning(variables: readonly string[]): {
+  readonly title: string;
+  readonly variables: readonly string[];
+} {
+  return {
+    title: "⚠ 詳細ルールがOFFのため、以下の変数は利用できません。",
+    variables
+  };
+}
+
 function validateRuleDraft(ruleDraft: RuleDraft): string | null {
   if (ruleDraft.name.trim().length === 0) {
     return "通知ルール名を入力してください。";
@@ -2360,12 +2441,14 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
     return "終了時刻はHH:mm形式で入力してください。";
   }
 
-  if (ruleDraft.battleType === "guildBattle" && ruleDraft.targetGuildSelectionMode === "specific" && ruleDraft.targetGuildIds.length === 0) {
-    return "対象ギルドを1件以上選択してください。";
-  }
+  if (ruleDraft.detailRuleEnabled) {
+    if (ruleDraft.battleType === "guildBattle" && ruleDraft.guildFilterSelectionMode === "specific" && ruleDraft.guildFilter.length === 0) {
+      return "対象ギルドを1件以上選択してください。";
+    }
 
-  if (!isValidDetailConditionRoot(ruleDraft.detailConditions)) {
-    return "\u8a73\u7d30\u6761\u4ef6\u306f0\u4ee5\u4e0a\u306e\u6574\u6570\u3067\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
+    if (!isValidDetailConditionRoot(ruleDraft.detailConditions)) {
+      return "\u8a73\u7d30\u6761\u4ef6\u306f0\u4ee5\u4e0a\u306e\u6574\u6570\u3067\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
+    }
   }
 
   if (ruleDraft.message.titleTemplate.trim().length === 0) {
@@ -2381,6 +2464,11 @@ function validateRuleDraft(ruleDraft: RuleDraft): string | null {
     (ruleDraft.message.mention.customText ?? "").trim().length === 0
   ) {
     return "カスタムメンションを入力してください。";
+  }
+
+  const forbiddenVariables = collectDetailRuleOffForbiddenVariables(ruleDraft);
+  if (forbiddenVariables.length > 0) {
+    return createDetailRuleOffVariableWarning(forbiddenVariables).title;
   }
 
   return null;

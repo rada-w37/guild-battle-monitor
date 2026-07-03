@@ -312,9 +312,10 @@ describe("notification dispatch trigger", () => {
       createDependencies(firestore, { discordPosts })
     );
 
+    const discordPayload = discordPosts[0].payload as { readonly content: string };
     expect(Array.from(expectedSummary)).toHaveLength(120);
-    expect(discordPosts[0].payload.content).toBe(`<@123>\n${expectedSummary}`);
-    expect(discordPosts[0].payload.content).not.toContain("�");
+    expect(discordPayload.content).toBe(`<@123>\n${expectedSummary}`);
+    expect(discordPayload.content).not.toContain("�");
     expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
       status: "sent"
     });

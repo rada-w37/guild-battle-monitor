@@ -66,7 +66,7 @@ describe("notification settings callables", () => {
       "guildShares/guild-1": createShare(),
       "guildShares/guild-1/notificationRules/legacy-rule": createRule({ name: "Legacy Rule" }),
       "guildShares/guild-1/notificationRules/v2-rule": {
-        ...createRuleV2Input({ name: "V2 Rule", targetGuildIds: ["guild-a"] }),
+        ...createRuleV2Input({ name: "V2 Rule", guildFilter: ["guild-a"] }),
         createdAt: "created-at",
         createdByRole: "guildOwner",
         updatedAt: "updated-at"
@@ -86,7 +86,7 @@ describe("notification settings callables", () => {
           schemaVersion: 2,
           battleSide: "defense",
           name: "V2 Rule",
-          targetGuildIds: ["guild-a"]
+          guildFilter: ["guild-a"]
         }
       ],
       destination: {
@@ -227,7 +227,7 @@ describe("notification settings callables", () => {
         {
           guildId: "guild-1",
           rule: createRuleV2Input({
-            targetGuildIds: ["guild-a"],
+            guildFilter: ["guild-a"],
             sortOrder: 3
           })
         },
@@ -238,8 +238,9 @@ describe("notification settings callables", () => {
       id: "generated-rule",
       schemaVersion: 2,
       battleSide: "defense",
+      detailRuleEnabled: true,
       sortOrder: 3,
-      targetGuildIds: ["guild-a"],
+      guildFilter: ["guild-a"],
       createdByRole: "guildOwner",
       createdAt: "now-1",
       updatedAt: "now-1"
@@ -251,8 +252,9 @@ describe("notification settings callables", () => {
         data: expect.objectContaining({
           schemaVersion: 2,
           battleSide: "defense",
+          detailRuleEnabled: true,
           sortOrder: 3,
-          targetGuildIds: ["guild-a"],
+          guildFilter: ["guild-a"],
           createdAt: "now-1",
           createdByRole: "guildOwner",
           updatedAt: "now-1"
@@ -363,6 +365,67 @@ describe("notification settings callables", () => {
         operator: "OR",
         children: []
       }
+    });
+  });
+
+  it("defaults missing detailRuleEnabled to true when reading existing rules", async () => {
+    const ruleWithoutDetailToggle: Record<string, unknown> = { ...createRuleV2Input({ name: "Old V2 Rule" }) };
+    delete ruleWithoutDetailToggle.detailRuleEnabled;
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/v2-rule": ruleWithoutDetailToggle
+    });
+
+    await expect(
+      handleGetNotificationSettingsV2({ guildId: "guild-1" }, { authUid: "owner-uid" }, createDependencies(firestore))
+    ).resolves.toMatchObject({
+      rules: [
+        {
+          id: "v2-rule",
+          detailRuleEnabled: true
+        }
+      ]
+    });
+  });
+
+  it("reads legacy attackerGuildIds into guildFilter when guildFilter is missing", async () => {
+    const legacyRule: Record<string, unknown> = { ...createRuleV2Input({ name: "Old V2 Rule" }) };
+    delete legacyRule.guildFilter;
+    legacyRule.attackerGuildIds = ["guild-a", "guild-b"];
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/v2-rule": legacyRule
+    });
+
+    await expect(
+      handleGetNotificationSettingsV2({ guildId: "guild-1" }, { authUid: "owner-uid" }, createDependencies(firestore))
+    ).resolves.toMatchObject({
+      rules: [
+        {
+          id: "v2-rule",
+          guildFilter: ["guild-a", "guild-b"]
+        }
+      ]
+    });
+  });
+
+  it("defaults missing guildFilter to an empty list when no legacy guild ids exist", async () => {
+    const ruleWithoutGuildFilter: Record<string, unknown> = { ...createRuleV2Input({ name: "Old V2 Rule" }) };
+    delete ruleWithoutGuildFilter.guildFilter;
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/v2-rule": ruleWithoutGuildFilter
+    });
+
+    await expect(
+      handleGetNotificationSettingsV2({ guildId: "guild-1" }, { authUid: "owner-uid" }, createDependencies(firestore))
+    ).resolves.toMatchObject({
+      rules: [
+        {
+          id: "v2-rule",
+          guildFilter: []
+        }
+      ]
     });
   });
 
@@ -480,6 +543,29 @@ describe("notification settings callables", () => {
         battleSide: "both"
       })
     ).toThrow();
+  });
+
+  it("rejects invalid v2 guildFilter values", () => {
+    expect(() =>
+      validateNotificationRuleV2Input({
+        ...createRuleV2Input(),
+        guildFilter: ["guild-a", ""]
+      })
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+
+    expect(() =>
+      validateNotificationRuleV2Input({
+        ...createRuleV2Input(),
+        guildFilter: ["guild-a", "guild-a"]
+      })
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+
+    expect(() =>
+      validateNotificationRuleV2Input({
+        ...createRuleV2Input(),
+        guildFilter: "guild-a"
+      } as Record<string, unknown>)
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
   });
 
   it("allows an empty webhook URL only when destination is disabled", async () => {
@@ -669,7 +755,6 @@ function createShare() {
     guestAccessKey: "g_viewer"
   };
 }
-
 function createRule(overrides: Record<string, unknown> = {}) {
   return {
     ...createRuleInput(),
@@ -679,7 +764,6 @@ function createRule(overrides: Record<string, unknown> = {}) {
     ...overrides
   };
 }
-
 function createRuleInput() {
   return {
     battleType: "guildBattle",
@@ -703,9 +787,10 @@ function createRuleV2Input(
   overrides: {
     readonly name?: string;
     readonly battleSide?: "defense" | "attack";
+    readonly detailRuleEnabled?: boolean;
     readonly sortOrder?: number;
     readonly schedule?: { readonly startTime: string; readonly endTime?: string | null };
-    readonly targetGuildIds?: readonly string[];
+    readonly guildFilter?: readonly string[];
     readonly mention?: { readonly type: string; readonly customText?: string };
     readonly usernameTemplate?: string;
     readonly titleTemplate?: string;
@@ -718,6 +803,7 @@ function createRuleV2Input(
     schemaVersion: 2,
     battleType: "guildBattle",
     battleSide: overrides.battleSide ?? "defense",
+    detailRuleEnabled: overrides.detailRuleEnabled ?? true,
     name: overrides.name ?? "\u898b\u843d\u3068\u3057\u9632\u6b62",
     enabled: true,
     sortOrder: overrides.sortOrder ?? 0,
@@ -725,7 +811,7 @@ function createRuleV2Input(
       startTime: overrides.schedule?.startTime ?? "21:00",
       endTime: overrides.schedule?.endTime ?? null
     },
-    targetGuildIds: overrides.targetGuildIds ?? [],
+    guildFilter: overrides.guildFilter ?? [],
     detailConditions: overrides.detailConditions ?? {
       operator: "OR",
       children: [
