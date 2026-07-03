@@ -291,6 +291,7 @@ select {
 .notification-settings-dialog__tab:focus-visible,
 .notification-settings-dialog__confirm-actions button:focus-visible,
 .notification-rule-card:focus-visible,
+.notification-rule-card__actions-trigger:focus-visible,
 .connection-indicator:focus-visible,
 .test-mode-actions button:focus-visible,
 .field__input:focus-visible {
@@ -1042,6 +1043,11 @@ select {
   align-items: center;
 }
 
+.notification-rule-editor__repeat-interval-control .field__input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .notification-rule-editor__target-guilds {
   display: flex;
   flex-wrap: wrap;
@@ -1229,6 +1235,20 @@ select {
   background: var(--app-surface);
   cursor: pointer;
   font-weight: 700;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.notification-rule-editor__condition-group-header button:not(.notification-rule-editor__drag-handle):hover,
+.notification-rule-editor__condition-group-header button:not(.notification-rule-editor__drag-handle):focus-visible,
+.notification-rule-editor__condition-actions button:hover,
+.notification-rule-editor__condition-actions button:focus-visible {
+  border-color: color-mix(in srgb, var(--app-primary) 58%, var(--app-border-strong));
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface));
 }
 
 .notification-rule-editor__drag-handle {
@@ -1353,6 +1373,17 @@ select {
   background: var(--app-surface);
   cursor: pointer;
   font-weight: 700;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.notification-rule-editor__condition-row button:not(.notification-rule-editor__drag-handle):hover,
+.notification-rule-editor__condition-row button:not(.notification-rule-editor__drag-handle):focus-visible {
+  border-color: color-mix(in srgb, var(--app-primary) 58%, var(--app-border-strong));
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface));
 }
 
 .notification-rule-editor__condition-warning {
@@ -1366,6 +1397,10 @@ select {
 }
 
 .notification-rule-editor__condition-row .field__input {
+  min-width: 0;
+}
+
+.notification-rule-editor__condition-row select {
   min-width: 0;
 }
 
@@ -1670,6 +1705,17 @@ select {
 .notification-rule-card__actions-menu button {
   width: 100%;
   text-align: left;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.notification-rule-card__actions-menu button:hover,
+.notification-rule-card__actions-menu button:focus-visible {
+  border-color: color-mix(in srgb, var(--app-primary) 58%, var(--app-border-strong));
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface));
 }
 
 .notification-rule-editor__conditions {
@@ -2903,6 +2949,15 @@ select {
     flex-direction: column;
   }
 
+  .notification-rule-editor__repeat-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .notification-rule-editor__repeat-interval {
+    max-width: 180px;
+  }
+
   .notification-rule-preview-panel {
     grid-column: auto;
   }
@@ -2932,6 +2987,16 @@ select {
   .notification-rule-editor__condition-row .field__input,
   .notification-rule-editor__condition-row button:not(.notification-rule-editor__drag-handle) {
     width: 100%;
+  }
+
+  .notification-rule-editor__condition-group-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .notification-rule-editor__condition-group-actions button,
+  .notification-rule-editor__condition-actions button {
+    flex: 1 1 128px;
   }
 
   .grand-battle-participants__grid {
