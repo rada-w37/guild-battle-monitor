@@ -997,7 +997,8 @@ select {
   margin: 0;
 }
 
-.notification-rule-editor__detail-toggle {
+.notification-rule-editor__detail-toggle,
+.notification-rule-editor__repeat-toggle {
   gap: 8px;
   align-items: center;
   min-height: 32px;
@@ -1018,7 +1019,27 @@ select {
 
 .notification-rule-editor__section {
   display: grid;
+  gap: 8px;
   min-width: 0;
+}
+
+.notification-rule-editor__repeat-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notification-rule-editor__repeat-interval {
+  max-width: 220px;
+}
+
+.notification-rule-editor__repeat-interval-control {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .notification-rule-editor__target-guilds {

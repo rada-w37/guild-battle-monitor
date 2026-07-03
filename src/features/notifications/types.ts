@@ -26,6 +26,11 @@ export interface NotificationDetailConditionRoot {
   readonly children: readonly (NotificationDetailCondition | NotificationDetailConditionGroup)[];
 }
 
+export interface NotificationRepeatNotification {
+  readonly enabled: boolean;
+  readonly intervalSeconds: number;
+}
+
 export interface NotificationRule {
   readonly id: string;
   readonly battleType: NotificationBattleType;
@@ -67,6 +72,7 @@ export interface NotificationRuleV2 {
   };
   readonly guildFilter: readonly string[];
   readonly detailConditions: NotificationDetailConditionRoot;
+  readonly repeatNotification?: NotificationRepeatNotification;
   readonly message: NotificationRule["message"];
   readonly temporarySuspension?: {
     readonly suspendedAt: string;

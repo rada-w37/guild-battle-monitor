@@ -17,6 +17,10 @@ describe("notification rule v2 draft", () => {
       detailRuleEnabled: true,
       sortOrder: 2,
       guildFilter: [],
+      repeatNotification: {
+        enabled: false,
+        intervalSeconds: 300
+      },
       message: {
         usernameTemplate: "",
         mention: { type: "none" }
@@ -49,7 +53,11 @@ describe("notification rule v2 draft", () => {
       guildFilter: [],
       name: "終盤アラート",
       enabled: false,
-      schedule: { startTime: "21:20", endTime: null }
+      schedule: { startTime: "21:20", endTime: null },
+      repeatNotification: {
+        enabled: false,
+        intervalSeconds: 300
+      }
     });
     expect(legacyInput).toEqual({
       battleType: "guildBattle",

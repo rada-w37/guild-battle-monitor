@@ -2,11 +2,21 @@ import {
   DEFAULT_NOTIFICATION_BODY_TEMPLATE,
   DEFAULT_NOTIFICATION_TITLE_TEMPLATE
 } from "./notificationTemplates";
-import type { NotificationBattleType, NotificationRule, NotificationRuleInput, NotificationRuleV2Input } from "./types";
+import type {
+  NotificationBattleType,
+  NotificationRepeatNotification,
+  NotificationRule,
+  NotificationRuleInput,
+  NotificationRuleV2Input
+} from "./types";
 
 export const DEFAULT_NOTIFICATION_RULE_V2_NAME = "見落とし防止";
+export const DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 300;
+export const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 60;
 
-export type NotificationRuleV2Draft = NotificationRuleV2Input;
+export type NotificationRuleV2Draft = Omit<NotificationRuleV2Input, "repeatNotification"> & {
+  readonly repeatNotification: NotificationRepeatNotification;
+};
 
 export function createDefaultNotificationRuleV2Draft(
   battleType: NotificationBattleType,
@@ -38,6 +48,7 @@ export function createDefaultNotificationRuleV2Draft(
         }
       ]
     },
+    repeatNotification: createDefaultRepeatNotification(),
     message: {
       usernameTemplate: "",
       mention: { type: "none" },
@@ -98,10 +109,31 @@ export function createNotificationRuleV2DraftFromLegacy(
         }
       ]
     },
+    repeatNotification: createDefaultRepeatNotification(),
     message: {
       ...rule.message,
       mention: { ...rule.message.mention }
     }
+  };
+}
+
+export function createDefaultRepeatNotification(): NotificationRepeatNotification {
+  return {
+    enabled: false,
+    intervalSeconds: DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS
+  };
+}
+
+export function normalizeRepeatNotification(
+  repeatNotification: NotificationRuleV2Input["repeatNotification"] | undefined
+): NotificationRepeatNotification {
+  if (repeatNotification === undefined) {
+    return createDefaultRepeatNotification();
+  }
+
+  return {
+    enabled: repeatNotification.enabled,
+    intervalSeconds: Math.max(MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS, repeatNotification.intervalSeconds)
   };
 }
 

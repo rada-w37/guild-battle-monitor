@@ -25,6 +25,7 @@ import {
   createDefaultNotificationRuleV2Draft,
   createLegacyNotificationRuleInputFromV2Draft,
   createNotificationRuleV2DraftFromLegacy,
+  normalizeRepeatNotification,
   type NotificationRuleV2Draft
 } from "./notificationRuleV2Draft";
 import {
@@ -1269,6 +1270,63 @@ export function NotificationSettingsDialog({
                   />
                 </label>
               </div>
+              <div className="notification-rule-editor__section notification-rule-editor__repeat-section">
+                <div className="notification-rule-editor__repeat-heading">
+                  <span className="field__label">{"\u7e70\u308a\u8fd4\u3057\u901a\u77e5"}</span>
+                  <label className="notification-rule-card__enabled-toggle notification-rule-editor__repeat-toggle">
+                    <input
+                      aria-label="繰り返し通知"
+                      checked={ruleDraft.detailRuleEnabled && ruleDraft.repeatNotification.enabled}
+                      disabled={!ruleDraft.detailRuleEnabled}
+                      type="checkbox"
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        setRuleDraft((currentDraft) => ({
+                          ...currentDraft,
+                          repeatNotification: {
+                            ...currentDraft.repeatNotification,
+                            enabled
+                          }
+                        }));
+                      }}
+                    />
+                    <span className="notification-rule-card__toggle-track" aria-hidden="true">
+                      <span className="notification-rule-card__toggle-thumb" />
+                    </span>
+                    <span>{ruleDraft.detailRuleEnabled && ruleDraft.repeatNotification.enabled ? "ON" : "OFF"}</span>
+                  </label>
+                </div>
+                {ruleDraft.detailRuleEnabled ? (
+                  <p className="notification-settings-dialog__note">
+                    {"\u8a73\u7d30\u6761\u4ef6\u304c\u6210\u7acb\u3057\u3066\u3044\u308b\u9593\u3001\u6307\u5b9a\u3057\u305f\u9593\u9694\u3054\u3068\u306b\u518d\u901a\u77e5\u3057\u307e\u3059\u3002"}
+                  </p>
+                ) : null}
+                {ruleDraft.detailRuleEnabled && ruleDraft.repeatNotification.enabled ? (
+                  <label className="field notification-rule-editor__repeat-interval">
+                    <span className="field__label">{"\u901a\u77e5\u9593\u9694"}</span>
+                    <span className="notification-rule-editor__repeat-interval-control">
+                      <input
+                        id="notification-rule-repeat-interval-minutes"
+                        className="field__input"
+                        min="1"
+                        type="number"
+                        value={Math.max(1, Math.floor(ruleDraft.repeatNotification.intervalSeconds / 60))}
+                        onChange={(event) => {
+                          const intervalMinutes = Math.max(1, Number.parseInt(event.target.value, 10) || 1);
+                          setRuleDraft((currentDraft) => ({
+                            ...currentDraft,
+                            repeatNotification: {
+                              ...currentDraft.repeatNotification,
+                              intervalSeconds: intervalMinutes * 60
+                            }
+                          }));
+                        }}
+                      />
+                      <span>{"\u5206"}</span>
+                    </span>
+                  </label>
+                ) : null}
+              </div>
               <div className="notification-rule-editor__section-heading-row">
                 <h4 className="notification-settings-dialog__numbered-heading">
                   <span>2</span>
@@ -1281,7 +1339,14 @@ export function NotificationSettingsDialog({
                     onChange={(event) => {
                       const detailRuleEnabled = event.target.checked;
                       setRuleDraft((currentDraft) => {
-                        const nextDraft = { ...currentDraft, detailRuleEnabled };
+                        const nextDraft = {
+                          ...currentDraft,
+                          detailRuleEnabled,
+                          repeatNotification: {
+                            ...currentDraft.repeatNotification,
+                            enabled: detailRuleEnabled && currentDraft.repeatNotification.enabled
+                          }
+                        };
                         setRuleError(validateRuleDraft(nextDraft));
                         return nextDraft;
                       });
@@ -1902,7 +1967,8 @@ function createRuleRecordFromV2(rule: NotificationRuleV2): RuleRecord {
     schedule: { ...rule.schedule },
     guildFilter: [...rule.guildFilter],
     guildFilterSelectionMode: rule.guildFilter.length > 0 ? "specific" : "all",
-    detailConditions: normalizeDetailConditionRoot(rule.detailConditions)
+    detailConditions: normalizeDetailConditionRoot(rule.detailConditions),
+    repeatNotification: normalizeRepeatNotification(rule.repeatNotification)
   };
 }
 
@@ -1929,7 +1995,8 @@ function createRuleDraft(rule: RuleRecord): RuleDraft {
     schedule: { ...rule.schedule },
     guildFilter: [...rule.guildFilter],
     guildFilterSelectionMode: rule.guildFilterSelectionMode,
-    detailConditions: normalizeDetailConditionRoot(rule.detailConditions)
+    detailConditions: normalizeDetailConditionRoot(rule.detailConditions),
+    repeatNotification: normalizeRepeatNotification(rule.repeatNotification)
   };
 }
 
@@ -1943,7 +2010,11 @@ function toRuleV2Input(ruleDraft: RuleDraft): NotificationRuleV2Input {
   return {
     ...input,
     guildFilter: input.battleType === "grandBattle" ? [] : input.guildFilter,
-    detailConditions: normalizeDetailConditionRoot(input.detailConditions)
+    detailConditions: normalizeDetailConditionRoot(input.detailConditions),
+    repeatNotification: {
+      ...normalizeRepeatNotification(input.repeatNotification),
+      enabled: input.detailRuleEnabled && input.repeatNotification.enabled
+    }
   };
 }
 

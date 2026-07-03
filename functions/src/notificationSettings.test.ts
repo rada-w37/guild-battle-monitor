@@ -388,6 +388,29 @@ describe("notification settings callables", () => {
     });
   });
 
+  it("defaults missing repeat notification settings when reading existing v2 rules", async () => {
+    const ruleWithoutRepeatNotification: Record<string, unknown> = { ...createRuleV2Input({ name: "Old V2 Rule" }) };
+    delete ruleWithoutRepeatNotification.repeatNotification;
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare(),
+      "guildShares/guild-1/notificationRules/v2-rule": ruleWithoutRepeatNotification
+    });
+
+    await expect(
+      handleGetNotificationSettingsV2({ guildId: "guild-1" }, { authUid: "owner-uid" }, createDependencies(firestore))
+    ).resolves.toMatchObject({
+      rules: [
+        {
+          id: "v2-rule",
+          repeatNotification: {
+            enabled: false,
+            intervalSeconds: 300
+          }
+        }
+      ]
+    });
+  });
+
   it("reads legacy attackerGuildIds into guildFilter when guildFilter is missing", async () => {
     const legacyRule: Record<string, unknown> = { ...createRuleV2Input({ name: "Old V2 Rule" }) };
     delete legacyRule.guildFilter;
@@ -467,6 +490,72 @@ describe("notification settings callables", () => {
         operator: "OR",
         children: []
       }
+    });
+  });
+
+  it("saves v2 repeat notification settings through the save callable", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            repeatNotification: {
+              enabled: true,
+              intervalSeconds: 180
+            }
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      id: "generated-rule",
+      repeatNotification: {
+        enabled: true,
+        intervalSeconds: 180
+      }
+    });
+
+    expect(firestore.writes[0].data.repeatNotification).toEqual({
+      enabled: true,
+      intervalSeconds: 180
+    });
+  });
+
+  it("normalizes repeat notification to disabled when detail rule is disabled", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1": createShare()
+    });
+
+    await expect(
+      handleSaveNotificationRuleV2(
+        {
+          guildId: "guild-1",
+          rule: createRuleV2Input({
+            detailRuleEnabled: false,
+            repeatNotification: {
+              enabled: true,
+              intervalSeconds: 240
+            }
+          })
+        },
+        { authUid: "owner-uid" },
+        createDependencies(firestore)
+      )
+    ).resolves.toMatchObject({
+      repeatNotification: {
+        enabled: false,
+        intervalSeconds: 240
+      }
+    });
+
+    expect(firestore.writes[0].data.repeatNotification).toEqual({
+      enabled: false,
+      intervalSeconds: 240
     });
   });
 
@@ -708,6 +797,19 @@ describe("notification settings callables", () => {
     });
   });
 
+  it("rejects repeat notification intervals under one minute", () => {
+    expect(() =>
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          repeatNotification: {
+            enabled: true,
+            intervalSeconds: 59
+          }
+        })
+      )
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+  });
+
   it("prepares v2 document filtering without switching the get settings path", () => {
     expect(shouldReadNotificationRuleV2Document(createRuleV2Input())).toBe(true);
     expect(shouldReadNotificationRuleV2Document(createRule())).toBe(false);
@@ -796,6 +898,7 @@ function createRuleV2Input(
     readonly titleTemplate?: string;
     readonly bodyTemplate?: string;
     readonly detailConditions?: Record<string, unknown>;
+    readonly repeatNotification?: Record<string, unknown>;
     readonly temporarySuspension?: Record<string, unknown>;
   } = {}
 ) {
@@ -833,7 +936,10 @@ function createRuleV2Input(
     },
     ...(overrides.temporarySuspension === undefined
       ? {}
-      : { temporarySuspension: overrides.temporarySuspension })
+      : { temporarySuspension: overrides.temporarySuspension }),
+    ...(overrides.repeatNotification === undefined
+      ? {}
+      : { repeatNotification: overrides.repeatNotification })
   };
 }
 

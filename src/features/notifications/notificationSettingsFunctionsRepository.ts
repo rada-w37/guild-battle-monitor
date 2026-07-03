@@ -13,6 +13,9 @@ import type {
   NotificationSettingsV2
 } from "./types";
 
+const DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 300;
+const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 60;
+
 export interface NotificationSettingsRequest {
   readonly guildId: string;
   readonly accessKey?: string;
@@ -239,6 +242,7 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
     },
     guildFilter: createGuildFilter(data),
     detailConditions: createDetailConditionRoot(data.detailConditions),
+    repeatNotification: createRepeatNotification(data.repeatNotification),
     message: {
       usernameTemplate: typeof data.message.usernameTemplate === "string" ? data.message.usernameTemplate : "",
       mention: createMention(data.message.mention),
@@ -258,6 +262,26 @@ function createNotificationRuleV2(data: unknown): NotificationRuleV2 {
 
 function createNotificationBattleSide(data: unknown): NotificationBattleSide {
   return data === "attack" ? "attack" : "defense";
+}
+
+function createRepeatNotification(data: unknown): NonNullable<NotificationRuleV2["repeatNotification"]> {
+  if (
+    !isPlainObject(data) ||
+    typeof data.enabled !== "boolean" ||
+    typeof data.intervalSeconds !== "number" ||
+    !Number.isSafeInteger(data.intervalSeconds) ||
+    data.intervalSeconds < MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS
+  ) {
+    return {
+      enabled: false,
+      intervalSeconds: DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS
+    };
+  }
+
+  return {
+    enabled: data.enabled,
+    intervalSeconds: data.intervalSeconds
+  };
 }
 
 function createGuildFilter(data: Record<string, unknown>): readonly string[] {

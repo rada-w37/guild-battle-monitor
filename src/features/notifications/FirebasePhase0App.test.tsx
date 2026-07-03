@@ -1500,6 +1500,81 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
   });
 
+  it("saves repeat notification settings in seconds and clamps the UI to one minute", async () => {
+    const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
+      Promise.resolve({
+        id: "saved-rule-v2",
+        ...input.rule
+      } satisfies NotificationRuleV2)
+    );
+
+    await renderNotificationSettingsDialog({ saveNotificationRuleV2 });
+
+    const newRuleButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".notification-rule-editor button")).find(
+      (candidate) => candidate.textContent === "新規作成"
+    );
+    if (!newRuleButton) {
+      throw new Error("new rule button was not found");
+    }
+
+    await act(async () => {
+      newRuleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const repeatToggle = Array.from(document.querySelectorAll<HTMLInputElement>("input[type='checkbox']")).find(
+      (input) => input.getAttribute("aria-label") === "\u7e70\u308a\u8fd4\u3057\u901a\u77e5"
+    );
+    if (!repeatToggle) {
+      throw new Error("repeat notification toggle was not found");
+    }
+    expect(repeatToggle.disabled).toBe(false);
+    expect(repeatToggle.checked).toBe(false);
+
+    await act(async () => {
+      repeatToggle.click();
+      await flushPromises();
+    });
+
+    const intervalInput = document.querySelector<HTMLInputElement>("#notification-rule-repeat-interval-minutes");
+    if (!intervalInput) {
+      throw new Error("repeat notification interval input was not found");
+    }
+    expect(intervalInput.min).toBe("1");
+    expect(intervalInput.value).toBe("5");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(intervalInput, "0");
+      intervalInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(intervalInput.value).toBe("1");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(intervalInput, "3");
+      intervalInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    const createButton = getNotificationRuleEditorActionButton("作成");
+    await act(async () => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(saveNotificationRuleV2).toHaveBeenCalledWith({
+      guildId: "saved-guild",
+      rule: expect.objectContaining({
+        repeatNotification: {
+          enabled: true,
+          intervalSeconds: 180
+        }
+      })
+    });
+  });
+
   it("allows saving an empty Discord username and body for v2 rules", async () => {
     const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
       Promise.resolve({
@@ -2435,6 +2510,26 @@ describe("FirebasePhase0App notification settings dialog", () => {
       targetGuildCheckboxes[0]?.click();
       await flushPromises();
     });
+    const repeatToggle = Array.from(document.querySelectorAll<HTMLInputElement>("input[type='checkbox']")).find(
+      (input) => input.getAttribute("aria-label") === "\u7e70\u308a\u8fd4\u3057\u901a\u77e5"
+    );
+    if (!repeatToggle) {
+      throw new Error("repeat notification toggle was not found");
+    }
+    await act(async () => {
+      repeatToggle.click();
+      await flushPromises();
+    });
+    const repeatIntervalInput = document.querySelector<HTMLInputElement>("#notification-rule-repeat-interval-minutes");
+    if (!repeatIntervalInput) {
+      throw new Error("repeat notification interval input was not found");
+    }
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(repeatIntervalInput, "4");
+      repeatIntervalInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
     const detailRuleToggle = document.querySelector<HTMLInputElement>(".notification-rule-editor__detail-toggle input");
     if (!detailRuleToggle) {
       throw new Error("detail rule toggle was not found");
@@ -2446,6 +2541,8 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
 
     expect(detailRuleToggle.checked).toBe(false);
+    expect(repeatToggle.checked).toBe(false);
+    expect(repeatToggle.disabled).toBe(true);
     expect(document.body.textContent).toContain("時刻のみを条件として通知判定します。");
     expect(document.body.textContent).not.toContain("詳細ルールOFF時は時刻だけで通知します。対象拠点・対象ギルド・詳細条件の保存値は保持されます。");
     expect(document.querySelector(".notification-rule-editor__battle-side")).toBeNull();
@@ -2527,6 +2624,10 @@ describe("FirebasePhase0App notification settings dialog", () => {
       guildId: "saved-guild",
       rule: expect.objectContaining({
         detailRuleEnabled: false,
+        repeatNotification: {
+          enabled: false,
+          intervalSeconds: 240
+        },
         battleSide: "attack",
         guildFilter: ["guild-a"],
         detailConditions: expect.objectContaining({ operator: "OR" })

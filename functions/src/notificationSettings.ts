@@ -11,6 +11,8 @@ const START_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const FUNCTION_REGION = "asia-northeast1";
 const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
+const DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 300;
+const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 60;
 
 type NotificationBattleType = "guildBattle" | "grandBattle";
 type NotificationBattleSide = "defense" | "attack";
@@ -94,6 +96,10 @@ interface NotificationRuleV2Input {
   readonly detailConditions: {
     readonly operator: "OR";
     readonly children: readonly (NotificationDetailConditionInput | NotificationDetailConditionGroupInput)[];
+  };
+  readonly repeatNotification: {
+    readonly enabled: boolean;
+    readonly intervalSeconds: number;
   };
   readonly message: NotificationRuleInput["message"];
   readonly temporarySuspension?: {
@@ -342,6 +348,7 @@ export async function handleSaveNotificationRuleV2(
     schedule: { ...payload.rule.schedule },
     guildFilter: [...payload.rule.guildFilter],
     detailConditions: cloneDetailConditionRoot(payload.rule.detailConditions),
+    repeatNotification: { ...payload.rule.repeatNotification },
     message: {
       ...payload.rule.message,
       mention: { ...payload.rule.message.mention }
@@ -660,6 +667,9 @@ function readNotificationRuleV2Input(data: Record<string, unknown>): Notificatio
     throw new HttpsError("invalid-argument", "invalid_notification_rule_v2");
   }
 
+  const detailRuleEnabled = data.detailRuleEnabled === undefined ? true : data.detailRuleEnabled;
+  const repeatNotification = readRepeatNotification(data.repeatNotification);
+
   return {
     schemaVersion: 2,
     battleType: data.battleType,
@@ -667,10 +677,14 @@ function readNotificationRuleV2Input(data: Record<string, unknown>): Notificatio
     name: data.name.trim(),
     enabled: data.enabled,
     sortOrder: data.sortOrder,
-    detailRuleEnabled: data.detailRuleEnabled === undefined ? true : data.detailRuleEnabled,
+    detailRuleEnabled,
     schedule: readSchedule(data.schedule),
     guildFilter: readGuildFilter(data),
     detailConditions: readDetailConditionRoot(data.detailConditions),
+    repeatNotification: {
+      ...repeatNotification,
+      enabled: detailRuleEnabled && repeatNotification.enabled
+    },
     message: readMessage(data.message),
     ...(data.temporarySuspension === undefined
       ? {}
@@ -696,6 +710,30 @@ function readSchedule(data: Record<string, unknown>): NotificationRuleV2Input["s
   }
 
   return { startTime: data.startTime, ...(data.endTime === null ? { endTime: null } : {}) };
+}
+
+function readRepeatNotification(data: unknown): NotificationRuleV2Input["repeatNotification"] {
+  if (data === undefined) {
+    return {
+      enabled: false,
+      intervalSeconds: DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS
+    };
+  }
+
+  if (
+    !isPlainObject(data) ||
+    typeof data.enabled !== "boolean" ||
+    typeof data.intervalSeconds !== "number" ||
+    !Number.isSafeInteger(data.intervalSeconds) ||
+    data.intervalSeconds < MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS
+  ) {
+    throw new HttpsError("invalid-argument", "invalid_notification_repeat_notification");
+  }
+
+  return {
+    enabled: data.enabled,
+    intervalSeconds: data.intervalSeconds
+  };
 }
 
 function readGuildFilter(data: Record<string, unknown>): readonly string[] {
