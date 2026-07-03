@@ -1298,148 +1298,154 @@ export function NotificationSettingsDialog({
                   {"詳細ルールOFF時は時刻だけで通知します。対象拠点・対象ギルド・詳細条件の保存値は保持されます。"}
                 </p>
               ) : null}
-              <fieldset className="notification-rule-editor__battle-side" aria-label="対象拠点" disabled={!ruleDraft.detailRuleEnabled}>
-                <legend className="field__label">対象拠点</legend>
-                <label className="notification-rule-editor__target-guild-radio">
-                  <input
-                    checked={ruleDraft.battleSide === "defense"}
-                    type="radio"
-                    name="notification-battle-side"
-                    onChange={() =>
-                      setRuleDraft((currentDraft) => ({
-                        ...currentDraft,
-                        battleSide: "defense"
-                      }))
-                    }
-                  />
-                  防衛拠点
-                </label>
-                <label className="notification-rule-editor__target-guild-radio">
-                  <input
-                    checked={ruleDraft.battleSide === "attack"}
-                    type="radio"
-                    name="notification-battle-side"
-                    onChange={() =>
-                      setRuleDraft((currentDraft) => ({
-                        ...currentDraft,
-                        battleSide: "attack"
-                      }))
-                    }
-                  />
-                  侵攻拠点
-                </label>
-              </fieldset>
-              <h5 className="field__label">{"対象ギルド"}</h5>
-              {isGrandBattleRuleDraft ? (
-                <>
-                  <p className="notification-settings-dialog__note">{"\u30b0\u30e9\u30f3\u30c9\u30d0\u30c8\u30eb\u3067\u306f\u5168\u30ae\u30eb\u30c9\u56fa\u5b9a\u3067\u3059\u3002"}</p>
-                  <fieldset className="notification-rule-editor__target-guilds is-readonly" aria-label="対象ギルド">
-                    <div
-                      className="notification-rule-editor__target-guild-radio"
-                      aria-disabled="true"
-                      role="radio"
-                      aria-checked="true"
-                    >
-                      <span className="notification-rule-editor__readonly-radio is-checked" aria-hidden="true" />
-                      {"\u5168\u30ae\u30eb\u30c9"}
-                    </div>
-                    <div
-                      className="notification-rule-editor__target-guild-radio"
-                      aria-disabled="true"
-                      role="radio"
-                      aria-checked="false"
-                    >
-                      <span className="notification-rule-editor__readonly-radio" aria-hidden="true" />
-                      {"\u6307\u5b9a\u30ae\u30eb\u30c9"}
-                    </div>
-                  </fieldset>
-                </>
-              ) : (
-                <>
-                  <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド" disabled={!ruleDraft.detailRuleEnabled}>
-                    <label className="notification-rule-editor__target-guild-radio">
-                      <input
-                        checked={ruleDraft.guildFilterSelectionMode === "all"}
-                        type="radio"
-                        name="notification-target-guild-mode"
-                        onChange={() =>
-                          setRuleDraft((currentDraft) => ({
-                            ...currentDraft,
-                            guildFilterSelectionMode: "all",
-                            guildFilter: []
-                          }))
-                        }
-                      />
-                      {"\u5168\u30ae\u30eb\u30c9"}
-                    </label>
-                    <label className="notification-rule-editor__target-guild-radio">
-                      <input
-                        checked={ruleDraft.guildFilterSelectionMode === "specific"}
-                        disabled={targetGuildWorld === null && ruleDraft.guildFilter.length === 0}
-                        type="radio"
-                        name="notification-target-guild-mode"
-                        onChange={() =>
-                          setRuleDraft((currentDraft) => ({
-                            ...currentDraft,
-                            guildFilterSelectionMode: "specific"
-                          }))
-                        }
-                      />
-                      {"\u6307\u5b9a\u30ae\u30eb\u30c9"}
-                    </label>
-                    {ruleDraft.guildFilterSelectionMode === "specific" ? (
-                      <div className="notification-rule-editor__target-guild-list">
-                        {targetGuildOptions.length === 0 ? (
-                          <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
-                        ) : (
-                          targetGuildOptions.map((candidate) => (
-                            <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
-                              <input
-                                checked={ruleDraft.guildFilter.includes(candidate.guildId)}
-                                type="checkbox"
-                                onChange={(event) => {
-                                  const isChecked = event.target.checked;
-                                  setRuleDraft((currentDraft) => ({
-                                    ...currentDraft,
-                                    guildFilter: isChecked
-                                      ? addGuildFilterId(currentDraft.guildFilter, candidate.guildId)
-                                      : currentDraft.guildFilter.filter((guildId) => guildId !== candidate.guildId)
-                                  }));
-                                }}
-                              />
-                              {candidate.guildName}
-                            </label>
-                          ))
-                        )}
+              <div className="notification-rule-editor__section">
+                <fieldset className="notification-rule-editor__battle-side" aria-label="対象拠点" disabled={!ruleDraft.detailRuleEnabled}>
+                  <legend className="field__label">対象拠点</legend>
+                  <label className="notification-rule-editor__target-guild-radio">
+                    <input
+                      checked={ruleDraft.battleSide === "defense"}
+                      type="radio"
+                      name="notification-battle-side"
+                      onChange={() =>
+                        setRuleDraft((currentDraft) => ({
+                          ...currentDraft,
+                          battleSide: "defense"
+                        }))
+                      }
+                    />
+                    防衛拠点
+                  </label>
+                  <label className="notification-rule-editor__target-guild-radio">
+                    <input
+                      checked={ruleDraft.battleSide === "attack"}
+                      type="radio"
+                      name="notification-battle-side"
+                      onChange={() =>
+                        setRuleDraft((currentDraft) => ({
+                          ...currentDraft,
+                          battleSide: "attack"
+                        }))
+                      }
+                    />
+                    侵攻拠点
+                  </label>
+                </fieldset>
+              </div>
+              <div className="notification-rule-editor__section">
+                {isGrandBattleRuleDraft ? (
+                  <>
+                    <fieldset className="notification-rule-editor__target-guilds is-readonly" aria-label="対象ギルド">
+                      <legend className="field__label">{"対象ギルド"}</legend>
+                      <p className="notification-settings-dialog__note">{"\u30b0\u30e9\u30f3\u30c9\u30d0\u30c8\u30eb\u3067\u306f\u5168\u30ae\u30eb\u30c9\u56fa\u5b9a\u3067\u3059\u3002"}</p>
+                      <div
+                        className="notification-rule-editor__target-guild-radio"
+                        aria-disabled="true"
+                        role="radio"
+                        aria-checked="true"
+                      >
+                        <span className="notification-rule-editor__readonly-radio is-checked" aria-hidden="true" />
+                        {"\u5168\u30ae\u30eb\u30c9"}
                       </div>
+                      <div
+                        className="notification-rule-editor__target-guild-radio"
+                        aria-disabled="true"
+                        role="radio"
+                        aria-checked="false"
+                      >
+                        <span className="notification-rule-editor__readonly-radio" aria-hidden="true" />
+                        {"\u6307\u5b9a\u30ae\u30eb\u30c9"}
+                      </div>
+                    </fieldset>
+                  </>
+                ) : (
+                  <>
+                    <fieldset className="notification-rule-editor__target-guilds" aria-label="対象ギルド" disabled={!ruleDraft.detailRuleEnabled}>
+                      <legend className="field__label">{"対象ギルド"}</legend>
+                      <label className="notification-rule-editor__target-guild-radio">
+                        <input
+                          checked={ruleDraft.guildFilterSelectionMode === "all"}
+                          type="radio"
+                          name="notification-target-guild-mode"
+                          onChange={() =>
+                            setRuleDraft((currentDraft) => ({
+                              ...currentDraft,
+                              guildFilterSelectionMode: "all",
+                              guildFilter: []
+                            }))
+                          }
+                        />
+                        {"\u5168\u30ae\u30eb\u30c9"}
+                      </label>
+                      <label className="notification-rule-editor__target-guild-radio">
+                        <input
+                          checked={ruleDraft.guildFilterSelectionMode === "specific"}
+                          disabled={targetGuildWorld === null && ruleDraft.guildFilter.length === 0}
+                          type="radio"
+                          name="notification-target-guild-mode"
+                          onChange={() =>
+                            setRuleDraft((currentDraft) => ({
+                              ...currentDraft,
+                              guildFilterSelectionMode: "specific"
+                            }))
+                          }
+                        />
+                        {"\u6307\u5b9a\u30ae\u30eb\u30c9"}
+                      </label>
+                      {ruleDraft.guildFilterSelectionMode === "specific" ? (
+                        <div className="notification-rule-editor__target-guild-list">
+                          {targetGuildOptions.length === 0 ? (
+                            <p className="notification-settings-dialog__note">{"\u8868\u793a\u3067\u304d\u308b\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002"}</p>
+                          ) : (
+                            targetGuildOptions.map((candidate) => (
+                              <label key={candidate.guildId} className="notification-rule-editor__target-guild-checkbox">
+                                <input
+                                  checked={ruleDraft.guildFilter.includes(candidate.guildId)}
+                                  type="checkbox"
+                                  onChange={(event) => {
+                                    const isChecked = event.target.checked;
+                                    setRuleDraft((currentDraft) => ({
+                                      ...currentDraft,
+                                      guildFilter: isChecked
+                                        ? addGuildFilterId(currentDraft.guildFilter, candidate.guildId)
+                                        : currentDraft.guildFilter.filter((guildId) => guildId !== candidate.guildId)
+                                    }));
+                                  }}
+                                />
+                                {candidate.guildName}
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      ) : null}
+                    </fieldset>
+                    {targetGuildWorld === null ? (
+                      <p className="notification-settings-dialog__note">
+                        {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u3092\u53d6\u5f97\u3059\u308b\u306b\u306f\u3001\u6240\u5c5e\u30ae\u30eb\u30c9\u8a2d\u5b9a\u3067\u30ef\u30fc\u30eb\u30c9\u3092\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
+                      </p>
                     ) : null}
-                  </fieldset>
-                  {targetGuildWorld === null ? (
-                    <p className="notification-settings-dialog__note">
-                      {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u3092\u53d6\u5f97\u3059\u308b\u306b\u306f\u3001\u6240\u5c5e\u30ae\u30eb\u30c9\u8a2d\u5b9a\u3067\u30ef\u30fc\u30eb\u30c9\u3092\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
-                    </p>
-                  ) : null}
-                  {targetGuildCandidateStatus === "error" ? (
-                    <p className="notification-settings-dialog__note">
-                      {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002"}
-                    </p>
-                  ) : null}
-                </>
-              )}
-              <h5 className="field__label">{"詳細条件"}</h5>
-              {hasDetailConditionNodes ? (
-                <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
-              ) : null}
-              <div
-                className="notification-rule-editor__condition-tree"
-                onDragOver={(event) =>
-                  updateConditionEndDropTarget(event, {
-                    scope: "root",
-                    index: ruleDraft.detailConditions.children.length
-                  })
-                }
-                onDrop={dropConditionNode}
-              >
+                    {targetGuildCandidateStatus === "error" ? (
+                      <p className="notification-settings-dialog__note">
+                        {"\u5bfe\u8c61\u30ae\u30eb\u30c9\u5019\u88dc\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002"}
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+              <div className="notification-rule-editor__section">
+                <h5 className="field__label">{"詳細条件"}</h5>
+                {hasDetailConditionNodes ? (
+                  <p className="notification-settings-dialog__note">{"\u3044\u305a\u308c\u304b\u306e\u6761\u4ef6\u30d6\u30ed\u30c3\u30af\u306b\u4e00\u81f4"}</p>
+                ) : null}
+                <div
+                  className="notification-rule-editor__condition-tree"
+                  onDragOver={(event) =>
+                    updateConditionEndDropTarget(event, {
+                      scope: "root",
+                      index: ruleDraft.detailConditions.children.length
+                    })
+                  }
+                  onDrop={dropConditionNode}
+                >
                 {ruleDraft.detailConditions.children.map((conditionNode, nodeIndex) =>
                   conditionNode.type === "group" ? (
                     <div key={`group-${nodeIndex}`}>
@@ -1575,6 +1581,7 @@ export function NotificationSettingsDialog({
                 <button type="button" onClick={addRootConditionAndScroll}>
                   {"\uff0b \u6761\u4ef6\u3092\u8ffd\u52a0"}
                 </button>
+              </div>
               </div>
               {!hasDetailConditionNodes ? (
                 <div className="notification-rule-editor__condition-warning">
@@ -1746,6 +1753,7 @@ export function NotificationSettingsDialog({
                   </div>
                   <div className="notification-rule-preview-panel__divider" />
                 </>
+                <div className="notification-rule-editor__section">
               <h4 className="field__label">通知プレビュー</h4>
                 <div className="notification-preview">
                   <div className="notification-preview__avatar" aria-hidden="true">
@@ -1775,6 +1783,7 @@ export function NotificationSettingsDialog({
                       </div>
                     ) : null}
                   </div>
+                </div>
                 </div>
                 {detailRuleOffVariableWarning !== null ? (
                   <div className="notification-rule-editor__condition-warning notification-rule-editor__preview-warning">

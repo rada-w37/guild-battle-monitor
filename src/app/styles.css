@@ -963,12 +963,19 @@ select {
   font-size: 0.78rem;
 }
 
-.notification-rule-editor .field__label {
-  margin-top: 2px;
+.notification-rule-editor .field__label,
+.notification-rule-preview-panel .field__label {
+  margin: 0;
 }
 
-.notification-rule-editor > .field__label + .notification-settings-dialog__note {
+.notification-rule-editor__section > .notification-settings-dialog__note,
+.notification-rule-editor__target-guilds > .notification-settings-dialog__note,
+.notification-rule-editor__target-guild-list > .notification-settings-dialog__note {
   margin-top: 0;
+}
+
+.notification-rule-editor__target-guilds > .notification-settings-dialog__note {
+  flex: 0 0 100%;
 }
 
 .notification-rule-editor > .notification-settings-dialog__numbered-heading:first-child,
@@ -1009,6 +1016,12 @@ select {
   font-weight: 400;
 }
 
+.notification-rule-editor__section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .notification-rule-editor__target-guilds {
   display: flex;
   flex-wrap: wrap;
@@ -1024,12 +1037,13 @@ select {
   flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
-  margin: 12px 0 0;
+  margin: 0;
   padding: 0;
   border: 0;
 }
 
-.notification-rule-editor__battle-side legend {
+.notification-rule-editor__battle-side legend,
+.notification-rule-editor__target-guilds legend {
   flex: 0 0 100%;
   margin: 0;
   padding: 0;
