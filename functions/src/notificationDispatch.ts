@@ -26,12 +26,13 @@ interface NotificationRequest {
   readonly ruleId: string;
   readonly ruleName: string;
   readonly duplicateKey: string;
+  readonly activeTimeWindow?: string;
   readonly baseId?: string;
-  readonly baseName: string;
+  readonly baseName?: string;
   readonly attackerGuildId?: string;
   readonly attackerGuildName?: string;
-  readonly defenseCount: number;
-  readonly attackCount: number;
+  readonly defenseCount?: number;
+  readonly attackCount?: number;
   readonly message: {
     readonly username?: string;
     readonly mentionText?: string;
@@ -361,12 +362,13 @@ function createHistoryBase(requestId: string, request: NotificationRequest) {
     ruleId: request.ruleId,
     ruleName: request.ruleName,
     battleType: request.battleType,
+    ...(request.activeTimeWindow === undefined ? {} : { activeTimeWindow: request.activeTimeWindow }),
     ...(request.baseId === undefined ? {} : { baseId: request.baseId }),
-    baseName: request.baseName,
+    ...(request.baseName === undefined ? {} : { baseName: request.baseName }),
     ...(request.attackerGuildId === undefined ? {} : { attackerGuildId: request.attackerGuildId }),
     ...(request.attackerGuildName === undefined ? {} : { attackerGuildName: request.attackerGuildName }),
-    defenseCount: request.defenseCount,
-    attackCount: request.attackCount,
+    ...(request.defenseCount === undefined ? {} : { defenseCount: request.defenseCount }),
+    ...(request.attackCount === undefined ? {} : { attackCount: request.attackCount }),
     destinationId: DISCORD_DESTINATION_ID
   };
 }
@@ -427,11 +429,13 @@ function readNotificationRequest(input: unknown): NotificationRequest | null {
   const ruleId = readRequiredString(input.ruleId);
   const ruleName = readRequiredString(input.ruleName);
   const duplicateKey = readRequiredString(input.duplicateKey);
+  const activeTimeWindow = readOptionalString(input.activeTimeWindow);
   const baseName = readRequiredString(input.baseName);
   const title = readNotificationSummary(input.message.title);
   const body = readOptionalMessageBody(input.message.body);
   const defenseCount = readNonNegativeInteger(input.defenseCount);
   const attackCount = readNonNegativeInteger(input.attackCount);
+  const isRuleLevelNotification = activeTimeWindow !== undefined;
 
   if (
     guildId === null ||
@@ -439,11 +443,15 @@ function readNotificationRequest(input: unknown): NotificationRequest | null {
     ruleId === null ||
     ruleName === null ||
     duplicateKey === null ||
-    baseName === null ||
     title === null ||
-    body === null ||
-    defenseCount === null ||
-    attackCount === null
+    body === null
+  ) {
+    return null;
+  }
+
+  if (
+    !isRuleLevelNotification &&
+    (baseName === null || defenseCount === null || attackCount === null)
   ) {
     return null;
   }
@@ -461,12 +469,13 @@ function readNotificationRequest(input: unknown): NotificationRequest | null {
     ruleId,
     ruleName,
     duplicateKey,
+    ...(activeTimeWindow === undefined ? {} : { activeTimeWindow }),
     ...(baseId === undefined ? {} : { baseId }),
-    baseName,
+    ...(baseName === null ? {} : { baseName }),
     ...(attackerGuildId === undefined ? {} : { attackerGuildId }),
     ...(attackerGuildName === undefined ? {} : { attackerGuildName }),
-    defenseCount,
-    attackCount,
+    ...(defenseCount === null ? {} : { defenseCount }),
+    ...(attackCount === null ? {} : { attackCount }),
     message: {
       ...(username === undefined ? {} : { username }),
       ...(mentionText === undefined ? {} : { mentionText }),

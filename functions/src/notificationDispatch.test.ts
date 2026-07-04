@@ -46,6 +46,48 @@ describe("notification dispatch trigger", () => {
     expect(firestore.documents["notificationRequests/request-1"]).not.toHaveProperty("errorMessage");
   });
 
+  it("posts a rule-level time request without battle observation fields", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+
+    await handleNotificationRequestCreated(
+      "request-time-1",
+      createRuleLevelTimeRequest(),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(discordPosts).toEqual([
+      {
+        webhookUrl: "https://discord.com/api/webhooks/webhook-id/webhook-token",
+        payload: {
+          username: "KOO Rule",
+          content: "Scheduled notice"
+        }
+      }
+    ]);
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-time-1"]).toMatchObject({
+      requestId: "request-time-1",
+      duplicateKey: "guild-1:guildBattle:1001:2026-06-17:rule-1:time:21:00-open",
+      ruleId: "rule-1",
+      activeTimeWindow: "21:00-open",
+      status: "sent"
+    });
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-time-1"]).not.toHaveProperty(
+      "baseName"
+    );
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-time-1"]).not.toHaveProperty(
+      "defenseCount"
+    );
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-time-1"]).not.toHaveProperty(
+      "attackCount"
+    );
+    expect(firestore.documents["notificationRequests/request-time-1"]).toMatchObject({
+      status: "sent"
+    });
+  });
+
   it("does not alter sent or processing histories when skipping duplicates", async () => {
     const sentHistory = createHistory({ status: "sent", createdAt: "created-sent", updatedAt: "updated-sent" });
     const processingHistory = createHistory({
@@ -460,6 +502,55 @@ describe("notification dispatch trigger", () => {
     });
     expect(firestore.documents["guildShares/guild/1/notificationHistories/request-1"]).toBeUndefined();
   });
+
+  it("keeps battle observation fields required when activeTimeWindow is missing", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+
+    await handleNotificationRequestCreated(
+      "request-1",
+      createRequest({
+        baseName: undefined,
+        defenseCount: undefined,
+        attackCount: undefined,
+        message: {
+          username: "KOO Rule",
+          title: "Base is under attack",
+          body: ""
+        }
+      }),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(discordPosts).toEqual([]);
+    expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
+      status: "failed",
+      errorCode: "invalid_request"
+    });
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-1"]).toBeUndefined();
+  });
+
+  it("does not treat detailRuleEnabled false alone as a rule-level time request", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+
+    await handleNotificationRequestCreated(
+      "request-1",
+      createRuleLevelTimeRequest({ activeTimeWindow: undefined }),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(discordPosts).toEqual([]);
+    expect(firestore.documents["notificationRequests/request-1"]).toMatchObject({
+      status: "failed",
+      errorCode: "invalid_request"
+    });
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-1"]).toBeUndefined();
+  });
 });
 
 type DiscordPost = {
@@ -485,6 +576,29 @@ function createRequest(overrides: Record<string, unknown> = {}) {
       mentionText: "<@123>",
       title: "Base is under attack",
       body: "Defense 3 / Attack 5"
+    },
+    ...overrides
+  };
+}
+
+function createRuleLevelTimeRequest(overrides: Record<string, unknown> = {}) {
+  return {
+    guildId: "guild-1",
+    battleType: "guildBattle",
+    ruleId: "rule-1",
+    ruleName: "Rule",
+    detailRuleEnabled: false,
+    duplicateKey: "guild-1:guildBattle:1001:2026-06-17:rule-1:time:21:00-open",
+    activeTimeWindow: "21:00-open",
+    message: {
+      username: "KOO Rule",
+      title: "Scheduled notice",
+      body: ""
+    },
+    source: {
+      worldId: "1001",
+      battleDate: "2026-06-17",
+      observedAt: createTimestampLike("2026-06-17T21:00:00.000Z")
     },
     ...overrides
   };
