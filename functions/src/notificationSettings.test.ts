@@ -505,7 +505,7 @@ describe("notification settings callables", () => {
           rule: createRuleV2Input({
             repeatNotification: {
               enabled: true,
-              intervalSeconds: 180
+              intervalSeconds: 30
             }
           })
         },
@@ -516,13 +516,13 @@ describe("notification settings callables", () => {
       id: "generated-rule",
       repeatNotification: {
         enabled: true,
-        intervalSeconds: 180
+        intervalSeconds: 30
       }
     });
 
     expect(firestore.writes[0].data.repeatNotification).toEqual({
       enabled: true,
-      intervalSeconds: 180
+      intervalSeconds: 30
     });
   });
 
@@ -797,13 +797,42 @@ describe("notification settings callables", () => {
     });
   });
 
-  it("rejects repeat notification intervals under one minute", () => {
+  it("accepts repeat notification intervals from 30 seconds", () => {
+    expect(
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          repeatNotification: {
+            enabled: true,
+            intervalSeconds: 30
+          }
+        })
+      )
+    ).toMatchObject({
+      repeatNotification: {
+        enabled: true,
+        intervalSeconds: 30
+      }
+    });
+  });
+
+  it("rejects repeat notification intervals outside the supported range", () => {
     expect(() =>
       validateNotificationRuleV2Input(
         createRuleV2Input({
           repeatNotification: {
             enabled: true,
-            intervalSeconds: 59
+            intervalSeconds: 29
+          }
+        })
+      )
+    ).toThrowError(expect.objectContaining({ code: "invalid-argument" }));
+
+    expect(() =>
+      validateNotificationRuleV2Input(
+        createRuleV2Input({
+          repeatNotification: {
+            enabled: true,
+            intervalSeconds: 2701
           }
         })
       )

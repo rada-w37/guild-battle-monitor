@@ -12,7 +12,8 @@ import type {
 
 export const DEFAULT_NOTIFICATION_RULE_V2_NAME = "見落とし防止";
 export const DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 300;
-export const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 60;
+export const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 30;
+export const MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 2700;
 
 export type NotificationRuleV2Draft = Omit<NotificationRuleV2Input, "repeatNotification"> & {
   readonly repeatNotification: NotificationRepeatNotification;
@@ -133,8 +134,15 @@ export function normalizeRepeatNotification(
 
   return {
     enabled: repeatNotification.enabled,
-    intervalSeconds: Math.max(MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS, repeatNotification.intervalSeconds)
+    intervalSeconds: clampRepeatNotificationIntervalSeconds(repeatNotification.intervalSeconds)
   };
+}
+
+export function clampRepeatNotificationIntervalSeconds(intervalSeconds: number): number {
+  return Math.min(
+    MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS,
+    Math.max(MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS, intervalSeconds)
+  );
 }
 
 export function createLegacyNotificationRuleInputFromV2Draft(draft: NotificationRuleV2Draft): NotificationRuleInput {

@@ -14,7 +14,8 @@ import type {
 } from "./types";
 
 const DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 300;
-const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 60;
+const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 30;
+const MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 2700;
 
 export interface NotificationSettingsRequest {
   readonly guildId: string;
@@ -270,7 +271,8 @@ function createRepeatNotification(data: unknown): NonNullable<NotificationRuleV2
     typeof data.enabled !== "boolean" ||
     typeof data.intervalSeconds !== "number" ||
     !Number.isSafeInteger(data.intervalSeconds) ||
-    data.intervalSeconds < MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS
+    data.intervalSeconds < MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS ||
+    data.intervalSeconds > MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS
   ) {
     return {
       enabled: false,

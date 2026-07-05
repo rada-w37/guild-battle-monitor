@@ -22,6 +22,9 @@ import {
   type SuspendNotificationRuleRequest
 } from "./notificationSettingsFunctionsRepository";
 import {
+  MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS,
+  MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS,
+  clampRepeatNotificationIntervalSeconds,
   createDefaultNotificationRuleV2Draft,
   createLegacyNotificationRuleInputFromV2Draft,
   createNotificationRuleV2DraftFromLegacy,
@@ -68,6 +71,9 @@ const DETAIL_RULE_OFF_DISABLED_VARIABLES = [
   "{侵攻数}"
 ] as const;
 const DETAIL_RULE_OFF_VARIABLE_DISABLED_REASON = "詳細ルールOFF時は利用できません";
+const REPEAT_INTERVAL_MIN_CORRECTION_MESSAGE = "30秒未満は指定できないため、30秒に補正しました。";
+const REPEAT_INTERVAL_MAX_CORRECTION_MESSAGE = "45分を超えるため、45分00秒に補正しました。";
+const REPEAT_INTERVAL_SECONDS_NORMALIZED_MESSAGE = "秒は0〜59秒として扱うため、分と秒に補正しました。";
 
 interface NotificationSettingsDialogProps {
   readonly request: NotificationSettingsRequest;
@@ -128,6 +134,13 @@ interface DiscardConfirmationContent {
   readonly confirmLabel: string;
 }
 
+interface RepeatIntervalInputState {
+  readonly minutes: string;
+  readonly seconds: string;
+  readonly warning: string | null;
+  readonly syncedIntervalSeconds: number;
+}
+
 export function NotificationSettingsDialog({
   request,
   role,
@@ -149,6 +162,9 @@ export function NotificationSettingsDialog({
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [ruleEditorMode, setRuleEditorMode] = useState<RuleEditorMode>("empty");
   const [ruleDraft, setRuleDraft] = useState<RuleDraft>(() => createDefaultRuleDraft("guildBattle"));
+  const [repeatIntervalInput, setRepeatIntervalInput] = useState<RepeatIntervalInputState>(() =>
+    createRepeatIntervalInputState(ruleDraft.repeatNotification.intervalSeconds)
+  );
   const [savedRuleDraft, setSavedRuleDraft] = useState<RuleDraft | null>(null);
   const [destinationDraft, setDestinationDraft] = useState<DestinationDraft>(createDefaultDestinationDraft());
   const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
@@ -169,6 +185,14 @@ export function NotificationSettingsDialog({
   const titleTemplateInputRef = useRef<HTMLInputElement | null>(null);
   const bodyTemplateTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const ruleCardPointerRef = useRef<RuleCardPointerState | null>(null);
+
+  useEffect(() => {
+    setRepeatIntervalInput((currentInput) =>
+      currentInput.syncedIntervalSeconds === ruleDraft.repeatNotification.intervalSeconds
+        ? currentInput
+        : createRepeatIntervalInputState(ruleDraft.repeatNotification.intervalSeconds)
+    );
+  }, [ruleDraft.repeatNotification.intervalSeconds]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -647,8 +671,27 @@ export function NotificationSettingsDialog({
     }
   }
 
+  function commitRepeatIntervalInput(currentDraft: RuleDraft = ruleDraft): RuleDraft {
+    if (!currentDraft.detailRuleEnabled || !currentDraft.repeatNotification.enabled) {
+      return currentDraft;
+    }
+
+    const normalizedInput = normalizeRepeatIntervalInput(repeatIntervalInput);
+    const nextDraft = {
+      ...currentDraft,
+      repeatNotification: {
+        ...currentDraft.repeatNotification,
+        intervalSeconds: normalizedInput.syncedIntervalSeconds
+      }
+    };
+    setRepeatIntervalInput(normalizedInput);
+    setRuleDraft(nextDraft);
+    return nextDraft;
+  }
+
   async function saveRule() {
-    const validation = validateRuleDraft(ruleDraft);
+    const draftToSave = commitRepeatIntervalInput();
+    const validation = validateRuleDraft(draftToSave);
     setRuleError(validation);
     setMessage(null);
     setError(null);
@@ -664,14 +707,14 @@ export function NotificationSettingsDialog({
             await saveNotificationRuleV2({
               ...request,
               ...(selectedRuleId === null ? {} : { ruleId: selectedRuleId }),
-              rule: toRuleV2Input(ruleDraft)
+              rule: toRuleV2Input(draftToSave)
             } satisfies SaveNotificationRuleV2Request)
           )
         : createRuleRecordFromLegacy(
             await saveNotificationRule({
               ...request,
               ...(selectedRuleId === null ? {} : { ruleId: selectedRuleId }),
-              rule: toLegacyRuleInput(ruleDraft)
+              rule: toLegacyRuleInput(draftToSave)
             } satisfies SaveNotificationRuleRequest)
           );
       setRules((currentRules) => {
@@ -1294,10 +1337,22 @@ export function NotificationSettingsDialog({
                       type="checkbox"
                       onChange={(event) => {
                         const enabled = event.target.checked;
+                        const normalizedRepeatIntervalInput = normalizeRepeatIntervalInput(repeatIntervalInput);
+                        if (enabled) {
+                          setRepeatIntervalInput(
+                            createRepeatIntervalInputState(ruleDraft.repeatNotification.intervalSeconds)
+                          );
+                        } else {
+                          setRepeatIntervalInput(normalizedRepeatIntervalInput);
+                        }
                         setRuleDraft((currentDraft) => ({
                           ...currentDraft,
                           repeatNotification: {
                             ...currentDraft.repeatNotification,
+                            intervalSeconds:
+                              currentDraft.repeatNotification.enabled && !enabled
+                                ? normalizedRepeatIntervalInput.syncedIntervalSeconds
+                                : currentDraft.repeatNotification.intervalSeconds,
                             enabled
                           }
                         }));
@@ -1310,29 +1365,48 @@ export function NotificationSettingsDialog({
                   </label>
                 </div>
                 {ruleDraft.detailRuleEnabled && ruleDraft.repeatNotification.enabled ? (
-                  <label className="field notification-rule-editor__repeat-interval">
+                  <div className="field notification-rule-editor__repeat-interval">
                     <span className="field__label">{"\u901a\u77e5\u9593\u9694"}</span>
                     <span className="notification-rule-editor__repeat-interval-control">
                       <input
                         id="notification-rule-repeat-interval-minutes"
+                        aria-label="通知間隔 分"
                         className="field__input"
-                        min="1"
+                        inputMode="numeric"
+                        min="0"
+                        step="1"
                         type="number"
-                        value={Math.max(1, Math.floor(ruleDraft.repeatNotification.intervalSeconds / 60))}
+                        value={repeatIntervalInput.minutes}
                         onChange={(event) => {
-                          const intervalMinutes = Math.max(1, Number.parseInt(event.target.value, 10) || 1);
-                          setRuleDraft((currentDraft) => ({
-                            ...currentDraft,
-                            repeatNotification: {
-                              ...currentDraft.repeatNotification,
-                              intervalSeconds: intervalMinutes * 60
-                            }
-                          }));
+                          const minutes = event.target.value;
+                          setRepeatIntervalInput((currentInput) => ({ ...currentInput, minutes, warning: null }));
                         }}
+                        onBlur={() => commitRepeatIntervalInput()}
                       />
                       <span>{"\u5206"}</span>
+                      <input
+                        id="notification-rule-repeat-interval-seconds"
+                        aria-label="通知間隔 秒"
+                        className="field__input"
+                        inputMode="numeric"
+                        min="0"
+                        step="1"
+                        type="number"
+                        value={repeatIntervalInput.seconds}
+                        onChange={(event) => {
+                          const seconds = event.target.value;
+                          setRepeatIntervalInput((currentInput) => ({ ...currentInput, seconds, warning: null }));
+                        }}
+                        onBlur={() => commitRepeatIntervalInput()}
+                      />
+                      <span>{"\u79d2"}</span>
                     </span>
-                  </label>
+                    {repeatIntervalInput.warning === null ? null : (
+                      <span className="notification-rule-editor__repeat-interval-warning" role="status">
+                        {repeatIntervalInput.warning}
+                      </span>
+                    )}
+                  </div>
                 ) : null}
               </div>
               <div className="notification-rule-editor__section-heading-row">
@@ -1343,18 +1417,26 @@ export function NotificationSettingsDialog({
                 <label className="notification-rule-card__enabled-toggle notification-rule-editor__detail-toggle">
                   <input
                     checked={ruleDraft.detailRuleEnabled}
-                    type="checkbox"
-                    onChange={(event) => {
-                      const detailRuleEnabled = event.target.checked;
-                      setRuleDraft((currentDraft) => {
-                        const nextDraft = {
-                          ...currentDraft,
-                          detailRuleEnabled,
-                          repeatNotification: {
-                            ...currentDraft.repeatNotification,
-                            enabled: detailRuleEnabled && currentDraft.repeatNotification.enabled
-                          }
-                        };
+                  type="checkbox"
+                  onChange={(event) => {
+                    const detailRuleEnabled = event.target.checked;
+                    const normalizedRepeatIntervalInput = normalizeRepeatIntervalInput(repeatIntervalInput);
+                    if (!detailRuleEnabled && ruleDraft.repeatNotification.enabled) {
+                      setRepeatIntervalInput(normalizedRepeatIntervalInput);
+                    }
+                    setRuleDraft((currentDraft) => {
+                      const nextDraft = {
+                        ...currentDraft,
+                        detailRuleEnabled,
+                        repeatNotification: {
+                          ...currentDraft.repeatNotification,
+                          intervalSeconds:
+                            currentDraft.detailRuleEnabled && currentDraft.repeatNotification.enabled && !detailRuleEnabled
+                              ? normalizedRepeatIntervalInput.syncedIntervalSeconds
+                              : currentDraft.repeatNotification.intervalSeconds,
+                          enabled: detailRuleEnabled && currentDraft.repeatNotification.enabled
+                        }
+                      };
                         setRuleError(validateRuleDraft(nextDraft));
                         return nextDraft;
                       });
@@ -2006,6 +2088,50 @@ function createRuleDraft(rule: RuleRecord): RuleDraft {
     detailConditions: normalizeDetailConditionRoot(rule.detailConditions),
     repeatNotification: normalizeRepeatNotification(rule.repeatNotification)
   };
+}
+
+function createRepeatIntervalInputState(
+  intervalSeconds: number,
+  warning: string | null = null
+): RepeatIntervalInputState {
+  const clampedIntervalSeconds = clampRepeatNotificationIntervalSeconds(intervalSeconds);
+  return {
+    minutes: Math.floor(clampedIntervalSeconds / 60).toString(),
+    seconds: (clampedIntervalSeconds % 60).toString().padStart(2, "0"),
+    warning,
+    syncedIntervalSeconds: clampedIntervalSeconds
+  };
+}
+
+function normalizeRepeatIntervalInput(input: RepeatIntervalInputState): RepeatIntervalInputState {
+  const minutes = Math.max(0, parseRepeatIntervalInputPart(input.minutes));
+  const seconds = Math.max(0, parseRepeatIntervalInputPart(input.seconds));
+  const rawIntervalSeconds = minutes * 60 + seconds;
+  const intervalSeconds = clampRepeatNotificationIntervalSeconds(rawIntervalSeconds);
+
+  if (rawIntervalSeconds < MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS) {
+    return createRepeatIntervalInputState(intervalSeconds, REPEAT_INTERVAL_MIN_CORRECTION_MESSAGE);
+  }
+
+  if (rawIntervalSeconds > MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS) {
+    return createRepeatIntervalInputState(intervalSeconds, REPEAT_INTERVAL_MAX_CORRECTION_MESSAGE);
+  }
+
+  if (seconds >= 60) {
+    return createRepeatIntervalInputState(intervalSeconds, REPEAT_INTERVAL_SECONDS_NORMALIZED_MESSAGE);
+  }
+
+  return createRepeatIntervalInputState(intervalSeconds);
+}
+
+function parseRepeatIntervalInputPart(value: string): number {
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return 0;
+  }
+
+  const parsedValue = Number(trimmedValue);
+  return Number.isFinite(parsedValue) ? Math.trunc(parsedValue) : 0;
 }
 
 function toLegacyRuleInput(ruleDraft: RuleDraft) {

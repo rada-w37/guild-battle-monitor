@@ -1033,12 +1033,12 @@ select {
 }
 
 .notification-rule-editor__repeat-interval {
-  max-width: 220px;
+  max-width: 340px;
 }
 
 .notification-rule-editor__repeat-interval-control {
   display: grid;
-  grid-template-columns: minmax(72px, 1fr) auto;
+  grid-template-columns: minmax(72px, 1fr) auto minmax(72px, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
@@ -1046,6 +1046,12 @@ select {
 .notification-rule-editor__repeat-interval-control .field__input {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.notification-rule-editor__repeat-interval-warning {
+  color: #9a3412;
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 .notification-rule-editor__target-guilds {
@@ -2955,7 +2961,7 @@ select {
   }
 
   .notification-rule-editor__repeat-interval {
-    max-width: 180px;
+    max-width: 100%;
   }
 
   .notification-rule-preview-panel {

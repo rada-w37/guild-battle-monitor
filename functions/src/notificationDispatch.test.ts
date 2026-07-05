@@ -88,6 +88,35 @@ describe("notification dispatch trigger", () => {
     });
   });
 
+  it("posts a repeat request with a 30 second repeat interval", async () => {
+    const firestore = createFirestore({
+      "guildShares/guild-1/notificationDestinations/discord": createDestination()
+    });
+    const discordPosts: DiscordPost[] = [];
+
+    await handleNotificationRequestCreated(
+      "request-repeat-1",
+      createRequest({
+        repeatNotification: {
+          enabled: true,
+          intervalSeconds: 30
+        },
+        baseNotificationKey: "base-notification-key",
+        repeatSeq: 1,
+        isRepeat: true
+      }),
+      createDependencies(firestore, { discordPosts })
+    );
+
+    expect(discordPosts).toHaveLength(1);
+    expect(firestore.documents["notificationRequests/request-repeat-1"]).toMatchObject({
+      status: "sent"
+    });
+    expect(firestore.documents["guildShares/guild-1/notificationHistories/request-repeat-1"]).toMatchObject({
+      status: "sent"
+    });
+  });
+
   it("does not alter sent or processing histories when skipping duplicates", async () => {
     const sentHistory = createHistory({ status: "sent", createdAt: "created-sent", updatedAt: "updated-sent" });
     const processingHistory = createHistory({

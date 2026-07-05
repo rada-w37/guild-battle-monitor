@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultNotificationRuleV2Draft,
   createLegacyNotificationRuleInputFromV2Draft,
-  createNotificationRuleV2DraftFromLegacy
+  createNotificationRuleV2DraftFromLegacy,
+  normalizeRepeatNotification
 } from "./notificationRuleV2Draft";
 import type { NotificationRule } from "./types";
 
@@ -69,6 +70,21 @@ describe("notification rule v2 draft", () => {
         attackCountMin: 3
       },
       message: legacyRule.message
+    });
+  });
+
+  it("normalizes repeat notification intervals to the supported range", () => {
+    expect(normalizeRepeatNotification({ enabled: true, intervalSeconds: 30 })).toEqual({
+      enabled: true,
+      intervalSeconds: 30
+    });
+    expect(normalizeRepeatNotification({ enabled: true, intervalSeconds: 10 })).toEqual({
+      enabled: true,
+      intervalSeconds: 30
+    });
+    expect(normalizeRepeatNotification({ enabled: true, intervalSeconds: 2701 })).toEqual({
+      enabled: true,
+      intervalSeconds: 2700
     });
   });
 });

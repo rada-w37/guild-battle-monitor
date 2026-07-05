@@ -12,7 +12,8 @@ const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z
 const FUNCTION_REGION = "asia-northeast1";
 const NOTIFICATION_SUMMARY_MAX_LENGTH = 120;
 const DEFAULT_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 300;
-const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 60;
+const MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 30;
+const MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS = 2700;
 
 type NotificationBattleType = "guildBattle" | "grandBattle";
 type NotificationBattleSide = "defense" | "attack";
@@ -725,7 +726,8 @@ function readRepeatNotification(data: unknown): NotificationRuleV2Input["repeatN
     typeof data.enabled !== "boolean" ||
     typeof data.intervalSeconds !== "number" ||
     !Number.isSafeInteger(data.intervalSeconds) ||
-    data.intervalSeconds < MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS
+    data.intervalSeconds < MIN_REPEAT_NOTIFICATION_INTERVAL_SECONDS ||
+    data.intervalSeconds > MAX_REPEAT_NOTIFICATION_INTERVAL_SECONDS
   ) {
     throw new HttpsError("invalid-argument", "invalid_notification_repeat_notification");
   }

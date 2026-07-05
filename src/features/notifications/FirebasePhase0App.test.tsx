@@ -1500,7 +1500,7 @@ describe("FirebasePhase0App notification settings dialog", () => {
     });
   });
 
-  it("saves repeat notification settings in seconds and clamps the UI to one minute", async () => {
+  it("saves repeat notification settings in seconds and clamps short input on blur", async () => {
     const saveNotificationRuleV2 = vi.fn((input: { readonly rule: NotificationRuleV2Input }) =>
       Promise.resolve({
         id: "saved-rule-v2",
@@ -1536,27 +1536,44 @@ describe("FirebasePhase0App notification settings dialog", () => {
       await flushPromises();
     });
 
-    const intervalInput = document.querySelector<HTMLInputElement>("#notification-rule-repeat-interval-minutes");
-    if (!intervalInput) {
-      throw new Error("repeat notification interval input was not found");
+    const intervalMinutesInput = document.querySelector<HTMLInputElement>("#notification-rule-repeat-interval-minutes");
+    const intervalSecondsInput = document.querySelector<HTMLInputElement>("#notification-rule-repeat-interval-seconds");
+    if (!intervalMinutesInput || !intervalSecondsInput) {
+      throw new Error("repeat notification interval inputs were not found");
     }
-    expect(intervalInput.min).toBe("1");
-    expect(intervalInput.value).toBe("5");
+    expect(intervalMinutesInput.min).toBe("0");
+    expect(intervalMinutesInput.value).toBe("5");
+    expect(intervalSecondsInput.value).toBe("00");
 
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      valueSetter?.call(intervalInput, "0");
-      intervalInput.dispatchEvent(new Event("input", { bubbles: true }));
+      valueSetter?.call(intervalMinutesInput, "");
+      intervalMinutesInput.dispatchEvent(new Event("input", { bubbles: true }));
+      valueSetter?.call(intervalSecondsInput, "");
+      intervalSecondsInput.dispatchEvent(new Event("input", { bubbles: true }));
       await flushPromises();
     });
-    expect(intervalInput.value).toBe("1");
+    expect(intervalMinutesInput.value).toBe("");
+    expect(intervalSecondsInput.value).toBe("");
 
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      valueSetter?.call(intervalInput, "3");
-      intervalInput.dispatchEvent(new Event("input", { bubbles: true }));
+      valueSetter?.call(intervalMinutesInput, "0");
+      intervalMinutesInput.dispatchEvent(new Event("input", { bubbles: true }));
+      valueSetter?.call(intervalSecondsInput, "10");
+      intervalSecondsInput.dispatchEvent(new Event("input", { bubbles: true }));
       await flushPromises();
     });
+    expect(intervalMinutesInput.value).toBe("0");
+    expect(intervalSecondsInput.value).toBe("10");
+
+    await act(async () => {
+      intervalSecondsInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(intervalMinutesInput.value).toBe("0");
+    expect(intervalSecondsInput.value).toBe("30");
+    expect(document.body.textContent).toContain("30秒未満は指定できないため、30秒に補正しました。");
 
     const createButton = getNotificationRuleEditorActionButton("作成");
     await act(async () => {
@@ -1569,10 +1586,70 @@ describe("FirebasePhase0App notification settings dialog", () => {
       rule: expect.objectContaining({
         repeatNotification: {
           enabled: true,
-          intervalSeconds: 180
+          intervalSeconds: 30
         }
       })
     });
+  });
+
+  it("normalizes repeat notification interval seconds and hydrates existing second values", async () => {
+    await renderNotificationSettingsDialog({
+      rules: [
+        createNotificationRuleV2({
+          id: "repeat-90-rule",
+          repeatNotification: {
+            enabled: true,
+            intervalSeconds: 90
+          }
+        })
+      ]
+    });
+    await openFirstNotificationRuleForEdit();
+
+    const intervalMinutesInput = document.querySelector<HTMLInputElement>("#notification-rule-repeat-interval-minutes");
+    const intervalSecondsInput = document.querySelector<HTMLInputElement>("#notification-rule-repeat-interval-seconds");
+    if (!intervalMinutesInput || !intervalSecondsInput) {
+      throw new Error("repeat notification interval inputs were not found");
+    }
+
+    expect(intervalMinutesInput.value).toBe("1");
+    expect(intervalSecondsInput.value).toBe("30");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(intervalMinutesInput, "0");
+      intervalMinutesInput.dispatchEvent(new Event("input", { bubbles: true }));
+      valueSetter?.call(intervalSecondsInput, "90");
+      intervalSecondsInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(intervalMinutesInput.value).toBe("0");
+    expect(intervalSecondsInput.value).toBe("90");
+
+    await act(async () => {
+      intervalSecondsInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(intervalMinutesInput.value).toBe("1");
+    expect(intervalSecondsInput.value).toBe("30");
+    expect(document.body.textContent).toContain("秒は0〜59秒として扱うため、分と秒に補正しました。");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(intervalMinutesInput, "45");
+      intervalMinutesInput.dispatchEvent(new Event("input", { bubbles: true }));
+      valueSetter?.call(intervalSecondsInput, "1");
+      intervalSecondsInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await flushPromises();
+    });
+
+    await act(async () => {
+      intervalSecondsInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      await flushPromises();
+    });
+    expect(intervalMinutesInput.value).toBe("45");
+    expect(intervalSecondsInput.value).toBe("00");
+    expect(document.body.textContent).toContain("45分を超えるため、45分00秒に補正しました。");
   });
 
   it("allows saving an empty Discord username and body for v2 rules", async () => {
