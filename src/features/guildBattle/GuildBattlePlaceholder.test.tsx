@@ -379,7 +379,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(getStoredViewSettings().world).toBe("50");
     expect(getGrandBattleUpdateButton().disabled).toBe(false);
     expect(document.querySelector(".grand-battle-setup__selection-summary")?.textContent).toBe(
-      "Japan / W+50 / グランドマスター / ブロック A"
+      "Japan / W50 / グランドマスター / ブロック A"
     );
 
     await clickGrandBattleUpdateButton();

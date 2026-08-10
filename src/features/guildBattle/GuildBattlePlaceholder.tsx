@@ -1376,7 +1376,7 @@ function GrandBattleSetupPanel({
 
       <div className="grand-battle-setup__apply-row">
         <p className="grand-battle-setup__selection-summary">
-          {GRAND_BATTLE_SERVER_OPTIONS.find((option) => option.value === draftSource.serverId)?.label ?? ""} / W+
+          {GRAND_BATTLE_SERVER_OPTIONS.find((option) => option.value === draftSource.serverId)?.label ?? ""} / W
           {draftSource.worldInput.trim().length > 0 ? draftSource.worldInput.trim() : "—"} / {getGrandBattleOptionLabel(
             GRAND_BATTLE_CLASS_OPTIONS,
             draftSource.classId
