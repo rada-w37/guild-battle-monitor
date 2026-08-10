@@ -997,6 +997,30 @@ describe("GuildBattlePlaceholder", () => {
     expect(realtimeClient.sentUnsubscriptions).toHaveLength(0);
   });
 
+  it("reconnects GrandBattle realtime from the monitoring status icon", async () => {
+    const realtimeClient = new MockGvgRealtimeClient();
+    renderGrandBattleComponent(() => realtimeClient);
+
+    await flushPromises();
+    act(() => {
+      updateInput(getGrandBattleWorldInput(), "50");
+    });
+    await commitGrandBattleWorldWithKey("Enter");
+    await clickGrandBattleUpdateButton();
+
+    expect(realtimeClient.subscriptions).toHaveLength(1);
+
+    await act(async () => {
+      getConnectionIndicator().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(realtimeClient.sentUnsubscriptions).toHaveLength(1);
+    expect(realtimeClient.subscriptions).toHaveLength(2);
+    expect(querySettingsDialog()).toBeNull();
+  });
+
   it("does not start GrandBattle realtime when auto update is off", async () => {
     const realtimeClient = new MockGvgRealtimeClient();
     window.localStorage.setItem(

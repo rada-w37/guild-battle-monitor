@@ -783,6 +783,16 @@ export function GuildBattlePlaceholder({
     }
   }
 
+  async function handleGrandBattleRealtimeReconnect() {
+    if (!isAutoUpdateEnabled || grandBattleSnapshotLoadState.status !== "success") {
+      return;
+    }
+
+    const snapshot = grandBattleSnapshotLoadState.data;
+    stopGrandBattleRealtime("manual grand battle realtime reconnect", { nextState: "idle" });
+    await startGrandBattleRealtime(snapshot);
+  }
+
   async function loadGrandBattleSnapshotForSource(source: GrandBattleResolvedSource) {
     stopGrandBattleRealtime("grand battle snapshot reload", { nextState: "idle" });
     const requestSeq = grandBattleSnapshotRequestSeqRef.current + 1;
@@ -1139,7 +1149,7 @@ export function GuildBattlePlaceholder({
             onBlockChange={handleGrandBattleBlockChange}
             onClassChange={handleGrandBattleClassChange}
             onGuildChange={setSelectedGrandBattleGuildId}
-            onOpenSettings={() => setIsSettingsDialogOpen(true)}
+            onReconnect={handleGrandBattleRealtimeReconnect}
             onWorldCommit={handleGrandBattleWorldCommit}
             onWorldInputChange={handleGrandBattleWorldInputChange}
           />
@@ -1251,7 +1261,7 @@ function GrandBattleSetupPanel({
   onBlockChange,
   onClassChange,
   onGuildChange,
-  onOpenSettings,
+  onReconnect,
   onWorldCommit,
   onWorldInputChange
 }: {
@@ -1271,7 +1281,7 @@ function GrandBattleSetupPanel({
   readonly onBlockChange: (blockId: GrandBattleBlockId) => void;
   readonly onClassChange: (classId: GrandBattleClassId) => void;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
-  readonly onOpenSettings: () => void;
+  readonly onReconnect: () => void;
   readonly onWorldCommit: () => void;
   readonly onWorldInputChange: (worldInput: string) => void;
 }) {
@@ -1288,7 +1298,7 @@ function GrandBattleSetupPanel({
           selectedGuildId={selectedGuildId}
           snapshotLoadState={snapshotLoadState}
           onGuildChange={onGuildChange}
-          onOpenSettings={onOpenSettings}
+          onReconnect={onReconnect}
         />
       </section>
     );
@@ -1392,7 +1402,7 @@ function GrandBattleSetupPanel({
         selectedGuildId={selectedGuildId}
         snapshotLoadState={snapshotLoadState}
         onGuildChange={onGuildChange}
-        onOpenSettings={onOpenSettings}
+        onReconnect={onReconnect}
       />
     </section>
   );
@@ -1461,7 +1471,7 @@ function GrandBattleSnapshotStatus({
   selectedGuildId,
   snapshotLoadState,
   onGuildChange,
-  onOpenSettings
+  onReconnect
 }: {
   readonly alertThresholds: GuildBattleAlertThresholds;
   readonly isAutoUpdateEnabled: boolean;
@@ -1470,7 +1480,7 @@ function GrandBattleSnapshotStatus({
   readonly selectedGuildId: GvgGuildId | "";
   readonly snapshotLoadState: AsyncLoadState<GrandBattleSnapshot>;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
-  readonly onOpenSettings: () => void;
+  readonly onReconnect: () => void;
 }) {
   if (snapshotLoadState.status === "idle") {
     return null;
@@ -1501,7 +1511,7 @@ function GrandBattleSnapshotStatus({
       selectedGuildId={selectedGuildId}
       snapshot={snapshotLoadState.data}
       onGuildChange={onGuildChange}
-      onOpenSettings={onOpenSettings}
+      onReconnect={onReconnect}
     />
   );
 }
@@ -1514,7 +1524,7 @@ function GrandBattleSnapshotSummary({
   selectedGuildId,
   snapshot,
   onGuildChange,
-  onOpenSettings
+  onReconnect
 }: {
   readonly alertThresholds: GuildBattleAlertThresholds;
   readonly isAutoUpdateEnabled: boolean;
@@ -1523,7 +1533,7 @@ function GrandBattleSnapshotSummary({
   readonly selectedGuildId: GvgGuildId | "";
   readonly snapshot: GrandBattleSnapshot;
   readonly onGuildChange: (guildId: GvgGuildId | "") => void;
-  readonly onOpenSettings: () => void;
+  readonly onReconnect: () => void;
 }) {
   const currentTime = useCurrentTime();
   const guildCandidates = useMemo(
@@ -1553,7 +1563,7 @@ function GrandBattleSnapshotSummary({
         <ConnectionIndicator
           isAutoUpdateEnabled={isAutoUpdateEnabled}
           state={realtimeState}
-          onClick={onOpenSettings}
+          onClick={onReconnect}
         />
         <span className="snapshot-summary__captured-at">更新: {snapshot.capturedAt}</span>
       </div>
