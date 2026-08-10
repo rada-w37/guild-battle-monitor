@@ -298,10 +298,10 @@ describe("GuildBattlePlaceholder", () => {
     expect(document.body.textContent).not.toContain("GrandBattleMonitor（準備中）");
     expect(document.body.textContent).toContain("監視条件");
     expect(document.body.textContent).toContain("参加ギルド");
-    expect(getGrandBattleSelect("サーバー").value).toBe("japan");
+    expect(getGrandBattleServerInput().value).toBe("Japan");
     expect(getGrandBattleWorldInput().value).toBe("");
-    expect(getGrandBattleSelect("クラス").value).toBe("3");
-    expect(getGrandBattleSelect("ブロック").value).toBe("0");
+    expect(getGrandBattleClassTab("グランドマスター").getAttribute("aria-selected")).toBe("true");
+    expect(getGrandBattleBlockCard("A").getAttribute("aria-pressed")).toBe("true");
     expect(getGrandBattleUpdateButton().disabled).toBe(true);
     expect(document.querySelector(".startup-panel")).toBeNull();
     expect(getSettingsButton().disabled).toBe(false);
@@ -341,20 +341,18 @@ describe("GuildBattlePlaceholder", () => {
     expect(getGrandBattleUpdateButton().disabled).toBe(false);
   });
 
-  it("shows all GrandBattle class options", async () => {
+  it("shows all GrandBattle class page tabs and block cards", async () => {
     renderGrandBattleComponent();
     await flushPromises();
 
-    expect(getSelectOptions(getGrandBattleSelect("クラス"))).toEqual([
+    expect(Array.from(document.querySelectorAll<HTMLElement>(".grand-battle-pages__tab")).map((tab) => tab.textContent)).toEqual([
       "グランドマスター",
       "エキスパート",
       "エリート"
     ]);
-    expect(Array.from(getGrandBattleSelect("クラス").options).map((option) => option.value)).toEqual([
-      "3",
-      "2",
-      "1"
-    ]);
+    expect(Array.from(document.querySelectorAll<HTMLElement>(".grand-battle-block-card")).map((card) => card.textContent)).toHaveLength(4);
+    expect(document.querySelector(".grand-battle-setup .field__label")?.textContent).toBe("サーバー");
+    expect(document.body.textContent).not.toContain("クラス");
   });
 
   it("loads GrandBattle participant guilds when world is committed and applies the candidate source", async () => {
@@ -380,6 +378,9 @@ describe("GuildBattlePlaceholder", () => {
     expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
     expect(getStoredViewSettings().world).toBe("50");
     expect(getGrandBattleUpdateButton().disabled).toBe(false);
+    expect(document.querySelector(".grand-battle-setup__selection-summary")?.textContent).toBe(
+      "Japan / W+50 / グランドマスター / ブロック A"
+    );
 
     await clickGrandBattleUpdateButton();
 
@@ -397,35 +398,33 @@ describe("GuildBattlePlaceholder", () => {
     await commitGrandBattleWorldWithKey("Enter");
 
     await act(async () => {
-      updateSelect(getGrandBattleSelect("クラス"), "2");
+      getGrandBattleClassTab("エキスパート").dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
     await act(async () => {
-      updateSelect(getGrandBattleSelect("ブロック"), "1");
+      getGrandBattleBlockCard("B").dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(loadGrandBattleParticipants).toHaveBeenLastCalledWith({
-      serverId: "japan",
-      worldInput: "50",
-      worldNumber: 50,
-      classId: 2,
-      blockId: 1
-    });
+    expect(loadGrandBattleParticipants).toHaveBeenCalledTimes(8);
+    expect(loadGrandBattleParticipants).toHaveBeenNthCalledWith(5, expect.objectContaining({ classId: 2, blockId: 0 }));
+    expect(loadGrandBattleParticipants).toHaveBeenNthCalledWith(6, expect.objectContaining({ classId: 2, blockId: 1 }));
+    expect(loadGrandBattleParticipants).toHaveBeenNthCalledWith(7, expect.objectContaining({ classId: 2, blockId: 2 }));
+    expect(loadGrandBattleParticipants).toHaveBeenNthCalledWith(8, expect.objectContaining({ classId: 2, blockId: 3 }));
+    expect(getGrandBattleBlockCard("B").getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("keeps previous GrandBattle participant guilds visible while loading new candidates", async () => {
+  it("shows loading placeholders while refreshing GrandBattle class candidates", async () => {
     const nextParticipants = grandBattleParticipants.map((participant, index) => ({
       ...participant,
       guildName: `次候補${index + 1}`
     }));
     const deferredParticipants = createDeferred<readonly GrandBattleParticipantGuildCandidate[]>();
-    const loadGrandBattleParticipants = vi
-      .fn<typeof loadGrandBattleParticipantGuilds>()
-      .mockResolvedValueOnce(grandBattleParticipants)
-      .mockReturnValueOnce(deferredParticipants.promise);
+    const loadGrandBattleParticipants = vi.fn<typeof loadGrandBattleParticipantGuilds>((source) =>
+      source.classId === 3 ? Promise.resolve(grandBattleParticipants) : deferredParticipants.promise
+    );
     renderGrandBattleComponent(undefined, loadGrandBattleParticipants);
 
     await flushPromises();
@@ -436,12 +435,18 @@ describe("GuildBattlePlaceholder", () => {
     expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
 
     await act(async () => {
-      updateSelect(getGrandBattleSelect("ブロック"), "1");
+      getGrandBattleClassTab("エキスパート").dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(getGrandBattleParticipantNames()).toEqual(["ギルドA", "ギルドB", "ギルドC", "ギルドD"]);
+    expect(getGrandBattleParticipantNames()).toEqual([]);
+    expect(Array.from(document.querySelectorAll<HTMLElement>(".grand-battle-block-card__message")).map((message) => message.textContent)).toEqual([
+      "取得中です。",
+      "取得中です。",
+      "取得中です。",
+      "取得中です。"
+    ]);
     expect(getGrandBattleUpdateButton().disabled).toBe(true);
 
     await act(async () => {
@@ -458,7 +463,7 @@ describe("GuildBattlePlaceholder", () => {
     const loadGrandBattleParticipants = vi
       .fn<typeof loadGrandBattleParticipantGuilds>()
       .mockRejectedValueOnce(new Error("参加ギルド候補の取得に失敗しました。"))
-      .mockResolvedValueOnce(grandBattleParticipants.slice(0, 2));
+      .mockResolvedValue(grandBattleParticipants.slice(0, 2));
     renderGrandBattleComponent(undefined, loadGrandBattleParticipants);
 
     await flushPromises();
@@ -1108,7 +1113,7 @@ describe("GuildBattlePlaceholder", () => {
     expect(getRenderedCastleLabels()).toEqual(["アイン", "イエソド"]);
 
     await act(async () => {
-      updateSelect(getGrandBattleSelect("ブロック"), "1");
+      getGrandBattleBlockCard("B").dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -2016,17 +2021,41 @@ function getAppShell() {
   return appShell;
 }
 
-function getGrandBattleSelect(label: "サーバー" | "クラス" | "ブロック") {
+function getGrandBattleServerInput() {
   const field = Array.from(document.querySelectorAll<HTMLLabelElement>(".grand-battle-setup .field")).find(
-    (candidate) => candidate.querySelector(".field__label")?.textContent === label
+    (candidate) => candidate.querySelector(".field__label")?.textContent === "サーバー"
   );
-  const select = field?.querySelector<HTMLSelectElement>("select");
+  const input = field?.querySelector<HTMLInputElement>("input");
 
-  if (!select) {
-    throw new Error(`GrandBattle select was not found: ${label}`);
+  if (!input) {
+    throw new Error("GrandBattle server input was not found");
   }
 
-  return select;
+  return input;
+}
+
+function getGrandBattleClassTab(label: "グランドマスター" | "エキスパート" | "エリート") {
+  const tab = Array.from(document.querySelectorAll<HTMLButtonElement>(".grand-battle-pages__tab")).find(
+    (candidate) => candidate.textContent === label
+  );
+
+  if (!tab) {
+    throw new Error(`GrandBattle class tab was not found: ${label}`);
+  }
+
+  return tab;
+}
+
+function getGrandBattleBlockCard(label: "A" | "B" | "C" | "D") {
+  const card = Array.from(document.querySelectorAll<HTMLButtonElement>(".grand-battle-block-card")).find(
+    (candidate) => candidate.querySelector(".grand-battle-block-card__title")?.textContent === `ブロック ${label}`
+  );
+
+  if (!card) {
+    throw new Error(`GrandBattle block card was not found: ${label}`);
+  }
+
+  return card;
 }
 
 function getGrandBattleWorldInput() {
@@ -2063,9 +2092,9 @@ function getGuildBattleUpdateButton() {
 }
 
 function getGrandBattleParticipantNames() {
-  return Array.from(document.querySelectorAll<HTMLElement>(".grand-battle-participants__guild")).map(
-    (candidate) => candidate.textContent ?? ""
-  );
+  return Array.from(
+    document.querySelectorAll<HTMLElement>(".grand-battle-block-card--selected .grand-battle-block-card__guild")
+  ).map((candidate) => candidate.textContent ?? "");
 }
 
 function getKoVictimSummary() {
@@ -2080,10 +2109,6 @@ function getKoVictimSummary() {
 
 function getKoVictimRows() {
   return Array.from(document.querySelectorAll<HTMLElement>(".ko-victim-summary__row"));
-}
-
-function getSelectOptions(select: HTMLSelectElement) {
-  return Array.from(select.options).map((option) => option.textContent ?? "");
 }
 
 async function commitGrandBattleWorldWithKey(key: "Enter" | "Tab") {

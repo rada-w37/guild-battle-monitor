@@ -285,6 +285,8 @@ select {
 .firebase-auth-button:focus-visible,
 .settings-button:focus-visible,
 .mode-tabs__button:focus-visible,
+.grand-battle-pages__tab:focus-visible,
+.grand-battle-block-card:focus-visible,
 .load-form__button:focus-visible,
 .auto-update-toggle:focus-visible,
 .settings-dialog__close:focus-visible,
@@ -374,38 +376,180 @@ select {
   align-items: end;
 }
 
-.grand-battle-participants {
+.grand-battle-pages {
   display: grid;
-  gap: 10px;
+  margin-top: 2px;
 }
 
-.grand-battle-participants__title {
-  margin: 0;
-  font-size: 0.95rem;
+.grand-battle-pages__tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding-left: 2px;
+  border-bottom: 1px solid var(--app-border);
 }
 
-.grand-battle-participants__message {
-  margin: 0;
-}
-
-.grand-battle-participants__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 240px));
-  gap: 8px;
-}
-
-.grand-battle-participants__guild {
-  min-height: 34px;
-  padding: 7px 9px;
-  overflow-wrap: anywhere;
+.grand-battle-pages__tab {
+  position: relative;
+  min-width: 160px;
+  min-height: 48px;
+  padding: 10px 18px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  color: var(--app-text-muted);
   background: var(--app-surface-muted);
+  cursor: pointer;
   font-weight: 700;
 }
 
+.grand-battle-pages__tab:hover {
+  color: var(--app-text);
+}
+
+.grand-battle-pages__tab--active {
+  z-index: 1;
+  border-color: var(--app-primary);
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: 0 -2px 10px color-mix(in srgb, var(--app-primary) 16%, transparent);
+}
+
+.grand-battle-pages__page {
+  display: grid;
+  padding: 22px 20px 20px;
+  border: 1px solid var(--app-border);
+  border-top: 0;
+  border-radius: 0 8px 8px 8px;
+  background: color-mix(in srgb, var(--app-surface) 82%, var(--app-bg));
+}
+
+.grand-battle-block-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.grand-battle-block-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  color: var(--app-text);
+  text-align: left;
+  background: var(--app-surface);
+  cursor: pointer;
+  box-shadow: 0 2px 6px var(--app-shadow);
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.grand-battle-block-card:hover {
+  border-color: color-mix(in srgb, var(--app-primary) 58%, var(--app-border));
+  transform: translateY(-1px);
+}
+
+.grand-battle-block-card:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+
+.grand-battle-block-card--selected {
+  border-color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, var(--app-surface));
+  box-shadow: 0 0 0 1px var(--app-primary), 0 6px 18px color-mix(in srgb, var(--app-primary) 18%, transparent);
+}
+
+.grand-battle-block-card__header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.grand-battle-block-card__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.grand-battle-block-card__selected {
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 62%, var(--app-border));
+  border-radius: 999px;
+  color: var(--app-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.grand-battle-block-card__guilds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+}
+
+.grand-battle-block-card__guild,
+.grand-battle-block-card__message {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  background: var(--app-surface-muted);
+  font-weight: 700;
+  text-align: center;
+}
+
+.grand-battle-block-card__guild:nth-child(odd) {
+  border-right: 1px solid var(--app-border);
+}
+
+.grand-battle-block-card__guild:nth-child(n + 3) {
+  border-top: 1px solid var(--app-border);
+}
+
+.grand-battle-block-card__message {
+  grid-column: 1 / -1;
+  color: var(--app-text-muted);
+  font-weight: 500;
+}
+
+.grand-battle-block-grid__error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.grand-battle-setup__apply-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-muted);
+}
+
+.grand-battle-setup__selection-summary {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--app-text);
+  font-weight: 600;
+}
+
 .grand-battle-setup__apply {
-  width: min(100%, 500px);
+  flex: 0 0 auto;
+  min-width: 180px;
 }
 
 .ko-victim-summary {
@@ -3005,8 +3149,31 @@ select {
     flex: 1 1 128px;
   }
 
-  .grand-battle-participants__grid {
+  .grand-battle-pages__tabs {
+    overflow-x: auto;
+  }
+
+  .grand-battle-pages__tab {
+    min-width: 0;
+    flex: 1 0 132px;
+    padding-inline: 12px;
+  }
+
+  .grand-battle-pages__page {
+    padding: 14px;
+  }
+
+  .grand-battle-block-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grand-battle-setup__apply-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .grand-battle-setup__apply {
+    width: 100%;
   }
 
   .grand-battle-setup__form {
